@@ -2695,8 +2695,6 @@ void CheckAndHandleDoorObstruction(AvHAIPlayer* pBot)
 		{
 			if (Trigger->TriggerType == DOOR_BUTTON)
 			{
-				Vector UseLocation = UTIL_GetButtonFloorLocation(pBot->Edict->v.origin, Trigger->Edict);
-
 				NAV_SetUseMovementTask(pBot, Trigger->Edict, Trigger);
 			}
 			else if (Trigger->TriggerType == DOOR_TRIGGER)
@@ -6429,7 +6427,7 @@ bool NAV_MergeAndUpdatePath(AvHAIPlayer* pBot, std::vector<bot_path_node>& NewPa
 		return false;
 	}
 
-	if (!vEquals(OldPathEnd->FromLocation, NewPathStart->FromLocation, 16.0f) || !vEquals(OldPathEnd->Location, NewPathStart->Location, 16.0f))
+	if (OldPathEnd->flag != NewPathStart->flag || !vEquals(OldPathEnd->FromLocation, NewPathStart->FromLocation, 16.0f) || !vEquals(OldPathEnd->Location, NewPathStart->Location, 16.0f))
 	{
 		return false;
 	}

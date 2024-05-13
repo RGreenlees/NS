@@ -4433,30 +4433,29 @@ void AIPlayerNSAlienThink(AvHAIPlayer* pBot)
 	{
 		if (AlienCombatThink(pBot)) { return; }
 	}
-	
-	if (AIPlayerMustFinishCurrentTask(pBot, &pBot->PrimaryBotTask))
+
+	bool bPlayerMustFinishPrimaryTask = AIPlayerMustFinishCurrentTask(pBot, &pBot->PrimaryBotTask);
+
+	if (!bPlayerMustFinishPrimaryTask)
 	{
-		BotProgressTask(pBot, &pBot->PrimaryBotTask);
-		return;
-	}
+		UpdateAIAlienPlayerNSRole(pBot);
 
-	UpdateAIAlienPlayerNSRole(pBot);
+		AvHAIHiveDefinition* HiveToBuild = nullptr;
 
-	AvHAIHiveDefinition* HiveToBuild = nullptr;
-
-	if (AITAC_ShouldBotBuildHive(pBot, &HiveToBuild))
-	{
-		if (pBot->PrimaryBotTask.TaskType != TASK_BUILD || pBot->PrimaryBotTask.StructureType != STRUCTURE_ALIEN_HIVE)
+		if (AITAC_ShouldBotBuildHive(pBot, &HiveToBuild))
 		{
-			pBot->PrimaryBotTask.TaskType = TASK_BUILD;
-			pBot->PrimaryBotTask.StructureType = STRUCTURE_ALIEN_HIVE;
-			char msg[128];
-			sprintf(msg, "I'm going to drop the hive at %s", HiveToBuild->HiveName);
-			BotSay(pBot, true, 1.0f, msg);
+			if (pBot->PrimaryBotTask.TaskType != TASK_BUILD || pBot->PrimaryBotTask.StructureType != STRUCTURE_ALIEN_HIVE)
+			{
+				pBot->PrimaryBotTask.TaskType = TASK_BUILD;
+				pBot->PrimaryBotTask.StructureType = STRUCTURE_ALIEN_HIVE;
+				char msg[128];
+				sprintf(msg, "I'm going to drop the hive at %s", HiveToBuild->HiveName);
+				BotSay(pBot, true, 1.0f, msg);
+			}
+			BotAlienBuildHive(pBot, &pBot->PrimaryBotTask, HiveToBuild);
+			return;
 		}
-		BotAlienBuildHive(pBot, &pBot->PrimaryBotTask, HiveToBuild);
-		return;
-	}	
+	}
 
 	if (gpGlobals->time >= pBot->BotNextTaskEvaluationTime)
 	{
@@ -4464,7 +4463,10 @@ void AIPlayerNSAlienThink(AvHAIPlayer* pBot)
 
 		AITASK_BotUpdateAndClearTasks(pBot);
 
-		AIPlayerSetPrimaryAlienTask(pBot, &pBot->PrimaryBotTask);
+		if (!bPlayerMustFinishPrimaryTask)
+		{
+			AIPlayerSetPrimaryAlienTask(pBot, &pBot->PrimaryBotTask);
+		}
 		AIPlayerSetSecondaryAlienTask(pBot, &pBot->SecondaryBotTask);
 		AIPlayerSetWantsAndNeedsAlienTask(pBot, &pBot->WantsAndNeedsTask);
 	}
