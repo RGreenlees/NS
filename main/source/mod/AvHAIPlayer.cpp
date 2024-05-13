@@ -1782,10 +1782,23 @@ void StartNewBotFrame(AvHAIPlayer* pBot)
 
 		pBot->BotNavInfo.IsOnGround = true;
 		pBot->BotNavInfo.bIsJumping = false;
+		pBot->BotNavInfo.AirStartedTime = 0.0f;
 	}
 	else
 	{
+		if (pBot->BotNavInfo.IsOnGround)
+		{
+			pBot->BotNavInfo.AirStartedTime = gpGlobals->time;
+		}
+
 		pBot->BotNavInfo.IsOnGround = false;
+
+		// It's possible that players can get stuck in angled geometry where they're permanently in the air
+		// This just checks for that possibility: if a bot is falling for more than 15 seconds they're probably stuck and should suicide
+		if (pBot->BotNavInfo.AirStartedTime > 0.0f && gpGlobals->time - pBot->BotNavInfo.AirStartedTime > 15.0f)
+		{
+			BotSuicide(pBot);
+		}
 
 	}
 
