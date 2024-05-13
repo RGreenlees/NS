@@ -3106,7 +3106,7 @@ edict_t* UTIL_GetDoorBlockingPathPoint(const Vector FromLocation, const Vector T
 
 	if (MovementFlag == SAMPLE_POLYFLAGS_LADDER || MovementFlag == SAMPLE_POLYFLAGS_WALLCLIMB)
 	{
-		Vector TargetLoc = Vector(FromLoc.x, FromLoc.y, ToLocation.z);
+		Vector TargetLoc = (ToLocation.z > FromLocation.z) ? Vector(FromLoc.x, FromLoc.y, ToLoc.z) : Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
 		if (!FNullEnt(SearchDoor))
 		{
@@ -3134,11 +3134,9 @@ edict_t* UTIL_GetDoorBlockingPathPoint(const Vector FromLocation, const Vector T
 			}
 		}
 
-		Vector TargetLoc2 = Vector(ToLoc.x, ToLoc.y, ToLocation.z);
-
 		if (!FNullEnt(SearchDoor))
 		{
-			if (vlineIntersectsAABB(FromLoc, TargetLoc2, SearchDoor->v.absmin, SearchDoor->v.absmax))
+			if (vlineIntersectsAABB(TargetLoc, ToLoc, SearchDoor->v.absmin, SearchDoor->v.absmax))
 			{
 				return SearchDoor;
 			}
@@ -3147,7 +3145,7 @@ edict_t* UTIL_GetDoorBlockingPathPoint(const Vector FromLocation, const Vector T
 		{
 			for (auto it = NavDoors.begin(); it != NavDoors.end(); it++)
 			{
-				if (vlineIntersectsAABB(FromLoc, TargetLoc2, it->DoorEdict->v.absmin, it->DoorEdict->v.absmax))
+				if (vlineIntersectsAABB(TargetLoc, ToLoc, it->DoorEdict->v.absmin, it->DoorEdict->v.absmax))
 				{
 					return it->DoorEdict;
 				}
@@ -3155,7 +3153,7 @@ edict_t* UTIL_GetDoorBlockingPathPoint(const Vector FromLocation, const Vector T
 
 			for (auto it = NavWeldableObstacles.begin(); it != NavWeldableObstacles.end(); it++)
 			{
-				if (vlineIntersectsAABB(FromLoc, TargetLoc2, it->WeldableEdict->v.absmin, it->WeldableEdict->v.absmax))
+				if (vlineIntersectsAABB(TargetLoc, ToLoc, it->WeldableEdict->v.absmin, it->WeldableEdict->v.absmax))
 				{
 					return it->WeldableEdict;
 				}

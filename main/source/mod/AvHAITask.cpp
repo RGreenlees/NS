@@ -2978,9 +2978,19 @@ void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		// Empty res node with nothing to do but wait, stick around for 30 seconds and then move on if the commander doesn't drop an RT to build
 		if (Task->TaskLength == 0.0f)
 		{
+			const AvHAIResourceNode* ResNode = AITAC_GetNearestResourceNodeToLocation(Task->TaskLocation);
+
+			// If we're not at our destination yet, go there
+			if (vDist2DSq(pBot->Edict->v.origin, ResNode->Location) > sqrf(UTIL_MetresToGoldSrcUnits(1.0f)))
+			{
+				MoveTo(pBot, ResNode->Location, MOVESTYLE_NORMAL);
+				return;
+			}
+
 			Task->TaskStartedTime = gpGlobals->time;
 			Task->TaskLength = 30.0f;
 		}
+
 		BotGuardLocation(pBot, Task->TaskLocation);
 	}
 
