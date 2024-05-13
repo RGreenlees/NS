@@ -379,6 +379,9 @@ bool AICOMM_IsOrderStillValid(AvHAIPlayer* pBot, ai_commander_order* Order)
 
 bool AICOMM_DoesPlayerOrderNeedReminder(AvHAIPlayer* pBot, ai_commander_order* Order)
 {
+	// For now, disable reminders as it is annoying for humans and pointless for bots who should obey it always anyway
+	return false;
+
 	float NewDist = vDist2DSq(Order->Assignee->v.origin, Order->OrderLocation);
 	float OldDist = Order->LastPlayerDistance;
 	Order->LastPlayerDistance = NewDist;
