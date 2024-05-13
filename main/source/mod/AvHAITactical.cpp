@@ -4764,6 +4764,11 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
 
+	AvHAIPlayer* ExistingBuilder = GetFirstBotWithBuildTask(BotTeam, STRUCTURE_ALIEN_HIVE, pBot->Edict);
+
+	// Another bot already plans to do it
+	if (ExistingBuilder && IsPlayerActiveInGame(ExistingBuilder->Edict)) { return false; }
+
 	// Prioritise getting at least one fade or Onos on the team before putting up a second hive, or we're likely to lose it pretty quickly
 	int NumHeavyHitters = AITAC_GetNumPlayersOnTeamOfClass(BotTeam, AVH_USER3_ALIEN_PLAYER4, nullptr) + AITAC_GetNumPlayersOnTeamOfClass(BotTeam, AVH_USER3_ALIEN_PLAYER5, nullptr);
 
@@ -4779,8 +4784,7 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 		{
 			AvHAIPlayer* OtherBot = (*it);
 
-			// Another bot already plans to do it
-			if (OtherBot->PrimaryBotTask.TaskType == TASK_BUILD && OtherBot->PrimaryBotTask.StructureType == STRUCTURE_ALIEN_HIVE) { return false; }
+			if (OtherBot == pBot) { continue; }
 
 			// If the other bot has enough resources to drop a hive, and they're a less expensive life form than us, let them do it.
 			if (OtherBot->Player->GetResources() >= BALANCE_VAR(kHiveCost) * 0.8f && OtherBot->Player->GetUser3() < pBot->Player->GetUser3()) { return false; }
