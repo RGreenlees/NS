@@ -4779,6 +4779,9 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 		{
 			AvHAIPlayer* OtherBot = (*it);
 
+			// Another bot already plans to do it
+			if (OtherBot->PrimaryBotTask.TaskType == TASK_BUILD && OtherBot->PrimaryBotTask.StructureType == STRUCTURE_ALIEN_HIVE) { return false; }
+
 			// If the other bot has enough resources to drop a hive, and they're a less expensive life form than us, let them do it.
 			if (OtherBot->Player->GetResources() >= BALANCE_VAR(kHiveCost) * 0.8f && OtherBot->Player->GetUser3() < pBot->Player->GetUser3()) { return false; }
 		}
