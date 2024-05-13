@@ -607,6 +607,7 @@ typedef struct _NAV_STATUS
 	Vector UnstuckMoveLocation = g_vecZero; // If the bot is unable to find a path, blindly move here to try and fix the problem
 
 	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
+	float AirStartedTime = 0.0f; // When the bot left the ground if in the air
 	float LeapAttemptedTime = 0.0f; // When the bot last attempted to leap/blink. Avoid spam that sends it flying around too fast
 	bool bIsJumping = false; // Is the bot in the air from a jump? Will duck so it can duck-jump
 	bool IsOnGround = true; // Is the bot currently on the ground, or on a ladder?

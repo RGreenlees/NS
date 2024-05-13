@@ -4686,6 +4686,8 @@ bool IsBotOffWalkNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd,
 
 	// This shouldn't happen... but does occasionally. Walk moves should always be directly reachable from start to end
 	//if (!UTIL_PointIsDirectlyReachable(MoveStart, MoveEnd)) { return true; }
+	
+	if (UTIL_PointIsDirectlyReachable(MoveStart, MoveEnd) && !UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, MoveEnd)) { return true; }
 
 	Vector NearestPointOnLine = vClosestPointOnLine2D(MoveStart, MoveEnd, pBot->Edict->v.origin);
 
