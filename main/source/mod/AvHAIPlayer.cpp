@@ -1878,11 +1878,18 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	AITASK_BotUpdateAndClearTasks(pBot);
+	pBot->CurrentEnemy = BotGetNextEnemyTarget(pBot);
 
-	if (pBot->PrimaryBotTask.TaskType != TASK_NONE && !vIsZero(pBot->PrimaryBotTask.TaskLocation))
+	if (pBot->CurrentEnemy > -1)
 	{
-		MoveDirectlyTo(pBot, pBot->PrimaryBotTask.TaskLocation);
+		if (IsPlayerMarine(pBot->Player))
+		{
+			if (MarineCombatThink(pBot)) { return; }
+		}
+		else
+		{
+			if (AlienCombatThink(pBot)) { return; }
+		}
 	}
 }
 
@@ -3015,6 +3022,89 @@ bool BombardierCombatThink(AvHAIPlayer* pBot)
 	return false;
 }
 
+Vector GetZigZagDirection(AvHAIPlayer* pBot, edict_t* Enemy, bot_path_node* CurrentPathNode)
+{
+	if (CurrentPathNode && CurrentPathNode->flag != SAMPLE_POLYFLAGS_WALK) { return ZERO_VECTOR; }
+
+	Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - GetPlayerEyePosition(Enemy));
+	Vector MoveDir;
+	Vector ClosestPointOnLine;
+	float DistToLine = 0.0f;
+	int PointOnLine = 0;
+
+	if (!CurrentPathNode)
+	{
+		MoveDir = EnemyOrientation;
+		ClosestPointOnLine = pBot->Edict->v.origin;
+	}
+	else
+	{
+		MoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->Location - CurrentPathNode->FromLocation);
+
+		float OrientationDot = UTIL_GetDotProduct2D(MoveDir, EnemyOrientation);
+
+		// Only zig-zag if we are moving towards or away from the enemy. If we're side-on, then zig-zagging is pointless
+		if (fabs(OrientationDot) < 0.5f) { return ZERO_VECTOR; }
+
+		ClosestPointOnLine = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->Location, pBot->Edict->v.origin);
+
+		if (vDist3DSq(ClosestPointOnLine, CurrentPathNode->Location) < sqrf(32.0f)) { return ZERO_VECTOR; }
+
+		DistToLine = vDist2D(pBot->Edict->v.origin, ClosestPointOnLine);
+
+		PointOnLine = vPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->Location, pBot->Edict->v.origin);
+	}
+
+	float PlayerRadius = GetPlayerRadius(pBot->Edict);
+	float PlayerWidth = PlayerRadius * 2.0f;
+
+	Vector RightVector = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(MoveDir, UP_VECTOR));
+
+	bool bCurrentZig = pBot->BotNavInfo.bZig;
+	bool bNewZig = bCurrentZig;
+
+	// If we are at our width or more from our desired path, then switch direction
+	if (DistToLine >= PlayerWidth)
+	{
+		bNewZig = (PointOnLine < 0);
+	}
+	else
+	{
+		// Otherwise, check we have enough room to keep zig-zagging in the current direction
+		Vector CheckRoomDirection = (pBot->BotNavInfo.bZig) ? RightVector : -RightVector;
+
+		if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+		{
+			bNewZig = !pBot->BotNavInfo.bZig;
+		}
+		else if (!UTIL_TraceNav(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, pBot->CurrentFloorPosition + (CheckRoomDirection * (PlayerRadius + 4.0f)), 1.0f))
+		{
+			bNewZig = !pBot->BotNavInfo.bZig;
+		}
+	}
+
+	pBot->BotNavInfo.bZig = bNewZig;
+
+	if (bNewZig != bCurrentZig)
+	{
+		pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
+	}
+
+	Vector FinalDesiredMoveDir = (CurrentPathNode) ? MoveDir : ZERO_VECTOR;
+
+	FinalDesiredMoveDir = FinalDesiredMoveDir + ((pBot->BotNavInfo.bZig) ? RightVector : -RightVector);
+
+	FinalDesiredMoveDir = UTIL_GetVectorNormal2D(FinalDesiredMoveDir);
+
+	if (!UTIL_TraceNav(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, pBot->CurrentFloorPosition + (FinalDesiredMoveDir * (PlayerRadius + 4.0f)), 1.0f))
+	{
+		return ZERO_VECTOR;
+	}
+
+	return FinalDesiredMoveDir;
+
+}
+
 bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 {
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
@@ -3215,20 +3305,21 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 
 			if (bEnemyIsRanged && !IsMeleeWeapon(DesiredCombatWeapon))
 			{
-				Vector EnemyOrientation = UTIL_GetVectorNormal2D(CurrentEnemy->v.origin - pBot->Edict->v.origin);
+				Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+				Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-				Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+				float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-				pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(RightDir) : UTIL_GetVectorNormal2D(-RightDir);
-
-				// Let's get ziggy with it
-				if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+				if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 				{
-					pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-					pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-				}
+					Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, nullptr);
 
-				BotMovementInputs(pBot);
+					if (!vIsZero(EvasiveDir))
+					{
+						pBot->desiredMovementDir = EvasiveDir;
+						BotMovementInputs(pBot);
+					}
+				}
 			}
 			else
 			{
@@ -3352,20 +3443,21 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 
 				if (bEnemyIsRanged && !IsMeleeWeapon(DesiredCombatWeapon))
 				{
-					Vector EnemyOrientation = UTIL_GetVectorNormal2D(CurrentEnemy->v.origin - pBot->Edict->v.origin);
+					Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+					Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-					Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+					float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-					pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(RightDir) : UTIL_GetVectorNormal2D(-RightDir);
-
-					// Let's get ziggy with it
-					if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+					if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 					{
-						pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-						pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-					}
+						Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, nullptr);
 
-					BotMovementInputs(pBot);
+						if (!vIsZero(EvasiveDir))
+						{
+							pBot->desiredMovementDir = EvasiveDir;
+							BotMovementInputs(pBot);
+						}
+					}
 				}
 
 				if (!bEnemyIsRanged && !IsMeleeWeapon(DesiredCombatWeapon))
@@ -7598,21 +7690,24 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 
 				bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
 
-				// EVASIVE MANOEUVRES! Only do this if we're running along the floor and aren't approaching a path point (so we don't stray off the path)
-				if (TrackedEnemyRef->bHasLOS && CurrentPathNode.flag == SAMPLE_POLYFLAGS_WALK && vDist2DSq(pBot->Edict->v.origin, CurrentPathNode.Location) > sqrf(50.0f))
+				if (TrackedEnemyRef->bHasLOS)
 				{
-					Vector RightDir = UTIL_GetCrossProduct(pBot->desiredMovementDir, UP_VECTOR);
+					Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+					Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-					pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(pBot->desiredMovementDir + RightDir) : UTIL_GetVectorNormal2D(pBot->desiredMovementDir - RightDir);
+					float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-					// Let's get ziggy with it
-					if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+					if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 					{
-						pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-						pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-					}
+						bot_path_node* CurrentNode = (pBot->BotNavInfo.CurrentPath.size() > 0) ? &pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint] : nullptr;
+						Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, CurrentNode);
 
-					BotMovementInputs(pBot);
+						if (!vIsZero(EvasiveDir))
+						{
+							pBot->desiredMovementDir = EvasiveDir;
+							BotMovementInputs(pBot);
+						}
+					}
 				}
 			}
 		}
@@ -7747,22 +7842,21 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 					}
 				}
 
-				Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->desiredMovementDir);
-				Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+				Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+				Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-				if (TrackedEnemyRef->bHasLOS)
+				float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
+
+				if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 				{
+					bot_path_node* CurrentNode = (pBot->BotNavInfo.CurrentPath.size() > 0) ? &pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint] : nullptr;
+					Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, CurrentNode);
 
-					pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(pBot->desiredMovementDir + RightDir) : UTIL_GetVectorNormal2D(pBot->desiredMovementDir - RightDir);
-
-					// Let's get ziggy with it
-					if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+					if (!vIsZero(EvasiveDir))
 					{
-						pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-						pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
+						pBot->desiredMovementDir = EvasiveDir;
+						BotMovementInputs(pBot);
 					}
-
-					BotMovementInputs(pBot);
 				}
 
 				return true;
@@ -7825,19 +7919,22 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 
 				if (TrackedEnemyRef->bHasLOS)
 				{
-					Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->desiredMovementDir);
-					Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+					Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+					Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-					pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(pBot->desiredMovementDir + RightDir) : UTIL_GetVectorNormal2D(pBot->desiredMovementDir - RightDir);
+					float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-					// Let's get ziggy with it
-					if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+					if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 					{
-						pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-						pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-					}
+						bot_path_node* CurrentNode = (pBot->BotNavInfo.CurrentPath.size() > 0) ? &pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint] : nullptr;
+						Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, CurrentNode);
 
-					BotMovementInputs(pBot);
+						if (!vIsZero(EvasiveDir))
+						{
+							pBot->desiredMovementDir = EvasiveDir;
+							BotMovementInputs(pBot);
+						}
+					}
 				}
 
 				return true;
@@ -7852,19 +7949,22 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 				if (TrackedEnemyRef->bHasLOS)
 				{
 
-					Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->desiredMovementDir);
-					Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+					Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+					Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-					pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(pBot->desiredMovementDir + RightDir) : UTIL_GetVectorNormal2D(pBot->desiredMovementDir - RightDir);
+					float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-					// Let's get ziggy with it
-					if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+					if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 					{
-						pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-						pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-					}
+						bot_path_node* CurrentNode = (pBot->BotNavInfo.CurrentPath.size() > 0) ? &pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint] : nullptr;
+						Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, CurrentNode);
 
-					BotMovementInputs(pBot);
+						if (!vIsZero(EvasiveDir))
+						{
+							pBot->desiredMovementDir = EvasiveDir;
+							BotMovementInputs(pBot);
+						}
+					}
 				}
 			}
 
@@ -7894,19 +7994,22 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 		{
 			BotShootTarget(pBot, WEAPON_GORGE_SPIT, CurrentEnemy);
 
-			Vector EnemyOrientation = UTIL_GetVectorNormal2D(CurrentEnemy->v.origin - pBot->Edict->v.origin);
-			Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+			Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+			Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-			pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(pBot->desiredMovementDir + RightDir) : UTIL_GetVectorNormal2D(pBot->desiredMovementDir - RightDir);
+			float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-			// Let's get ziggy with it
-			if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+			if (TrackedEnemyRef->bHasLOS && FaceDot > 0.75f)
 			{
-				pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-				pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-			}
+				bot_path_node* CurrentNode = (pBot->BotNavInfo.CurrentPath.size() > 0) ? &pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint] : nullptr;
+				Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, CurrentNode);
 
-			BotMovementInputs(pBot);
+				if (!vIsZero(EvasiveDir))
+				{
+					pBot->desiredMovementDir = EvasiveDir;
+					BotMovementInputs(pBot);
+				}
+			}
 
 			return true;
 		}
@@ -8376,25 +8479,27 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 				}
 			}
 
-			if (GetPlayerEnergy(pBot->Edict) < (0.9f - (GetEnergyCostForWeapon(WEAPON_FADE_ACIDROCKET) * 4.0f)) || GetPlayerOverallHealthPercent(pBot->Edict) < 6.0f)
+			if (GetPlayerEnergy(pBot->Edict) < (0.9f - (GetEnergyCostForWeapon(WEAPON_FADE_ACIDROCKET) * 4.0f)) || GetPlayerOverallHealthPercent(pBot->Edict) < 0.6f)
 			{
 				MoveTo(pBot, pBot->LastSafeLocation, MOVESTYLE_NORMAL);
 			}
 			else
 			{
-				Vector EnemyOrientation = UTIL_GetVectorNormal2D(CurrentEnemy->v.origin - pBot->Edict->v.origin);
-				Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
+				Vector EnemyOrientation = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - CurrentEnemy->v.origin);
+				Vector EnemyFacing = UTIL_GetForwardVector2D(CurrentEnemy->v.v_angle);
 
-				pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(pBot->desiredMovementDir + RightDir) : UTIL_GetVectorNormal2D(pBot->desiredMovementDir - RightDir);
+				float FaceDot = UTIL_GetDotProduct2D(EnemyOrientation, EnemyFacing);
 
-				// Let's get ziggy with it
-				if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+				if (FaceDot > 0.75f)
 				{
-					pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-					pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
-				}
+					Vector EvasiveDir = GetZigZagDirection(pBot, CurrentEnemy, nullptr);
 
-				BotMovementInputs(pBot);
+					if (!vIsZero(EvasiveDir))
+					{
+						pBot->desiredMovementDir = EvasiveDir;
+						BotMovementInputs(pBot);
+					}
+				}
 			}
 
 			BotLookAt(pBot, TrackedEnemyRef->LastDetectedLocation);

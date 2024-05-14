@@ -622,7 +622,7 @@ typedef struct _NAV_STATUS
 
 	float NextForceRecalc = 0.0f; // If set, then the bot will force-recalc its current path
 
-	bool bZig; // Is the bot zigging, or zagging?
+	bool bZig; // Is the bot zigging (moving RIGHT), or zagging (moving LEFT)?
 	float NextZigTime; // Controls how frequently they zig or zag
 
 	nav_profile NavProfile;

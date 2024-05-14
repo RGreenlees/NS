@@ -188,4 +188,6 @@ void DEBUG_PrintBotDebugInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot);
 void DEBUG_PrintTaskInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot);
 void DEBUG_PrintCombatInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot);
 
+Vector GetZigZagDirection(AvHAIPlayer* pBot, edict_t* Enemy, bot_path_node* CurrentPathNode);
+
 #endif
