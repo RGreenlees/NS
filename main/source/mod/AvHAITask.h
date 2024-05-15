@@ -47,6 +47,8 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 bool AITASK_IsAlienSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 
+bool AITASK_IsAssaultMarineBaseTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
+
 bool AITASK_IsAlienGetHealthTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 bool AITASK_IsAlienHealTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 
@@ -67,6 +69,7 @@ void AITASK_SetReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, 
 void AITASK_SetReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Target, const AvHAIDeployableStructureType FirstStructureType, bool bIsUrgent);
 void AITASK_SetSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Target, const Vector WaitLocation, bool bIsUrgent);
 void AITASK_SetMineStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Target, bool bIsUrgent);
+void AITASK_SetAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, Vector BaseLocation, bool bIsUrgent);
 void AITASK_SetWeldTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Target, const bool bIsUrgent);
 void AITASK_SetPickupTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Target, const bool bIsUrgent);
 void AITASK_SetGetHealthTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* HealingSource, const bool bIsUrgent);
@@ -89,6 +92,8 @@ void BotProgressEvolveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 void MarineProgressBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 void BotProgressWeldTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
+
+void BotProgressAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task);
 
 void AIPlayerBuildStructure(AvHAIPlayer* pBot, edict_t* BuildTarget);
 

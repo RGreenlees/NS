@@ -208,6 +208,7 @@ void AITAC_UpdateSquads();
 void AITAC_ManageSquads();
 void AITAC_ClearSquads();
 AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, edict_t* TaskTarget, BotTaskType ObjectiveType);
+AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, Vector TaskLocation, BotTaskType ObjectiveType);
 Vector AITAC_GetGatherLocationForSquad(AvHAISquad* Squad);
 
 #endif
