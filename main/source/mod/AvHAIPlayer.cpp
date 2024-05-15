@@ -1878,19 +1878,17 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	pBot->CurrentEnemy = BotGetNextEnemyTarget(pBot);
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
 
-	if (pBot->CurrentEnemy > -1)
+	if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_MARINE)
 	{
-		if (IsPlayerMarine(pBot->Player))
-		{
-			if (MarineCombatThink(pBot)) { return; }
-		}
-		else
-		{
-			if (AlienCombatThink(pBot)) { return; }
-		}
+		AITASK_SetAssaultMarineBaseTask(pBot, &pBot->PrimaryBotTask, AITAC_GetTeamStartingLocation(EnemyTeam), true);
 	}
+
+	pBot->CurrentTask = &pBot->PrimaryBotTask;
+
+	BotProgressTask(pBot, pBot->CurrentTask);
 }
 
 void DroneThink(AvHAIPlayer* pBot)
@@ -2240,18 +2238,18 @@ void AIPlayerNSThink(AvHAIPlayer* pBot)
 {
 	AvHTeam* BotTeam = GetGameRules()->GetTeam(pBot->Player->GetTeam());
 
-if (!BotTeam) { return; }
+	if (!BotTeam) { return; }
 
-pBot->CurrentEnemy = BotGetNextEnemyTarget(pBot);
+	pBot->CurrentEnemy = BotGetNextEnemyTarget(pBot);
 
-if (BotTeam->GetTeamType() == AVH_CLASS_TYPE_MARINE)
-{
-	AIPlayerNSMarineThink(pBot);
-}
-else
-{
-	AIPlayerNSAlienThink(pBot);
-}
+	if (BotTeam->GetTeamType() == AVH_CLASS_TYPE_MARINE)
+	{
+		AIPlayerNSMarineThink(pBot);
+	}
+	else
+	{
+		AIPlayerNSAlienThink(pBot);
+	}
 }
 
 int BotGetNextEnemyTarget(AvHAIPlayer* pBot)
@@ -5935,13 +5933,11 @@ void AIPlayerReceiveMoveOrder(AvHAIPlayer* pBot, Vector Destination)
 		{
 			if (UTIL_QuickTrace(pBot->Edict, Destination + Vector(0.0f, 0.0f, 32.0f), HiveRef->Location))
 			{
-				AITASK_SetAttackTask(pBot, &pBot->CommanderTask, HiveRef->HiveEdict, false);
+				AITASK_SetSecureHiveTask(pBot, &pBot->CommanderTask, HiveRef->HiveEdict, ActualMoveLocation, false);
 				pBot->CommanderTask.bIssuedByCommander = true;
 				return;
 			}
-		}
-
-		
+		}		
 	}
 
 	// Otherwise, treat as a normal move order. Go there and wait a bit to see what the commander wants to do next
@@ -6778,12 +6774,14 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	int MaxHiveStrength = 0;
 	AvHAIHiveDefinition* HiveToSecure = nullptr;
 
+	EnemyStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+
 	for (auto it = AllHives.begin(); it != AllHives.end(); it++)
 	{
 		AvHAIHiveDefinition* ThisHive = (*it);
 
 		if (ThisHive->OwningTeam == BotTeam) { continue; }
-
+		
 		vector<AvHAIBuildableStructure> EnemyStructures = AITAC_FindAllDeployables(ThisHive->FloorLocation, &EnemyStuffFilter);
 
 		// Enemy hasn't built anything here, so doesn't need clearing
@@ -6825,32 +6823,29 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		return;
 	}
 
-	// ATTACK THE ENEMY BASE
+	// ATTACK THE ENEMY BASE IF AGAINST MARINES
 
-	DeployableSearchFilter EnemyInfPortalFilter;
-	EnemyInfPortalFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
-	EnemyInfPortalFilter.DeployableTeam = EnemyTeam;
-	EnemyInfPortalFilter.ReachabilityTeam = BotTeam;
-	EnemyInfPortalFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
-	EnemyInfPortalFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
-	EnemyInfPortalFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
-
-	AvHAIBuildableStructure EnemyInfPortal = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyInfPortalFilter);
-
-	if (EnemyInfPortal.IsValid())
+	// AvA is handled above in securing hives: this will cause aliens to attack and eliminate all enemy hives
+	// So this is only needed for marines where their base could be anywhere outside of hives
+	if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_MARINE)
 	{
-		AITASK_SetAttackTask(pBot, Task, EnemyInfPortal.edict, false);
-		return;
-	}
+		if (Task->TaskType == TASK_ASSAULT_MARINE_BASE) { return; }
 
-	// TODO: Attack enemy hive/base
-	edict_t* EnemyChair = AITAC_GetCommChair(EnemyTeam);
+		Vector EnemyBaseLocation = AITAC_GetTeamStartingLocation(EnemyTeam);
 
-	if (!FNullEnt(EnemyChair))
-	{
-		AITASK_SetAttackTask(pBot, Task, EnemyChair, false);
-		return;
+		if (!vIsZero(EnemyBaseLocation))
+		{
+			EnemyStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+			EnemyStuffFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+			if (AITAC_DeployableExistsAtLocation(EnemyBaseLocation, &EnemyStuffFilter))
+			{
+				AITASK_SetAssaultMarineBaseTask(pBot, Task, EnemyBaseLocation, false);
+				return;
+			}			
+		}
 	}
+	
 
 	// FIND ANY LAST ENEMIES TO KILL AND END GAME
 

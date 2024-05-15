@@ -680,8 +680,8 @@ char* UTIL_TaskTypeToChar(const BotTaskType TaskType)
 		return "Touch Trigger";
 	case TASK_WELD:
 		return "Weld Target";
-	case TASK_ATTACK_BASE:
-		return "Attack Enemy Base";
+	case TASK_ASSAULT_MARINE_BASE:
+		return "Assault Marine Base";
 	default:
 		return "None";
 	}

@@ -5514,7 +5514,7 @@ bool AITAC_IsBotPursuingSquadObjective(AvHAIPlayer* pBot, AvHAISquad* Squad)
 	if (!IsPlayerActiveInGame(pBot->Edict) || pBot->Player->GetTeam() != Squad->SquadTeam) { return false; } 
 	
 	// Bot no longer has this squad's objective as its primary task
-	if (pBot->PrimaryBotTask.TaskType != Squad->SquadObjective || pBot->PrimaryBotTask.TaskTarget != Squad->SquadTarget) { return false; }
+	if (pBot->PrimaryBotTask.TaskType != Squad->SquadObjective || (!FNullEnt(Squad->SquadTarget) && pBot->PrimaryBotTask.TaskTarget != Squad->SquadTarget) || (FNullEnt(Squad->SquadTarget) && !vEquals(pBot->PrimaryBotTask.TaskLocation, Squad->ObjectiveLocation))) { return false; }
 
 	// Bot is focused on the job at hand
 	if (!pBot->CurrentTask || pBot->CurrentTask == &pBot->PrimaryBotTask) { return true; }
@@ -5565,7 +5565,9 @@ void AITAC_UpdateSquads()
 			{
 				vector<bot_path_node> TravelPath;
 
-				dtStatus PathFindResult = FindPathClosestToPoint(GetBaseNavProfile(ONOS_BASE_NAV_PROFILE), AITAC_GetTeamStartingLocation(it->SquadTeam), UTIL_GetEntityGroundLocation(it->SquadTarget), TravelPath, UTIL_MetresToGoldSrcUnits(20.0f));
+				Vector TargetLocation = (!FNullEnt(it->SquadTarget)) ? UTIL_GetEntityGroundLocation(it->SquadTarget) : it->ObjectiveLocation;
+
+				dtStatus PathFindResult = FindPathClosestToPoint(GetBaseNavProfile(ONOS_BASE_NAV_PROFILE), AITAC_GetTeamStartingLocation(it->SquadTeam), TargetLocation, TravelPath, UTIL_MetresToGoldSrcUnits(20.0f));
 
 				if (dtStatusSucceed(PathFindResult))
 				{
@@ -5573,9 +5575,12 @@ void AITAC_UpdateSquads()
 					{
 						if (pIt->area != SAMPLE_POLYAREA_GROUND || pIt->flag != SAMPLE_POLYFLAGS_WALK) { continue; }
 
-						if (UTIL_QuickTrace(nullptr, pIt->Location, it->SquadTarget->v.origin)) { continue; }
+						if (!FNullEnt(it->SquadTarget))
+						{
+							if (UTIL_QuickTrace(nullptr, pIt->Location, it->SquadTarget->v.origin)) { continue; }
+						}
 
-						if (vDist2DSq(pIt->Location, it->SquadTarget->v.origin) > sqrf(UTIL_MetresToGoldSrcUnits(20.0f)))
+						if (vDist2DSq(pIt->Location, TargetLocation) > sqrf(UTIL_MetresToGoldSrcUnits(20.0f)))
 						{
 							DeployableSearchFilter EnemyStuff;
 							EnemyStuff.DeployableTeam = AIMGR_GetEnemyTeam(it->SquadTeam);
@@ -5654,6 +5659,48 @@ AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, edict_t* TaskTarget, B
 	AvHAISquad NewSquad;
 	NewSquad.SquadTeam = pBot->Player->GetTeam();
 	NewSquad.SquadTarget = TaskTarget;
+	NewSquad.SquadObjective = ObjectiveType;
+	NewSquad.bExecuteObjective = false;
+	NewSquad.SquadGatherLocation = ZERO_VECTOR;
+
+	ActiveSquads.push_back(NewSquad);
+
+	return nullptr;
+}
+
+AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, Vector TaskLocation, BotTaskType ObjectiveType)
+{
+	AvHAISquad* JoinSquad = nullptr;
+
+	for (auto it = ActiveSquads.begin(); it != ActiveSquads.end(); it++)
+	{
+		if (it->SquadTeam == pBot->Player->GetTeam() && vEquals(it->ObjectiveLocation, TaskLocation) && it->SquadObjective == ObjectiveType)
+		{
+			auto element = std::find(it->SquadMembers.begin(), it->SquadMembers.end(), pBot);
+
+			if (element != it->SquadMembers.end())
+			{
+				return &(*it);
+			}
+			else
+			{
+				if (!JoinSquad && !it->bExecuteObjective)
+				{
+					JoinSquad = &(*it);
+				}
+			}
+		}
+	}
+
+	if (JoinSquad)
+	{
+		JoinSquad->SquadMembers.push_back(pBot);
+		return JoinSquad;
+	}
+
+	AvHAISquad NewSquad;
+	NewSquad.SquadTeam = pBot->Player->GetTeam();
+	NewSquad.ObjectiveLocation = TaskLocation;
 	NewSquad.SquadObjective = ObjectiveType;
 	NewSquad.bExecuteObjective = false;
 	NewSquad.SquadGatherLocation = ZERO_VECTOR;

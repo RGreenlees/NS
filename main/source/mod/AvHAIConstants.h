@@ -415,7 +415,7 @@ typedef enum
 	TASK_REINFORCE_STRUCTURE,
 	TASK_SECURE_HIVE,
 	TASK_PLACE_MINE,
-	TASK_ATTACK_BASE
+	TASK_ASSAULT_MARINE_BASE
 }
 BotTaskType;
 
@@ -821,6 +821,7 @@ typedef struct _AVH_AI_SQUAD
 	vector<AvHAIPlayer*> SquadMembers; // Which bots are assigned to this
 	Vector SquadGatherLocation = g_vecZero; // Where should the squad gather before attempting the objective?
 	edict_t* SquadTarget = nullptr; // The target of the objective
+	Vector ObjectiveLocation = g_vecZero;
 	BotTaskType SquadObjective = TASK_NONE; // What to do with the objective
 	bool bExecuteObjective = false; // Are we at the gather or execute phase?
 

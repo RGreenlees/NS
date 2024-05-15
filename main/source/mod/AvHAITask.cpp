@@ -395,8 +395,8 @@ bool AITASK_IsTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			return AITASK_IsAlienSecureHiveTaskStillValid(pBot, Task);
 		}
 	}
-	case TASK_ATTACK_BASE:
-		return true;
+	case TASK_ASSAULT_MARINE_BASE:
+		return AITASK_IsAssaultMarineBaseTaskStillValid(pBot, Task);
 	case TASK_DEFEND:
 		return AITASK_IsDefendTaskStillValid(pBot, Task);
 	case TASK_WELD:
@@ -959,6 +959,24 @@ bool AITASK_IsAlienSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 	EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 
 	return AITAC_DeployableExistsAtLocation(HiveToSecure->FloorLocation, &EnemyStuff);
+}
+
+bool AITASK_IsAssaultMarineBaseTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
+{
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
+
+	if (AIMGR_GetTeamType(EnemyTeam) != AVH_CLASS_TYPE_MARINE) { return false; }
+
+	DeployableSearchFilter StructureFilter;
+	StructureFilter.DeployableTeam = EnemyTeam;
+	StructureFilter.DeployableTypes = (STRUCTURE_MARINE_OBSERVATORY | STRUCTURE_MARINE_ARMSLAB | STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_PROTOTYPELAB);
+	StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	StructureFilter.ReachabilityTeam = BotTeam;
+	StructureFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
+	StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+	return AITAC_DeployableExistsAtLocation(Task->TaskLocation, &StructureFilter);
 }
 
 bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -2577,6 +2595,9 @@ void BotProgressTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 	}
 	break;
+	case TASK_ASSAULT_MARINE_BASE:
+		BotProgressAssaultMarineBaseTask(pBot, Task);
+		break;
 	default:
 		break;
 
@@ -2995,6 +3016,115 @@ void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	}
 
 
+}
+
+void BotProgressAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
+{
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
+
+	if (AIMGR_GetTeamType(BotTeam) == AVH_CLASS_TYPE_ALIEN)
+	{
+		AvHAISquad* ActiveSquad = AITAC_GetSquadForObjective(pBot, Task->TaskLocation, Task->TaskType);
+
+		if (ActiveSquad && !ActiveSquad->bExecuteObjective && !vIsZero(ActiveSquad->SquadGatherLocation))
+		{
+			BotGuardLocation(pBot, ActiveSquad->SquadGatherLocation);
+			return;
+		}
+	}
+
+	DeployableSearchFilter EnemyStructureFilter;
+	EnemyStructureFilter.DeployableTeam = EnemyTeam;
+	EnemyStructureFilter.ReachabilityTeam = BotTeam;
+	EnemyStructureFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
+	EnemyStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+	EnemyStructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+
+
+	// First go for any TFs, to eliminate defences
+	EnemyStructureFilter.DeployableTypes = (STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
+
+	vector<AvHAIBuildableStructure> Structures = AITAC_FindAllDeployables(Task->TaskLocation, &EnemyStructureFilter);
+
+	for (auto it = Structures.begin(); it != Structures.end(); it++)
+	{
+		float DistToStructure = vDist2D(pBot->Edict->v.origin, it->Location) - 5.0f;
+
+		if (AITAC_GetNumPlayersOfTeamInArea(BotTeam, it->Location, DistToStructure, false, pBot->Edict, AVH_USER3_NONE) < 2)
+		{
+			BotAttackNonPlayerTarget(pBot, it->edict);
+			return;
+		}
+	}
+
+	// First go for any observatory, to prevent beacon
+	EnemyStructureFilter.DeployableTypes = STRUCTURE_MARINE_OBSERVATORY;
+
+	Structures = AITAC_FindAllDeployables(Task->TaskLocation, &EnemyStructureFilter);
+
+	for (auto it = Structures.begin(); it != Structures.end(); it++)
+	{
+		float DistToStructure = vDist2D(pBot->Edict->v.origin, it->Location) - 5.0f;
+
+		if (AITAC_GetNumPlayersOfTeamInArea(BotTeam, it->Location, DistToStructure, false, pBot->Edict, AVH_USER3_NONE) < 2)
+		{
+			BotAttackNonPlayerTarget(pBot, it->edict);
+			return;
+		}
+	}
+
+	// Next go for any arms lab, to weaken the marines
+	EnemyStructureFilter.DeployableTypes = STRUCTURE_MARINE_ARMSLAB;
+
+	Structures = AITAC_FindAllDeployables(Task->TaskLocation, &EnemyStructureFilter);
+
+	for (auto it = Structures.begin(); it != Structures.end(); it++)
+	{
+		float DistToStructure = vDist2D(pBot->Edict->v.origin, it->Location) - 5.0f;
+
+		if (AITAC_GetNumPlayersOfTeamInArea(BotTeam, it->Location, DistToStructure, false, pBot->Edict, AVH_USER3_NONE) < 2)
+		{
+			BotAttackNonPlayerTarget(pBot, it->edict);
+			return;
+		}
+	}
+
+	// Next go for any infantry portals, to prevent reinforcements
+	EnemyStructureFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
+
+	Structures = AITAC_FindAllDeployables(Task->TaskLocation, &EnemyStructureFilter);
+
+	for (auto it = Structures.begin(); it != Structures.end(); it++)
+	{
+		float DistToStructure = vDist2D(pBot->Edict->v.origin, it->Location) - 5.0f;
+
+		if (AITAC_GetNumPlayersOfTeamInArea(BotTeam, it->Location, DistToStructure, false, pBot->Edict, AVH_USER3_NONE) < 2)
+		{
+			BotAttackNonPlayerTarget(pBot, it->edict);
+			return;
+		}
+	}
+
+	// Finally, any other structures
+	EnemyStructureFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+
+	Structures = AITAC_FindAllDeployables(Task->TaskLocation, &EnemyStructureFilter);
+
+	for (auto it = Structures.begin(); it != Structures.end(); it++)
+	{
+		float DistToStructure = vDist2D(pBot->Edict->v.origin, it->Location) - 5.0f;
+
+		if (AITAC_GetNumPlayersOfTeamInArea(BotTeam, it->Location, DistToStructure, false, pBot->Edict, AVH_USER3_NONE) < 2)
+		{
+			BotAttackNonPlayerTarget(pBot, it->edict);
+			return;
+		}
+	}
+
+	// nothing to attack, just hang around
+	BotGuardLocation(pBot, Task->TaskLocation);
+	
 }
 
 void BotGuardLocation(AvHAIPlayer* pBot, const Vector GuardLocation)
@@ -3858,6 +3988,19 @@ void AITASK_SetMineStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict
 	Task->bTaskIsUrgent = bIsUrgent;
 	Task->TaskLocation = UTIL_GetNextMinePosition2(Target);
 	Task->StructureType = STRUCTURE_MARINE_DEPLOYEDMINE;
+}
 
+void AITASK_SetAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, Vector BaseLocation, bool bIsUrgent)
+{
+	if (Task->TaskType == TASK_ASSAULT_MARINE_BASE && vEquals(BaseLocation, Task->TaskLocation))
+	{
+		Task->bTaskIsUrgent = bIsUrgent;
+		return;
+	}
 
+	AITASK_ClearBotTask(pBot, Task);
+
+	Task->TaskType = TASK_ASSAULT_MARINE_BASE;
+	Task->TaskLocation = BaseLocation;
+	Task->bTaskIsUrgent = bIsUrgent;
 }
