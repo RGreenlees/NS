@@ -380,7 +380,7 @@ bool AICOMM_IsOrderStillValid(AvHAIPlayer* pBot, ai_commander_order* Order)
 bool AICOMM_DoesPlayerOrderNeedReminder(AvHAIPlayer* pBot, ai_commander_order* Order)
 {
 	// For now, disable reminders as it is annoying for humans and pointless for bots who should obey it always anyway
-	return false;
+	return (Order->LastReminderTime < 0.1f);
 
 	float NewDist = vDist2DSq(Order->Assignee->v.origin, Order->OrderLocation);
 	float OldDist = Order->LastPlayerDistance;
@@ -2154,7 +2154,7 @@ bool AICOMM_PerformNextSecureHiveAction(AvHAIPlayer* pBot, const AvHAIHiveDefini
 {
 	DeployableSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_MARINE_PHASEGATE;
-	StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+	StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 	StructureFilter.DeployableTeam = pBot->Player->GetTeam();
 	StructureFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
 	StructureFilter.ReachabilityTeam = pBot->Player->GetTeam();
@@ -2164,7 +2164,7 @@ bool AICOMM_PerformNextSecureHiveAction(AvHAIPlayer* pBot, const AvHAIHiveDefini
 	AvHAIBuildableStructure ExistingPG;
 	AvHAIBuildableStructure ExistingTF;
 
-	Vector OutpostLocation = (ExistingStructure.IsValid()) ? ExistingStructure.Location : HiveToSecure->FloorLocation;
+	Vector OutpostLocation = (ExistingStructure.IsValid() && ExistingStructure.Purpose == STRUCTURE_PURPOSE_FORTIFY) ? ExistingStructure.Location : HiveToSecure->FloorLocation;
 
 	if (HiveToSecure->HiveResNodeRef && HiveToSecure->HiveResNodeRef->OwningTeam == TEAM_IND)
 	{
@@ -3360,11 +3360,11 @@ const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPl
 		StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 
 		StructureFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY;
-		StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+		StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 
 		AvHAIBuildableStructure ExistingStructure = AITAC_FindClosestDeployableToLocation(Hive->FloorLocation, &StructureFilter);
 
-		if (ExistingStructure.IsValid() && UTIL_QuickTrace(nullptr, UTIL_GetCentreOfEntity(ExistingStructure.edict), Hive->Location))
+		if (ExistingStructure.IsValid() && ExistingStructure.Purpose == STRUCTURE_PURPOSE_FORTIFY)
 		{
 			SecureLocation = ExistingStructure.Location;
 		}
@@ -3444,7 +3444,7 @@ bool AICOMM_IsHiveFullySecured(AvHAIPlayer* CommanderBot, const AvHAIHiveDefinit
 			bTurretFactoryElectrified = (Structure.StructureStatusFlags & STRUCTURE_STATUS_ELECTRIFIED);
 
 			SearchFilter.DeployableTypes = STRUCTURE_MARINE_TURRET;
-			SearchFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(8.0f);
+			SearchFilter.MaxSearchRadius = BALANCE_VAR(kTurretFactoryBuildDistance);
 
 			NumTurrets = AITAC_GetNumDeployablesNearLocation(Structure.Location, &SearchFilter);
 

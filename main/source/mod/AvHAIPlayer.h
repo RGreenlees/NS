@@ -26,9 +26,9 @@ static const float f_ffwidth = f_ffheight * BOT_ASPECT_RATIO;
 
 void BotJump(AvHAIPlayer* pBot);
 void BotSuicide(AvHAIPlayer* pBot);
-void BotLookAt(AvHAIPlayer* pBot, Vector NewLocation);
-void BotLookAt(AvHAIPlayer* pBot, edict_t* target);
-void BotMoveLookAt(AvHAIPlayer* pBot, const Vector target);
+void BotLookAt(AvHAIPlayer* pBot, Vector NewLocation, bool bSnap = false);
+void BotLookAt(AvHAIPlayer* pBot, edict_t* target, bool bSnap = false);
+void BotMoveLookAt(AvHAIPlayer* pBot, const Vector target, bool bSnap = false);
 void BotDirectLookAt(AvHAIPlayer* pBot, Vector target);
 
 bool BotUseObject(AvHAIPlayer* pBot, edict_t* Target, bool bContinuous);
