@@ -2814,10 +2814,13 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	StructureFilter.ReachabilityTeam = BotTeam;
 	StructureFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 	StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	StructureFilter.PurposeFlags = STRUCTURE_PURPOSE_FORTIFY;
 
 	vector<AvHAIBuildableStructure> BuildableStructures = AITAC_FindAllDeployables(Hive->FloorLocation, &StructureFilter);
 
 	bool bKeyStructureBuilt = false;
+
+	AvHAIBuildableStructure KeyOutpostStructure;
 
 	AvHAIBuildableStructure StructureToBuild;
 	float MinDist = 0.0f;
@@ -2828,6 +2831,7 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		if ((ThisStructure.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED) && (ThisStructure.StructureType & (STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_MARINE_PHASEGATE)))
 		{
+			KeyOutpostStructure = ThisStructure;
 			bKeyStructureBuilt = true;
 		}
 
@@ -2904,8 +2908,9 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 	}
 
+	Vector OutpostLocation = (KeyOutpostStructure.IsValid()) ? KeyOutpostStructure.Location : Task->TaskLocation;
 
-	BotGuardLocation(pBot, Task->TaskLocation);
+	BotGuardLocation(pBot, OutpostLocation);
 	
 }
 

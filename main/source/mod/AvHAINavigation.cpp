@@ -3702,7 +3702,10 @@ void FallMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 		pBot->desiredMovementDir = vBotOrientation;
 	}
 
-
+	if (vIsZero(pBot->LookTargetLocation))
+	{
+		BotLookAt(pBot, EndPoint + (vBotOrientation * 100.0f));
+	}
 
 }
 
@@ -4890,6 +4893,30 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 	}
 
 	Vector vForward = UTIL_GetVectorNormal2D(EndPoint - StartPoint);
+	Vector ClimbAngle = UTIL_GetVectorNormal(Vector(EndPoint.x, EndPoint.y, RequiredClimbHeight) - pBot->Edict->v.origin);
+	
+	TraceResult SurfaceCheck;
+
+	UTIL_TraceHull(pBot->Edict->v.origin - Vector(0.0f, 0.0f, 1.0f), pBot->Edict->v.origin + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, pBot->Edict->v.pContainingEntity, &SurfaceCheck);
+
+	Vector CeilNormal = SurfaceCheck.vecPlaneNormal;
+
+	bool bIsUnderClimbing = false;
+
+	bool bClimbingUnderway = ((pBot->CollisionHullBottomLocation.z - StartPoint.z) >= 32.0f) && IsPlayerClimbingWall(pBot->Edict);
+	
+	if (pEdict->v.origin.z < (RequiredClimbHeight - 10.0f) && !(pEdict->v.flags & FL_ONGROUND) && bClimbingUnderway)
+	{
+		bIsUnderClimbing = (SurfaceCheck.flFraction < 1.0f && UTIL_GetDotProduct(ClimbAngle, CeilNormal) < 0.0f);
+	}	
+
+	if (bIsUnderClimbing)
+	{		
+		pBot->Button |= IN_WALK;
+		vForward = (UTIL_GetDotProduct2D(vForward, CeilNormal) > 0.0f) ? vForward : -vForward;
+
+	}
+
 	Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
 
 	pBot->desiredMovementDir = vForward;
@@ -4912,14 +4939,10 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 		pBot->Button &= ~IN_DUCK;
 	}
 
-
-
 	float ZDiff = fabs(pEdict->v.origin.z - RequiredClimbHeight);
 	Vector AdjustedTargetLocation = EndPoint + (UTIL_GetVectorNormal2D(EndPoint - StartPoint) * 1000.0f);
 	Vector DirectAheadView = pBot->CurrentEyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - pBot->CurrentEyePosition) * 100.0f);
-
-	Vector ClimbSurfaceNormal = UTIL_GetVectorNormal(EndPoint - StartPoint);
-
+	
 	Vector LookLocation = g_vecZero;
 
 	if (ZDiff < 1.0f)
@@ -4931,10 +4954,10 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 		// Don't look up/down quite so much as we reach the desired height so we slow down a bit, reduces the chance of over-shooting and climbing right over a vent
 		if (pEdict->v.origin.z > RequiredClimbHeight)
 		{
-			if (ZDiff > 32.0f)
+			if (ZDiff > 16.0f)
 			{
-				ClimbSurfaceNormal = ClimbSurfaceNormal - (2.0f * (UTIL_GetDotProduct(ClimbSurfaceNormal, UP_VECTOR) * ClimbSurfaceNormal));
-				LookLocation = pBot->CurrentEyePosition + (ClimbSurfaceNormal * 100.0f);
+				ClimbAngle = ClimbAngle - (2.0f * (UTIL_GetDotProduct(ClimbAngle, UP_VECTOR) * ClimbAngle));
+				LookLocation = pBot->CurrentEyePosition + (ClimbAngle * 100.0f);
 			}
 			else
 			{
@@ -4943,12 +4966,27 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 		}
 		else
 		{
-			ClimbSurfaceNormal = ClimbSurfaceNormal;
-			LookLocation = pBot->CurrentEyePosition + (ClimbSurfaceNormal * 100.0f);
+			if (bIsUnderClimbing)
+			{
+				LookLocation = pBot->CurrentEyePosition + vForward;
+				LookLocation.z = EndPoint.z + 100.0f;
+			}
+			else
+			{
+				if (bClimbingUnderway)
+				{
+					LookLocation = pBot->CurrentEyePosition + (ClimbAngle * 100.0f);
+				}
+				else
+				{
+					LookLocation = pBot->CurrentEyePosition + vForward;
+					LookLocation.z = RequiredClimbHeight;
+				}
+			}
 		}
 	}
 
-	if (IsPlayerClimbingWall(pBot->Edict))
+	if (IsPlayerClimbingWall(pBot->Edict) && !bIsUnderClimbing)
 	{
 		Vector RightDir = UTIL_GetCrossProduct(vForward, UP_VECTOR);
 
@@ -4971,7 +5009,8 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 		}
 	}
 
-	BotMoveLookAt(pBot, LookLocation);
+	BotMoveLookAt(pBot, LookLocation, true);
+	//BotDirectLookAt(pBot, LookLocation);
 
 }
 
@@ -7937,6 +7976,11 @@ void BotMovementInputs(AvHAIPlayer* pBot)
 
 	float botSpeed = (pBot->BotNavInfo.bShouldWalk) ? (pBot->Edict->v.maxspeed * 0.4f) : pBot->Edict->v.maxspeed;
 
+	if (pBot->BotNavInfo.bShouldWalk)
+	{
+		pBot->Button |= IN_WALK;
+	}
+
 	if (angleDelta < -180.0f)
 	{
 		angleDelta += 360.0f;
@@ -9690,6 +9734,11 @@ bool NAV_IsMovementTaskStillValid(AvHAIPlayer* pBot)
 
 	if (MoveTask->TaskType == MOVE_TASK_TOUCH)
 	{
+		if (pBot->BotNavInfo.IsOnGround)
+		{
+			if (vDist2DSq(pBot->Edict->v.origin, MoveTask->TaskLocation) < sqrf(8.0f) && fabs(pBot->Edict->v.origin.z - MoveTask->TaskLocation.z) < 32.0f) { return false; }
+		}
+
 		return (!FNullEnt(MoveTask->TaskTarget) && !IsPlayerTouchingEntity(pBot->Edict, MoveTask->TaskTarget));
 	}
 

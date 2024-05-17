@@ -2585,7 +2585,7 @@ AvHAIBuildableStructure* AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 
 						if (NearestHive)
 						{
-							if (NearestHive->Status == HIVE_STATUS_UNBUILT && vDist2DSq(NearestHive->FloorLocation, StructureRef->Location) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
+							if (NearestHive->Status == HIVE_STATUS_UNBUILT && vDist2DSq(NearestHive->FloorLocation, StructureRef->Location) < sqrf(UTIL_MetresToGoldSrcUnits(15.0f)))
 							{
 								StructureRef->Purpose = STRUCTURE_PURPOSE_FORTIFY;
 							}
@@ -5520,9 +5520,10 @@ bool AITAC_IsBotPursuingSquadObjective(AvHAIPlayer* pBot, AvHAISquad* Squad)
 	if (!pBot->CurrentTask || pBot->CurrentTask == &pBot->PrimaryBotTask) { return true; }
 
 	// Bot isn't currently pursuing squad objective, so check if it's doing something in the vicinity
-	Vector TaskLocation = (!FNullEnt(pBot->CurrentTask->TaskTarget)) ? pBot->CurrentTask->TaskTarget->v.origin : pBot->CurrentTask->TaskLocation;
+	Vector BotTaskLocation = (!FNullEnt(pBot->CurrentTask->TaskTarget)) ? pBot->CurrentTask->TaskTarget->v.origin : pBot->CurrentTask->TaskLocation;
+	Vector SquadTaskLocation = (!FNullEnt(Squad->SquadTarget)) ? Squad->SquadTarget->v.origin : Squad->ObjectiveLocation;
 
-	return vDist2DSq(TaskLocation, Squad->SquadTarget->v.origin) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f));
+	return vDist2DSq(BotTaskLocation, SquadTaskLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f));
 }
 
 void AITAC_ManageSquads()

@@ -59,17 +59,18 @@ void BotSuicide(AvHAIPlayer* pBot)
 }
 
 /* Makes the bot look at the specified position */
-void BotLookAt(AvHAIPlayer* pBot, const Vector target)
+void BotLookAt(AvHAIPlayer* pBot, const Vector target, bool bSnap)
 {
-
+	pBot->bSnapView = bSnap;
 	pBot->LookTargetLocation.x = target.x;
 	pBot->LookTargetLocation.y = target.y;
 	pBot->LookTargetLocation.z = target.z;
 
 }
 
-void BotMoveLookAt(AvHAIPlayer* pBot, const Vector target)
+void BotMoveLookAt(AvHAIPlayer* pBot, const Vector target, bool bSnap)
 {
+	pBot->bSnapView = bSnap;
 	pBot->MoveLookLocation.x = target.x;
 	pBot->MoveLookLocation.y = target.y;
 	pBot->MoveLookLocation.z = target.z;
@@ -126,9 +127,11 @@ enemy_status* GetTrackedEnemyRefForTarget(AvHAIPlayer* pBot, edict_t* Target)
 	return nullptr;
 }
 
-void BotLookAt(AvHAIPlayer* pBot, edict_t* target)
+void BotLookAt(AvHAIPlayer* pBot, edict_t* target, bool bSnap)
 {
 	if (FNullEnt(target)) { return; }
+
+	pBot->bSnapView = bSnap;
 
 	pBot->LookTarget = target;
 
@@ -1152,6 +1155,14 @@ void BotUpdateDesiredViewRotation(AvHAIPlayer* pBot)
 	if (pBot->DesiredLookDirection.x > 180)
 		pBot->DesiredLookDirection.x -= 360;
 
+	if (pBot->bSnapView)
+	{
+		pBot->ViewInterpolationSpeed = 1000.0f;
+		pBot->ViewInterpStartedTime = gpGlobals->time;
+
+		return;
+	}
+
 	// Now figure out how far we have to turn to reach our desired target
 	float yDelta = pBot->DesiredLookDirection.y - pBot->InterpolatedLookDirection.y;
 	float xDelta = pBot->DesiredLookDirection.x - pBot->InterpolatedLookDirection.x;
@@ -1193,8 +1204,6 @@ void BotUpdateDesiredViewRotation(AvHAIPlayer* pBot)
 			{
 				yOffset *= -1.0f;
 			}
-
-
 
 			pBot->DesiredLookDirection.x += xOffset;
 			pBot->DesiredLookDirection.y += yOffset;
@@ -5741,7 +5750,7 @@ void TestNavThink(AvHAIPlayer* pBot)
 
 	pBot->CurrentTask = &pBot->PrimaryBotTask;
 
-	if (IsPlayerAlien(pBot->Edict) && IsPlayerSkulk(pBot->Edict))
+	if (IsPlayerAlien(pBot->Edict) && IsPlayerSkulk(pBot->Edict) && AITAC_GetNumPlayersOnTeamOfClass(pBot->Player->GetTeam(), AVH_USER3_ALIEN_PLAYER1, pBot->Edict) > 0)
 	{
 		if (AITAC_GetNumPlayersOnTeamOfClass(pBot->Player->GetTeam(), AVH_USER3_ALIEN_PLAYER2, pBot->Edict) == 0)
 		{
