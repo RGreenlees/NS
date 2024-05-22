@@ -469,6 +469,32 @@ void AICOMM_UpdatePlayerOrders(AvHAIPlayer* pBot)
 	}
 	
 	int NumPlayersOnTeam = AITAC_GetNumActivePlayersOnTeam(pBot->Player->GetTeam());
+
+	if (AICOMM_ShouldCommanderRelocate(pBot))
+	{
+		Vector RelocationPoint = pBot->RelocationSpot;
+
+		int DesiredRelocationPlayers = imini(3, (int)ceilf((float)NumPlayersOnTeam * 0.5f));
+
+		const AvHAIHiveDefinition* RelocationHive = AITAC_GetHiveNearestLocation(RelocationPoint);
+
+		if (RelocationHive)
+		{
+			int NumAssignedPlayers = AICOMM_GetNumPlayersAssignedToOrder(pBot, RelocationHive->HiveEdict, ORDERPURPOSE_SECURE_HIVE);
+
+			if (NumAssignedPlayers < DesiredRelocationPlayers)
+			{
+				edict_t* NewAssignee = AICOMM_GetPlayerWithNoOrderNearestLocation(pBot, RelocationHive->FloorLocation);
+
+				if (!FNullEnt(NewAssignee))
+				{
+					AICOMM_AssignNewPlayerOrder(pBot, NewAssignee, RelocationHive->HiveEdict, ORDERPURPOSE_SECURE_HIVE);
+					return;
+				}
+			}
+		}
+	}
+
 	int DesiredPlayers = imini(2, (int)ceilf((float)NumPlayersOnTeam *0.5f));
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
@@ -498,8 +524,6 @@ void AICOMM_UpdatePlayerOrders(AvHAIPlayer* pBot)
 
 	if (AICOMM_ShouldCommanderPrioritiseNodes(pBot))
 	{
-		
-
 		DeployableSearchFilter ResNodeFilter;
 		ResNodeFilter.ReachabilityTeam = pBot->Player->GetTeam();
 		ResNodeFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
@@ -2164,7 +2188,7 @@ bool AICOMM_PerformNextSecureHiveAction(AvHAIPlayer* pBot, const AvHAIHiveDefini
 	AvHAIBuildableStructure ExistingPG;
 	AvHAIBuildableStructure ExistingTF;
 
-	Vector OutpostLocation = (ExistingStructure.IsValid() && ExistingStructure.Purpose == STRUCTURE_PURPOSE_FORTIFY) ? ExistingStructure.Location : HiveToSecure->FloorLocation;
+	Vector OutpostLocation = (ExistingStructure.IsValid() && (ExistingStructure.Purpose == STRUCTURE_PURPOSE_FORTIFY || ExistingStructure.Purpose == STRUCTURE_PURPOSE_BASE)) ? ExistingStructure.Location : HiveToSecure->FloorLocation;
 
 	if (HiveToSecure->HiveResNodeRef && HiveToSecure->HiveResNodeRef->OwningTeam == TEAM_IND)
 	{
@@ -2375,6 +2399,23 @@ bool AICOMM_BuildInfantryPortal(AvHAIPlayer* pBot, edict_t* CommChair)
 
 bool AICOMM_CheckForNextRecycleAction(AvHAIPlayer* pBot)
 {
+	DeployableSearchFilter OldStuffFilter;
+	OldStuffFilter.DeployableTeam = pBot->Player->GetTeam();
+	OldStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	OldStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+	OldStuffFilter.MinSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
+	OldStuffFilter.PurposeFlags = STRUCTURE_PURPOSE_BASE;
+
+	Vector BaseLocation = (!vIsZero(pBot->RelocationSpot)) ? pBot->RelocationSpot : AITAC_GetTeamStartingLocation(pBot->Player->GetTeam());
+
+	AvHAIBuildableStructure OldBaseStructure = AITAC_FindFurthestDeployableFromLocation(BaseLocation, &OldStuffFilter);
+
+	if (OldBaseStructure.IsValid())
+	{
+		return AICOMM_RecycleStructure(pBot, &OldBaseStructure);
+	}
+
+
 	DeployableSearchFilter UnreachableFilter;
 	UnreachableFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 	UnreachableFilter.DeployableTeam = pBot->Player->GetTeam();
@@ -3252,8 +3293,36 @@ void AICOMM_CommanderThink(AvHAIPlayer* pBot)
 
 	AICOMM_UpdatePlayerOrders(pBot);
 
-	if (AICOMM_CheckForNextRecycleAction(pBot)) { return; }
 	if (AICOMM_CheckForNextSupportAction(pBot)) { return; }
+
+	if (AICOMM_ShouldCommanderRelocate(pBot))
+	{
+		if (vIsZero(pBot->RelocationSpot) || !AITAC_IsRelocationPointStillValid(pBot->Player->GetTeam(), pBot->RelocationSpot))
+		{
+			pBot->RelocationSpot = AITAC_FindNewTeamRelocationPoint(pBot->Player->GetTeam());
+
+			if (!vIsZero(pBot->RelocationSpot))
+			{
+				const AvHAIHiveDefinition* RelocationHive = AITAC_GetHiveNearestLocation(pBot->RelocationSpot);
+
+				if (RelocationHive)
+				{
+					char msg[128];
+					sprintf(msg, "We're relocating to %s, lads", RelocationHive->HiveName);
+					BotSay(pBot, true, 1.0f, msg);
+				}
+			}
+		}
+
+		if (!vIsZero(pBot->RelocationSpot))
+		{
+			if (AICOMM_CheckForNextRelocationAction(pBot)) { return; }
+
+			return;
+		}
+	}
+
+	if (AICOMM_CheckForNextRecycleAction(pBot)) { return; }	
 	if (AICOMM_CheckForNextBuildAction(pBot)) { return; }
 	if (AICOMM_CheckForNextResearchAction(pBot)) { return; }
 	if (AICOMM_CheckForNextSupplyAction(pBot)) { return; }
@@ -3343,6 +3412,9 @@ const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPl
 
 	const vector<AvHAIHiveDefinition*> Hives = AITAC_GetAllHives();
 
+	Vector TeamStartLocation = AITAC_GetTeamStartingLocation(CommanderTeam);
+	Vector RelocationPoint = CommanderBot->RelocationSpot;
+
 	for (auto it = Hives.begin(); it != Hives.end(); it++)
 	{
 		const AvHAIHiveDefinition* Hive = (*it);
@@ -3350,6 +3422,16 @@ const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPl
 		if (Hive->Status != HIVE_STATUS_UNBUILT) { continue; }
 
 		if (AICOMM_IsHiveFullySecured(CommanderBot, Hive, false)) { continue; }
+
+		// If the hive is close enough that we could siege it from our base, then don't bother securing it
+		if (vDist2DSq(TeamStartLocation, Hive->FloorLocation) < sqrf(UTIL_MetresToGoldSrcUnits(15.0f))) { continue; }
+
+		// If the hive is close enough that we could siege it from our base, then don't bother securing it
+		if (!vIsZero(CommanderBot->RelocationSpot))
+		{
+			// Likewise, don't secure if we're planning to move there. We will build the base instead
+			if (vDist2DSq(CommanderBot->RelocationSpot, Hive->FloorLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) { continue; }
+		}
 
 		Vector SecureLocation = Hive->FloorLocation;
 
@@ -3364,7 +3446,7 @@ const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPl
 
 		AvHAIBuildableStructure ExistingStructure = AITAC_FindClosestDeployableToLocation(Hive->FloorLocation, &StructureFilter);
 
-		if (ExistingStructure.IsValid() && ExistingStructure.Purpose == STRUCTURE_PURPOSE_FORTIFY)
+		if (ExistingStructure.IsValid() && (ExistingStructure.Purpose == STRUCTURE_PURPOSE_FORTIFY || ExistingStructure.Purpose == STRUCTURE_PURPOSE_BASE))
 		{
 			SecureLocation = ExistingStructure.Location;
 		}
@@ -3615,4 +3697,230 @@ void AICOMM_ReceiveChatRequest(AvHAIPlayer* Commander, edict_t* Requestor, const
 	{
 		Commander->ActiveRequests.push_back(NewRequest);
 	}
+}
+
+bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
+{
+	AvHTeamNumber Team = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(Team);
+
+	edict_t* CurrentCommChair = AITAC_GetCommChair(Team);
+
+	if (FNullEnt(CurrentCommChair)) { return false; }
+
+	Vector CurrentTeamStartLocation = CurrentCommChair->v.origin;
+
+	DeployableSearchFilter BaseStructureFilter;
+	BaseStructureFilter.DeployableTeam = Team;
+	BaseStructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+	BaseStructureFilter.DeployableTypes = (STRUCTURE_MARINE_OBSERVATORY | STRUCTURE_MARINE_ARMSLAB | STRUCTURE_MARINE_ADVARMOURY | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
+	BaseStructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	BaseStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+	vector<AvHAIBuildableStructure> AllBaseStructures = AITAC_FindAllDeployables(CurrentTeamStartLocation, &BaseStructureFilter);
+
+	bool bBaseWellEstablished = false;
+	bool bObservatoryExists = false;
+
+	for (auto it = AllBaseStructures.begin(); it != AllBaseStructures.end(); it++)
+	{
+		if (it->StructureType == STRUCTURE_MARINE_OBSERVATORY)
+		{
+			bObservatoryExists = true;
+		}
+
+		bBaseWellEstablished = true;
+	}
+
+	// If we can beacon then don't relocate
+	if (bBaseWellEstablished && bObservatoryExists) { return false; }
+
+	// If our base is well established, then relocate if the base is overrun and lost
+	if (bBaseWellEstablished)
+	{
+		DeployableSearchFilter BaseStructureFilter;
+		BaseStructureFilter.DeployableTypes = (STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_COMMCHAIR);
+		BaseStructureFilter.DeployableTeam = Team;
+		BaseStructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+		BaseStructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+
+		vector<AvHAIBuildableStructure> BaseStructures = AITAC_FindAllDeployables(CurrentTeamStartLocation, &BaseStructureFilter);
+
+		bool bHasInfantryPortals = false;
+		bool bBaseUnderAttack = false;
+
+		for (auto it = BaseStructures.begin(); it != BaseStructures.end(); it++)
+		{
+			AvHAIBuildableStructure ThisStructure = (*it);
+
+			if (ThisStructure.StructureStatusFlags & STRUCTURE_STATUS_UNDERATTACK)
+			{
+				bBaseUnderAttack = true;
+			}
+
+			if (ThisStructure.StructureType == STRUCTURE_MARINE_INFANTRYPORTAL)
+			{
+				bHasInfantryPortals = true;
+			}
+		}
+
+		if (!bBaseUnderAttack && bHasInfantryPortals) { return false; }
+
+		int EnemyStrength = 0;
+		int DefenderStrength = AITAC_GetNumPlayersOfTeamInArea(Team, CurrentTeamStartLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER);
+
+		if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_MARINE)
+		{
+			EnemyStrength = AITAC_GetNumPlayersOfTeamInArea(EnemyTeam, CurrentTeamStartLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER);
+		}
+		else
+		{
+			int NumSkulks = AITAC_GetNumPlayersOfTeamAndClassInArea(EnemyTeam, CurrentTeamStartLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_ALIEN_PLAYER1);
+			int NumFades = AITAC_GetNumPlayersOfTeamAndClassInArea(EnemyTeam, CurrentTeamStartLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_ALIEN_PLAYER4);
+			int NumOnos = AITAC_GetNumPlayersOfTeamAndClassInArea(EnemyTeam, CurrentTeamStartLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_ALIEN_PLAYER5);
+
+			EnemyStrength = NumSkulks + (NumFades * 2) + (NumOnos * 2);
+		}
+
+		if (EnemyStrength >= 3 && EnemyStrength >= DefenderStrength * 3)
+		{
+			return true;
+		}
+
+		return false;
+	}
+
+	// Don't relocate if we're already located in a hive
+	const AvHAIHiveDefinition* NearestHive = AITAC_GetHiveNearestLocation(CurrentTeamStartLocation);
+
+	if (NearestHive && NearestHive->Status == HIVE_STATUS_UNBUILT && vDist2DSq(NearestHive->FloorLocation, CurrentTeamStartLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
+	{
+		return false;
+	}
+
+	if (!vIsZero(pBot->RelocationSpot))
+	{
+		if (AITAC_IsRelocationCompleted(Team, pBot->RelocationSpot))
+		{
+			return false;
+		}
+
+		DeployableSearchFilter InfPortalFilter;
+		InfPortalFilter.DeployableTeam = Team;
+		InfPortalFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
+		InfPortalFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+		InfPortalFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+		InfPortalFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+
+		if (AITAC_DeployableExistsAtLocation(pBot->RelocationSpot, &InfPortalFilter))
+		{
+			return true;
+		}
+
+		// If the match has been going on for a minute and we haven't made any progress in relocation then give up, or we risk losing everything
+		if (AIMGR_GetMatchLength() > 60.0f)
+		{
+			return AITAC_GetNumPlayersOfTeamInArea(Team, pBot->RelocationSpot, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER) > 0;
+		}
+	}
+
+	return true;
+}
+
+bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot)
+{
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
+	
+	Vector RelocationPoint = pBot->RelocationSpot;
+
+	if (vIsZero(RelocationPoint)) { return false; }
+	
+	edict_t* CurrentCommChair = AITAC_GetCommChair(BotTeam);
+
+	if (FNullEnt(CurrentCommChair)) { return false; }
+
+	DeployableSearchFilter OrigInfPortalFilter;
+	OrigInfPortalFilter.DeployableTeam = BotTeam;
+	OrigInfPortalFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
+	OrigInfPortalFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
+
+	// First ensure we have one infantry portal in our starting location, in case it goes horribly wrong
+	if (!AITAC_DeployableExistsAtLocation(CurrentCommChair->v.origin, &OrigInfPortalFilter))
+	{
+		return AICOMM_BuildInfantryPortal(pBot, CurrentCommChair);
+	}
+
+	// Don't do anything more if we don't have anyone at the relocation point yet, but we can drop RTs if needed
+	if (AITAC_GetNumPlayersOfTeamInArea(BotTeam, RelocationPoint, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER) == 0)
+	{
+		const AvHAIResourceNode* CappableNode = AICOMM_GetNearestResourceNodeCapOpportunity(BotTeam, CurrentCommChair->v.origin);
+
+		if (CappableNode)
+		{
+			bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_RESTOWER, CappableNode->Location);
+
+			if (bSuccess || pBot->Player->GetResources() <= BALANCE_VAR(kResourceTowerCost) + 10) { return true; }
+
+		}
+		
+		return false;
+	}
+
+	DeployableSearchFilter NewBaseFilter;
+	NewBaseFilter.DeployableTeam = BotTeam;
+	NewBaseFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
+	NewBaseFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	NewBaseFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+
+	AvHAIBuildableStructure RelocationCommChair = AITAC_FindClosestDeployableToLocation(RelocationPoint, &NewBaseFilter);
+
+	if (!RelocationCommChair.IsValid())
+	{
+		Vector BuildPoint = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), RelocationPoint, UTIL_MetresToGoldSrcUnits(2.0f));
+
+		if (vIsZero(BuildPoint))
+		{
+			BuildPoint = UTIL_ProjectPointToNavmesh(RelocationPoint, Vector(500.0f, 500.0f, 500.0f), GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+		}
+
+		if (!vIsZero(BuildPoint))
+		{
+			return AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_COMMCHAIR, BuildPoint, STRUCTURE_PURPOSE_BASE);
+		}
+
+		return false;
+	}
+
+	if (!(RelocationCommChair.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED)) { return false; }
+
+	NewBaseFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
+	NewBaseFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(8.0f);
+	NewBaseFilter.IncludeStatusFlags = STRUCTURE_STATUS_NONE;
+
+	int NumInfPortals = AITAC_GetNumDeployablesNearLocation(RelocationCommChair.Location, &NewBaseFilter);
+
+	if (NumInfPortals < 2)
+	{
+		return AICOMM_BuildInfantryPortal(pBot, RelocationCommChair.edict);
+	}
+
+	DeployableSearchFilter OldStuffFilter;
+	OldStuffFilter.DeployableTeam = BotTeam;
+	OldStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	OldStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+	OldStuffFilter.MinSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
+	OldStuffFilter.PurposeFlags = STRUCTURE_PURPOSE_BASE;
+
+	vector<AvHAIBuildableStructure> OldBaseStructures = AITAC_FindAllDeployables(pBot->RelocationSpot, &OldStuffFilter);
+
+	for (auto it = OldBaseStructures.begin(); it != OldBaseStructures.end(); it++)
+	{
+		if (it->edict != CurrentCommChair)
+		{
+			return AICOMM_RecycleStructure(pBot, &(*it));
+		}
+	}
+
+	return false;
 }

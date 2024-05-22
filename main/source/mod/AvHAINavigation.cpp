@@ -5010,7 +5010,6 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 	}
 
 	BotMoveLookAt(pBot, LookLocation, true);
-	//BotDirectLookAt(pBot, LookLocation);
 
 }
 

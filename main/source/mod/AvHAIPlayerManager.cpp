@@ -1591,3 +1591,8 @@ float AIMGR_GetFrameDelta()
 {
 	return CurrentFrameDelta;
 }
+
+float AIMGR_GetMatchLength()
+{
+	return (gpGlobals->time - GetGameRules()->GetTimeGameStarted());
+}

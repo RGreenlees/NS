@@ -18,6 +18,7 @@
 #include "AvHAIConstants.h"
 #include "AvHAIPlayerManager.h"
 #include "AvHAIConfig.h"
+#include "AvHAICommander.h"
 
 #include "AvHGamerules.h"
 #include "AvHServerUtil.h"
@@ -53,6 +54,9 @@ unsigned int ItemRefreshFrame = 0;
 
 Vector TeamAStartingLocation = ZERO_VECTOR;
 Vector TeamBStartingLocation = ZERO_VECTOR;
+
+Vector TeamARelocationPoint = ZERO_VECTOR;
+Vector TeamBRelocationPoint = ZERO_VECTOR;
 
 extern nav_mesh NavMeshes[MAX_NAV_MESHES]; // Array of nav meshes. Currently only 3 are used (building, onos, and regular)
 extern nav_profile BaseNavProfiles[MAX_NAV_PROFILES]; // Array of nav profiles
@@ -1182,6 +1186,27 @@ void AITAC_RefreshHiveData()
 
 		NextRefresh++;
 	}
+}
+
+Vector AITAC_GetTeamRelocationPoint(AvHTeamNumber Team)
+{
+	Vector CurrentRelocationPoint = (Team == GetGameRules()->GetTeamANumber()) ? TeamARelocationPoint : TeamBRelocationPoint;
+
+	if (!AITAC_IsRelocationPointStillValid(Team, CurrentRelocationPoint))
+	{
+		CurrentRelocationPoint = AITAC_FindNewTeamRelocationPoint(Team);
+	}
+
+	if (Team == GetGameRules()->GetTeamANumber())
+	{
+		TeamARelocationPoint = CurrentRelocationPoint;
+	}
+	else
+	{
+		TeamBRelocationPoint = CurrentRelocationPoint;
+	}
+
+	return (Team == GetGameRules()->GetTeamANumber()) ? TeamARelocationPoint : TeamBRelocationPoint;
 }
 
 Vector AITAC_GetTeamStartingLocation(AvHTeamNumber Team)
@@ -4379,7 +4404,6 @@ edict_t* AITAC_GetCommChair(AvHTeamNumber Team)
 	ChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
 	ChairFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 	ChairFilter.DeployableTeam = Team;
-	ChairFilter.ReachabilityTeam = TEAM_IND;
 
 	vector<AvHAIBuildableStructure> CommChairs = AITAC_FindAllDeployables(ZERO_VECTOR, &ChairFilter);
 
@@ -4391,8 +4415,10 @@ edict_t* AITAC_GetCommChair(AvHTeamNumber Team)
 	{
 		AvHCommandStation* ChairRef = dynamic_cast<AvHCommandStation*>((*it).EntityRef);
 
+		if (!ChairRef) { continue; }
+
 		// Idle animation will be 3 if the chair is in use (closed animation). See AvHCommandStation::GetIdleAnimation
-		if (ChairRef && ChairRef->GetIdleAnimation() == 3)
+		if (ChairRef->GetIdleAnimation() == 3)
 		{
 			MainCommChair = ChairRef->edict();
 		}
@@ -5750,4 +5776,157 @@ Vector AITAC_GetGatherLocationForSquad(AvHAISquad* Squad)
 	}
 
 	return ZERO_VECTOR;
+}
+
+Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team)
+{
+	if (!CONFIG_IsRelocationAllowed()) { return ZERO_VECTOR; }
+
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(Team);
+
+	// Only relocate if:
+	// There is a hive to relocate to with a marine ready to build
+	// The current base is overrun and lost
+	// Or we decide we want to, and the current base isn't too built up
+
+	Vector CurrentTeamStartLocation = AITAC_GetTeamStartingLocation(Team);
+
+	const AvHAIHiveDefinition* RelocationHive = nullptr;
+	float MinDist = 0.0f;
+
+	vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
+
+	for (auto it = AllHives.begin(); it != AllHives.end(); it++)
+	{
+		const AvHAIHiveDefinition* ThisHive = (*it);
+
+		// Obviously don't relocate to an active enemy hive...
+		if (ThisHive->Status != HIVE_STATUS_UNBUILT) { continue; }
+
+		// Don't relocate if we're already located close to this hive
+		if (vDist2DSq(CurrentTeamStartLocation, ThisHive->FloorLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) { continue; }
+
+		// Don't relocate if the enemy has a foothold here
+		DeployableSearchFilter EnemyStuff;
+		EnemyStuff.DeployableTeam = EnemyTeam;
+		EnemyStuff.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+		EnemyStuff.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+		EnemyStuff.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_ALIEN_OFFENCECHAMBER);
+		EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+		if (AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStuff)) { continue; }
+
+		const AvHAIHiveDefinition* NearestEnemyHive = AITAC_GetActiveHiveNearestLocation(EnemyTeam, ThisHive->FloorLocation);
+
+		float ThisDist = 0.0f;
+
+		// Either pick an empty hive furthest from the nearest enemy hive (if they have one)
+		// Or the closest one to us if the enemy don't (e.g. it's MvM)
+
+		if (NearestEnemyHive)
+		{
+			ThisDist = vDist2DSq(NearestEnemyHive->FloorLocation, ThisHive->FloorLocation);
+
+			if (!RelocationHive || ThisDist > MinDist)
+			{
+				RelocationHive = ThisHive;
+				MinDist = ThisDist;
+			}
+		}
+		else
+		{
+			ThisDist = vDist2DSq(CurrentTeamStartLocation, ThisHive->FloorLocation);
+
+			if (!RelocationHive || ThisDist < MinDist)
+			{
+				RelocationHive = ThisHive;
+				MinDist = ThisDist;
+			}
+		}
+
+		
+
+
+
+	}
+
+	// No hives to relocate to
+	if (!RelocationHive) { return ZERO_VECTOR; }
+
+	return RelocationHive->FloorLocation;
+
+}
+
+bool AITAC_IsRelocationPointStillValid(AvHTeamNumber RelocationTeam, Vector RelocationPoint)
+{
+	if (vIsZero(RelocationPoint)) { return false; }
+
+	const AvHAIHiveDefinition* ThisHive = AITAC_GetHiveNearestLocation(RelocationPoint);
+
+	// Obviously don't relocate to an active enemy hive...
+	if (ThisHive->Status != HIVE_STATUS_UNBUILT) { return false; }
+
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(RelocationTeam);
+
+	// Don't relocate if the enemy has a foothold here
+	DeployableSearchFilter EnemyStuff;
+	EnemyStuff.DeployableTeam = EnemyTeam;
+	EnemyStuff.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	EnemyStuff.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+	EnemyStuff.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_ALIEN_OFFENCECHAMBER);
+	EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+	if (AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStuff)) { return false; }
+
+	return true;
+}
+
+bool AITAC_IsRelocationCompleted(AvHTeamNumber RelocationTeam, Vector RelocationPoint)
+{
+	if (vIsZero(RelocationPoint)) { return true; }
+
+	// Don't relocate if the enemy has a foothold here
+	DeployableSearchFilter BaseStuffFilter;
+	BaseStuffFilter.DeployableTeam = RelocationTeam;
+	BaseStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	BaseStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+	BaseStuffFilter.DeployableTypes = (STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL);
+	BaseStuffFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+	edict_t* RelocationChair = nullptr;
+	edict_t* CurrentCommChair = AITAC_GetCommChair(RelocationTeam);
+	int NumInfPortals = 0;
+
+	vector<AvHAIBuildableStructure> RelocationStructures = AITAC_FindAllDeployables(RelocationPoint, &BaseStuffFilter);
+
+	for (auto it = RelocationStructures.begin(); it != RelocationStructures.end(); it++)
+	{
+		if (it->StructureType == STRUCTURE_MARINE_COMMCHAIR)
+		{
+			RelocationChair = it->edict;
+		}
+
+		if (it->StructureType == STRUCTURE_MARINE_INFANTRYPORTAL)
+		{
+			NumInfPortals++;
+		}
+	}
+
+	if (FNullEnt(RelocationChair) || NumInfPortals < 2) { return false; }
+
+	DeployableSearchFilter OldStuffFilter;
+	OldStuffFilter.DeployableTeam = RelocationTeam;
+	OldStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+	OldStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+	OldStuffFilter.MinSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
+	OldStuffFilter.PurposeFlags = STRUCTURE_PURPOSE_BASE;
+
+	vector<AvHAIBuildableStructure> AllOldStructures = AITAC_FindAllDeployables(RelocationPoint, &OldStuffFilter);
+
+	for (auto it = AllOldStructures.begin(); it != AllOldStructures.end(); it++)
+	{
+		if (it->edict != CurrentCommChair) { return false; }
+	}
+
+	return true;
 }

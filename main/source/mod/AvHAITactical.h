@@ -63,6 +63,7 @@ Vector						AITAC_GetCommChairLocation(AvHTeamNumber Team);
 edict_t*					AITAC_GetCommChair(AvHTeamNumber Team);
 
 Vector						AITAC_GetTeamStartingLocation(AvHTeamNumber Team);
+Vector						AITAC_GetTeamRelocationPoint(AvHTeamNumber Team);
 
 AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags);
 
@@ -210,5 +211,9 @@ void AITAC_ClearSquads();
 AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, edict_t* TaskTarget, BotTaskType ObjectiveType);
 AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, Vector TaskLocation, BotTaskType ObjectiveType);
 Vector AITAC_GetGatherLocationForSquad(AvHAISquad* Squad);
+
+Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team);
+bool AITAC_IsRelocationPointStillValid(AvHTeamNumber RelocationTeam, Vector RelocationPoint);
+bool AITAC_IsRelocationCompleted(AvHTeamNumber RelocationTeam, Vector RelocationPoint);
 
 #endif

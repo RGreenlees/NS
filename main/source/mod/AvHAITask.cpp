@@ -1928,9 +1928,34 @@ void BotProgressTakeCommandTask(AvHAIPlayer* pBot)
 	// Don't take command if we already have a commander
 	if (pBot->Player->GetCommander()) { return; }
 
-	edict_t* CommChair = AITAC_GetCommChair(pBot->Player->GetTeam());
+	edict_t* CommChair = nullptr;
 
-	if (!CommChair) { return; }
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+
+	Vector RelocationPoint = pBot->RelocationSpot;
+
+	if (!vIsZero(RelocationPoint) && AITAC_IsRelocationCompleted(BotTeam, RelocationPoint))
+	{
+		DeployableSearchFilter RelocationChairFilter;
+		RelocationChairFilter.DeployableTeam = BotTeam;
+		RelocationChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
+		RelocationChairFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+		RelocationChairFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+		RelocationChairFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+
+		AvHAIBuildableStructure RelocationChair = AITAC_FindClosestDeployableToLocation(RelocationPoint, &RelocationChairFilter);
+
+		if (RelocationChair.IsValid())
+		{
+			CommChair = RelocationChair.edict;
+		}
+	}
+	else
+	{
+		CommChair = AITAC_GetCommChair(BotTeam);
+	}	
+
+	if (FNullEnt(CommChair)) { return; }
 
 	float DistFromChair = vDist2DSq(pBot->Edict->v.origin, CommChair->v.origin);
 
@@ -2719,6 +2744,9 @@ void AlienProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		if (PhaseGate.IsValid())
 		{
+			// If the phase gate is next to an electrified structure, and we are a skulk or lerk, then attack
+			// The electrified structure instead. I might change this to avoid it altogether, but there's nothing
+			// wrong with trying to chip away at the TF if you're a skulk
 			if (bAvoidElectrified)
 			{
 				EnemyStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
