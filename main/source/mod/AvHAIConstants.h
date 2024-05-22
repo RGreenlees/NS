@@ -814,6 +814,8 @@ typedef struct AVH_AI_PLAYER
 
 	int DebugValue = 0; // Used for debugging the bot
 
+	Vector RelocationSpot = ZERO_VECTOR; // If the bot is commanding and wants to relocate, then this is where they plan to go
+
 } AvHAIPlayer;
 
 typedef struct _AVH_AI_SQUAD

@@ -12,6 +12,8 @@ BotFillTiming CurrentBotFillTiming = FILLTIMING_ALLHUMANS;
 
 float MaxAIMatchTimeMinutes = 90.0f;
 
+bool bRelocationAllowed = false;
+
 std::unordered_map<std::string, TeamSizeDefinitions> TeamSizeMap;
 
 bot_skill BotSkillLevels[4];
@@ -88,6 +90,11 @@ bool CONFIG_IsFadeAllowed()
 bool CONFIG_IsOnosAllowed()
 {
     return avh_botallowonos.value > 0;
+}
+
+bool CONFIG_IsRelocationAllowed()
+{
+    return bRelocationAllowed;
 }
 
 float CONFIG_GetMaxStuckTime()
@@ -324,6 +331,14 @@ void CONFIG_ParseConfigFile()
             if (!stricmp(keyChar, "Prefix"))
             {
                 sprintf(BotPrefix, value.c_str());
+
+                continue;
+            }
+
+            if (!stricmp(keyChar, "AllowRelocation"))
+            {
+                const char* ValueChar = value.c_str();
+                bRelocationAllowed = (!stricmp(ValueChar, "True") || !stricmp(ValueChar, "T"));
 
                 continue;
             }

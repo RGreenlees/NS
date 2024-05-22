@@ -41,6 +41,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextRecycleAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot);
+bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot);
 
 void AICOMM_SetDropHealthAction(AvHAIPlayer* pBot, commander_action* Action, edict_t* Recipient);
 void AICOMM_SetDropAmmoAction(AvHAIPlayer* pBot, commander_action* Action, edict_t* Recipient);
@@ -70,5 +71,7 @@ bool AICOMM_ShouldCommanderPrioritiseNodes(AvHAIPlayer* pBot);
 bool AICOMM_ShouldBeacon(AvHAIPlayer* pBot);
 
 void AICOMM_ReceiveChatRequest(AvHAIPlayer* Commander, edict_t* Requestor, const char* Request);
+
+bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot);
 
 #endif // AVH_AI_COMMANDER_H

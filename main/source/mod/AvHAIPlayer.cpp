@@ -1926,6 +1926,11 @@ void SetNewAIPlayerRole(AvHAIPlayer* pBot, AvHAIBotRole NewRole)
 		AITASK_ClearBotTask(pBot, &pBot->SecondaryBotTask);
 
 		pBot->BotRole = NewRole;
+
+		if (NewRole != BOT_ROLE_COMMAND && IsPlayerCommander(pBot->Edict))
+		{
+			BotStopCommanderMode(pBot);
+		}
 	}
 }
 
@@ -2072,10 +2077,37 @@ bool ShouldAIPlayerTakeCommand(AvHAIPlayer* pBot)
 
 	AvHPlayer* CurrentCommander = BotTeam->GetCommanderPlayer();
 
-	// Don't go commander if we already have one, and it's not us
 	if (CurrentCommander)
 	{
-		return CurrentCommander == pBot->Player;
+		// Don't go commander if we already have one, and it's not us
+		if (CurrentCommander != pBot->Player) { return false; }
+
+		if (!AICOMM_ShouldCommanderRelocate(pBot))
+		{
+			// If it is us, then check if we're relocating. If we are, and we're in the old chair, then we should stop commanding
+
+			Vector TeamRelocationPoint = pBot->RelocationSpot;
+
+			if (vIsZero(TeamRelocationPoint)) { return true; }
+
+			if (AITAC_IsRelocationCompleted(BotTeamNumber, TeamRelocationPoint))
+			{
+				DeployableSearchFilter CommChairFilter;
+				CommChairFilter.DeployableTeam = BotTeamNumber;
+				CommChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
+				CommChairFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+				CommChairFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+
+				AvHAIBuildableStructure RelocationCommChair = AITAC_FindClosestDeployableToLocation(pBot->RelocationSpot, &CommChairFilter);
+
+				// Only command if we're in the relocation chair, otherwise don't
+				return !RelocationCommChair.IsValid() || RelocationCommChair.edict == AITAC_GetCommChair(BotTeamNumber);
+			}
+			else
+			{
+				return true;
+			}
+		}
 	}
 
 	// Don't go commander if there is another bot already taking command
@@ -6793,6 +6825,8 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		
 		vector<AvHAIBuildableStructure> EnemyStructures = AITAC_FindAllDeployables(ThisHive->FloorLocation, &EnemyStuffFilter);
 
+		bool bIsRelocationHive = false; // If true, the marines have relocated here so don't try to retake it: requires a base attack task instead
+
 		// Enemy hasn't built anything here, so doesn't need clearing
 		if (ThisHive->OwningTeam != EnemyTeam && EnemyStructures.size() == 0) { continue; }
 
@@ -6802,6 +6836,9 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		{
 			switch (StructureIt->StructureType)
 			{
+				case STRUCTURE_MARINE_INFANTRYPORTAL:
+					bIsRelocationHive = true;
+					break;
 				case STRUCTURE_MARINE_PHASEGATE:
 					ThisStrength += 2;
 					break;
@@ -6819,7 +6856,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 			}
 		}
 
-		if (!HiveToSecure || ThisStrength < MaxHiveStrength)
+		if (!bIsRelocationHive && (!HiveToSecure || ThisStrength < MaxHiveStrength))
 		{
 			HiveToSecure = ThisHive;
 			MaxHiveStrength = ThisStrength;
@@ -6853,8 +6890,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 				return;
 			}			
 		}
-	}
-	
+	}	
 
 	// FIND ANY LAST ENEMIES TO KILL AND END GAME
 
@@ -7415,19 +7451,19 @@ void AIPlayerSetWantsAndNeedsAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		{
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_DEFENCE) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_DEFENCE))
 			{
-				AITASK_SetEvolveTask(pBot, Task, pBot->CurrentFloorPosition, AlienGetDesiredUpgrade(pBot, HIVE_TECH_DEFENCE), true);
+				pBot->Edict->v.impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_DEFENCE);
 				return;
 			}
 
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_MOVEMENT) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_MOVEMENT))
 			{
-				AITASK_SetEvolveTask(pBot, Task, pBot->CurrentFloorPosition, AlienGetDesiredUpgrade(pBot, HIVE_TECH_MOVEMENT), true);
+				pBot->Edict->v.impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_MOVEMENT);
 				return;
 			}
 
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_SENSORY) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_SENSORY))
 			{
-				AITASK_SetEvolveTask(pBot, Task, pBot->CurrentFloorPosition, AlienGetDesiredUpgrade(pBot, HIVE_TECH_SENSORY), true);
+				pBot->Edict->v.impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_SENSORY);
 				return;
 			}
 		}

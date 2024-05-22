@@ -97,6 +97,8 @@ AvHClassType AIMGR_GetTeamType(const AvHTeamNumber Team);
 AvHTeamNumber AIMGR_GetTeamANumber();
 AvHTeamNumber AIMGR_GetTeamBNumber();
 
+float AIMGR_GetMatchLength();
+
 AvHTeam* AIMGR_GetTeamRef(const AvHTeamNumber Team);
 
 // Returns all NS AI players. Does not include third-party bots
