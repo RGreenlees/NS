@@ -44,6 +44,7 @@ bool CONFIG_IsFadeAllowed();
 bool CONFIG_IsOnosAllowed();
 
 bool CONFIG_IsRelocationAllowed();
+float CONFIG_GetRelocationChance();
 
 // Returns the max time a bot is allowed to be stuck before suiciding (0 means forever)
 float CONFIG_GetMaxStuckTime();

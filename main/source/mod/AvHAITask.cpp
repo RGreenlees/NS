@@ -987,6 +987,8 @@ bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 
 	if (!HiveToSecure || HiveToSecure->Status != HIVE_STATUS_UNBUILT) { return false; }
 
+	
+
 	// A marine bot will consider their "secure hive" task completed if the following structures have been fully built:
 	// Phase gate (only if tech available)
 	// Turret factory (regular or advanced)
@@ -994,6 +996,12 @@ bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 	// Resource node has been capped by the bot's team
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+
+	// We've relocated to this hive, no need to secure now
+	if (vDist2DSq(AITAC_GetTeamStartingLocation(BotTeam), HiveToSecure->FloorLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
+	{
+		return false;
+	}
 
 	bool bPhaseGatesAvailable = AITAC_PhaseGatesAvailable(BotTeam);
 

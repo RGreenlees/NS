@@ -8,6 +8,7 @@
 #include "AvHAITask.h"
 #include "AvHAIHelper.h"
 #include "AvHAIPlayerManager.h"
+#include "AvHAIConfig.h"
 
 #include "AvHSharedUtil.h"
 #include "AvHServerUtil.h"
@@ -3701,6 +3702,8 @@ void AICOMM_ReceiveChatRequest(AvHAIPlayer* Commander, edict_t* Requestor, const
 
 bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
 {
+	if (!CONFIG_IsRelocationAllowed()) { return false; }
+
 	AvHTeamNumber Team = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(Team);
 
@@ -3818,13 +3821,13 @@ bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
 		}
 
 		// If the match has been going on for a minute and we haven't made any progress in relocation then give up, or we risk losing everything
-		if (AIMGR_GetMatchLength() > 60.0f)
+		if (AIMGR_GetMatchLength() > 90.0f)
 		{
 			return AITAC_GetNumPlayersOfTeamInArea(Team, pBot->RelocationSpot, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER) > 0;
 		}
 	}
 
-	return true;
+	return AITAC_IsRelocationEnabled();
 }
 
 bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot)
@@ -3877,7 +3880,12 @@ bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot)
 
 	if (!RelocationCommChair.IsValid())
 	{
-		Vector BuildPoint = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), RelocationPoint, UTIL_MetresToGoldSrcUnits(2.0f));
+		Vector BuildPoint = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_COMMCHAIR, pBot->RelocationSpot, UTIL_MetresToGoldSrcUnits(10.0f));
+
+		if (vIsZero(BuildPoint))
+		{
+			BuildPoint = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), RelocationPoint, UTIL_MetresToGoldSrcUnits(2.0f));
+		}
 
 		if (vIsZero(BuildPoint))
 		{

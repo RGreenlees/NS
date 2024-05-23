@@ -58,6 +58,8 @@ Vector TeamBStartingLocation = ZERO_VECTOR;
 Vector TeamARelocationPoint = ZERO_VECTOR;
 Vector TeamBRelocationPoint = ZERO_VECTOR;
 
+bool bEnableRelocation = false; // For this round, should the AI commander try relocating (if appropriate)?
+
 extern nav_mesh NavMeshes[MAX_NAV_MESHES]; // Array of nav meshes. Currently only 3 are used (building, onos, and regular)
 extern nav_profile BaseNavProfiles[MAX_NAV_PROFILES]; // Array of nav profiles
 
@@ -5559,7 +5561,7 @@ void AITAC_ManageSquads()
 		for (auto pIt = it->SquadMembers.begin(); pIt != it->SquadMembers.end();)
 		{
 			AvHAIPlayer* ThisPlayer = (*pIt);
-			if (!AITAC_IsBotPursuingSquadObjective(ThisPlayer, &(*it)))
+			if (!ThisPlayer || FNullEnt(ThisPlayer->Edict) || !AITAC_IsBotPursuingSquadObjective(ThisPlayer, &(*it)))
 			{
 				pIt = it->SquadMembers.erase(pIt);
 			}
@@ -5780,8 +5782,6 @@ Vector AITAC_GetGatherLocationForSquad(AvHAISquad* Squad)
 
 Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team)
 {
-	if (!CONFIG_IsRelocationAllowed()) { return ZERO_VECTOR; }
-
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(Team);
 
 	// Only relocate if:
@@ -5929,4 +5929,21 @@ bool AITAC_IsRelocationCompleted(AvHTeamNumber RelocationTeam, Vector Relocation
 	}
 
 	return true;
+}
+
+bool AITAC_IsRelocationEnabled()
+{
+	return bEnableRelocation;
+}
+
+void AITAC_DetermineRelocationEnabled()
+{
+	bEnableRelocation = false;
+
+	if (CONFIG_IsRelocationAllowed())
+	{
+		float RandomRoll = frandrange(0.0f, 1.0f);
+
+		bEnableRelocation = (RandomRoll <= CONFIG_GetRelocationChance());
+	}
 }
