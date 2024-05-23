@@ -12,7 +12,7 @@ BotFillTiming CurrentBotFillTiming = FILLTIMING_ALLHUMANS;
 
 float MaxAIMatchTimeMinutes = 90.0f;
 
-bool bRelocationAllowed = false;
+float RelocationChance = 0.1f;
 
 std::unordered_map<std::string, TeamSizeDefinitions> TeamSizeMap;
 
@@ -94,7 +94,12 @@ bool CONFIG_IsOnosAllowed()
 
 bool CONFIG_IsRelocationAllowed()
 {
-    return bRelocationAllowed;
+    return RelocationChance > 0.0f;
+}
+
+float CONFIG_GetRelocationChance()
+{
+    return RelocationChance;
 }
 
 float CONFIG_GetMaxStuckTime()
@@ -335,10 +340,10 @@ void CONFIG_ParseConfigFile()
                 continue;
             }
 
-            if (!stricmp(keyChar, "AllowRelocation"))
+            if (!stricmp(keyChar, "RelocationChance"))
             {
-                const char* ValueChar = value.c_str();
-                bRelocationAllowed = (!stricmp(ValueChar, "True") || !stricmp(ValueChar, "T"));
+                float RelocationValue = std::stof(value.c_str());
+                RelocationChance = RelocationValue;
 
                 continue;
             }
@@ -656,7 +661,11 @@ void CONFIG_RegenerateIniFile()
     fprintf(NewConfigFile, "# 0 = On map load (after 5 second grace period)\n");
     fprintf(NewConfigFile, "# 1 = When all humans have joined a team (i.e. no more humans left in ready room)\n");
     fprintf(NewConfigFile, "# 2 = When the round has started (after countdown)\n");
-    fprintf(NewConfigFile, "BotFillTiming=1\n\n\n");
+    fprintf(NewConfigFile, "BotFillTiming=1\n\n");
+
+    fprintf(NewConfigFile, "# Chance the AI Commander will try to relocate at the beginning of the game\n");
+    fprintf(NewConfigFile, "# Value is a decimal between 0.0 and 1.0, with 0 being never and 1 being always\n");
+    fprintf(NewConfigFile, "RelocationChance=0.1\n\n\n");
 
 
     fprintf(NewConfigFile, "### Skill Settings ###\n\n");

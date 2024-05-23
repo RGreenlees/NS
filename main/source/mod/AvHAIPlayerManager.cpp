@@ -930,6 +930,8 @@ void AIMGR_ResetRound()
 	bMapDataInitialised = true;
 
 	CountdownStartedTime = 0.0f;
+
+	AITAC_DetermineRelocationEnabled();
 }
 
 void AIMGR_ReloadNavigationData()

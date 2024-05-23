@@ -73,6 +73,7 @@ bool IsPlayerClimbingWall(const edict_t* Player)
 
 bool IsPlayerInReadyRoom(const edict_t* Player)
 {
+	if (FNullEnt(Player)) { return false; }
 	return Player->v.playerclass == PLAYMODE_READYROOM;
 }
 
