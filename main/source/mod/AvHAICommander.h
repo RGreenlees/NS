@@ -74,4 +74,6 @@ void AICOMM_ReceiveChatRequest(AvHAIPlayer* Commander, edict_t* Requestor, const
 
 bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot);
 
+bool AICOMM_GetRelocationMessage(Vector RelocationPoint, char* MessageBuffer);
+
 #endif // AVH_AI_COMMANDER_H
