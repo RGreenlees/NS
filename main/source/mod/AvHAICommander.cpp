@@ -1172,7 +1172,7 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 
 	if (!TF.IsValid())
 	{
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_TURRETFACTORY, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(10.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_TURRETFACTORY, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -1247,7 +1247,7 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 
 	if (!bHasArmsLab && !FNullEnt(BaseBuilder))
 	{
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_ARMSLAB, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(15.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_ARMSLAB, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -1281,7 +1281,7 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 
 	if (!bHasObservatory && !FNullEnt(BaseBuilder))
 	{
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_OBSERVATORY, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(15.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_OBSERVATORY, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -1361,7 +1361,7 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 
 	if (!bHasPrototypeLab && bHasAdvArmoury && !FNullEnt(BaseBuilder))
 	{
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_PROTOTYPELAB, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(15.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_PROTOTYPELAB, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(20.0f));
 		
 		if(!vIsZero(BuildLocation))
 		{
