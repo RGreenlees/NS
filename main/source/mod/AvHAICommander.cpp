@@ -3309,8 +3309,10 @@ void AICOMM_CommanderThink(AvHAIPlayer* pBot)
 				if (RelocationHive)
 				{
 					char msg[128];
-					sprintf(msg, "We're relocating to %s, lads", RelocationHive->HiveName);
-					BotSay(pBot, true, 1.0f, msg);
+					if (AICOMM_GetRelocationMessage(pBot->RelocationSpot, msg))
+					{
+						BotSay(pBot, true, 1.0f, msg);
+					}
 				}
 			}
 		}
@@ -3327,6 +3329,37 @@ void AICOMM_CommanderThink(AvHAIPlayer* pBot)
 	if (AICOMM_CheckForNextBuildAction(pBot)) { return; }
 	if (AICOMM_CheckForNextResearchAction(pBot)) { return; }
 	if (AICOMM_CheckForNextSupplyAction(pBot)) { return; }
+}
+
+bool AICOMM_GetRelocationMessage(Vector RelocationPoint, char* MessageBuffer)
+{
+	const AvHAIHiveDefinition* RelocationHive = AITAC_GetHiveNearestLocation(RelocationPoint);
+
+	if (!RelocationHive)
+	{
+		sprintf(MessageBuffer, "We're relocating, get ready");
+		return true;
+	}
+
+	int MsgIndex = irandrange(0, 2);
+
+	switch (MsgIndex)
+	{
+		case 0:
+			sprintf(MessageBuffer, "We're relocating to %s, lads", RelocationHive->HiveName);
+			return true;
+		case 1:
+			sprintf(MessageBuffer, "Relocate to %s, go go go", RelocationHive->HiveName);
+			return true;
+		case 2:
+			sprintf(MessageBuffer, "I'm relocating to %s", RelocationHive->HiveName);
+			return true;
+		default:
+			sprintf(MessageBuffer, "We're relocating, get ready");
+			return true;
+	}
+	
+	return false;
 }
 
 bool AICOMM_IsCommanderActionValid(AvHAIPlayer* pBot, commander_action* Action)

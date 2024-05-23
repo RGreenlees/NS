@@ -24,6 +24,7 @@ extern cvar_t avh_botusemapdefaults;
 extern cvar_t avh_botcommandermode;
 extern cvar_t avh_botdebugmode;
 extern cvar_t avh_botskill;
+extern cvar_t avh_limitteams;
 
 float LastAIPlayerCountUpdate = 0.0f;
 
@@ -224,8 +225,11 @@ void AIMGR_UpdateFillTeams()
 			bRemoveB = !bRemoveB;
 		}
 	}
+
+	bool bCanAddToTeamA = (GetGameRules()->GetCheatsEnabled() || TeamSizeA < TeamSizeB || TeamSizeA - TeamSizeB < avh_limitteams.value);
+	bool bCanAddToTeamB = (GetGameRules()->GetCheatsEnabled() || TeamSizeB < TeamSizeA || TeamSizeB - TeamSizeA < avh_limitteams.value);
 	
-	if (TeamSizeA < NumDesiredTeamA && TeamSizeA <= TeamSizeB)
+	if (TeamSizeA < NumDesiredTeamA && bCanAddToTeamA)
 	{
 		// Don't add a bot if we have any stuck in the ready room, wait for teams to resolve themselves
 		if (AIMGR_GetNumAIPlayersOnTeam(TEAM_IND) > 0) { return; }
@@ -242,7 +246,7 @@ void AIMGR_UpdateFillTeams()
 		}
 	}
 
-	if (TeamSizeB < NumDesiredTeamB && TeamSizeB <= TeamSizeA)
+	if (TeamSizeB < NumDesiredTeamB && bCanAddToTeamB)
 	{
 		// Don't add a bot if we have any stuck in the ready room, wait for teams to resolve themselves
 		if (AIMGR_GetNumAIPlayersOnTeam(TEAM_IND) > 0) { return; }
