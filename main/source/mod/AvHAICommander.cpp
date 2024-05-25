@@ -993,6 +993,10 @@ bool AICOMM_IsRequestValid(ai_commander_request* Request)
 			return !AITAC_IsStructureOfTypeNearLocation(RequestorTeam, STRUCTURE_MARINE_COMMCHAIR, Requestor->v.origin, UTIL_MetresToGoldSrcUnits(10.0f));
 		case BUILD_SCAN:
 			return !AITAC_ItemExistsInLocation(Requestor->v.origin, DEPLOYABLE_ITEM_SCAN, RequestorTeam, AI_REACHABILITY_NONE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
+		case BUILD_ARMSLAB:
+			return !AITAC_IsStructureOfTypeNearLocation(RequestorTeam, STRUCTURE_MARINE_ARMSLAB, Requestor->v.origin, UTIL_MetresToGoldSrcUnits(10.0f));
+		case BUILD_PROTOTYPE_LAB:
+			return !AITAC_IsStructureOfTypeNearLocation(RequestorTeam, STRUCTURE_MARINE_PROTOTYPELAB, Requestor->v.origin, UTIL_MetresToGoldSrcUnits(10.0f));
 		default:
 			return true;
 	}
@@ -2330,68 +2334,71 @@ bool AICOMM_BuildInfantryPortal(AvHAIPlayer* pBot, edict_t* CommChair)
 
 	Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_INFANTRYPORTAL, CommChair->v.origin, BALANCE_VAR(kCommandStationBuildDistance));
 
-	if (vIsZero(BuildLocation))
+	if (!vIsZero(BuildLocation))
 	{
-		
-		DeployableSearchFilter ExistingPortalFilter;
-		ExistingPortalFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
-		ExistingPortalFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
-		ExistingPortalFilter.DeployableTeam = pBot->Player->GetTeam();
-		ExistingPortalFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
-		ExistingPortalFilter.ReachabilityTeam = pBot->Player->GetTeam();
+		bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
 
-		AvHAIBuildableStructure ExistingInfantryPortal = AITAC_FindClosestDeployableToLocation(CommChair->v.origin, &ExistingPortalFilter);
-
-		// First see if we can place the next infantry portal next to the first one
-		if (ExistingInfantryPortal.IsValid())
-		{
-			BuildLocation = UTIL_GetRandomPointOnNavmeshInDonutIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), ExistingInfantryPortal.edict->v.origin, UTIL_MetresToGoldSrcUnits(2.0f), UTIL_MetresToGoldSrcUnits(3.0f));
-
-			if (!vIsZero(BuildLocation))
-			{
-				bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
-
-				if (bSuccess) { return true; }
-			}
-		}
-
-		Vector SearchPoint = ZERO_VECTOR;
-
-		DeployableSearchFilter ResNodeFilter;
-		ResNodeFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
-		ResNodeFilter.ReachabilityTeam = pBot->Player->GetTeam();
-
-		const AvHAIResourceNode* ResNode = AITAC_FindNearestResourceNodeToLocation(CommChair->v.origin, &ResNodeFilter);
-
-		if (ResNode)
-		{
-			SearchPoint = ResNode->Location;
-		}
-		else
-		{
-			return false;
-		}
-
-		Vector NearestPointToChair = FindClosestNavigablePointToDestination(GetBaseNavProfile(MARINE_BASE_NAV_PROFILE), SearchPoint, CommChair->v.origin, UTIL_MetresToGoldSrcUnits(5.0f));
-
-		if (!vIsZero(NearestPointToChair))
-		{
-			float Distance = vDist2D(NearestPointToChair, CommChair->v.origin);
-			float RandomDist = UTIL_MetresToGoldSrcUnits(5.0f) - Distance;
-
-			BuildLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestPointToChair, RandomDist);
-
-			if (!vIsZero(BuildLocation))
-			{
-				bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
-
-				if (bSuccess) { return true; }
-			}
-
-		}
-
-		BuildLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), CommChair->v.origin, UTIL_MetresToGoldSrcUnits(5.0f));
+		if (bSuccess) { return true; }
 	}
+		
+	DeployableSearchFilter ExistingPortalFilter;
+	ExistingPortalFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
+	ExistingPortalFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+	ExistingPortalFilter.DeployableTeam = pBot->Player->GetTeam();
+	ExistingPortalFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
+	ExistingPortalFilter.ReachabilityTeam = pBot->Player->GetTeam();
+
+	AvHAIBuildableStructure ExistingInfantryPortal = AITAC_FindClosestDeployableToLocation(CommChair->v.origin, &ExistingPortalFilter);
+
+	// First see if we can place the next infantry portal next to the first one
+	if (ExistingInfantryPortal.IsValid())
+	{
+		BuildLocation = UTIL_GetRandomPointOnNavmeshInDonutIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), ExistingInfantryPortal.edict->v.origin, UTIL_MetresToGoldSrcUnits(2.0f), UTIL_MetresToGoldSrcUnits(3.0f));
+
+		if (!vIsZero(BuildLocation))
+		{
+			bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
+
+			if (bSuccess) { return true; }
+		}
+	}
+
+	Vector SearchPoint = ZERO_VECTOR;
+
+	DeployableSearchFilter ResNodeFilter;
+	ResNodeFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
+	ResNodeFilter.ReachabilityTeam = pBot->Player->GetTeam();
+
+	const AvHAIResourceNode* ResNode = AITAC_FindNearestResourceNodeToLocation(CommChair->v.origin, &ResNodeFilter);
+
+	if (ResNode)
+	{
+		SearchPoint = ResNode->Location;
+	}
+	else
+	{
+		return false;
+	}
+
+	Vector NearestPointToChair = FindClosestNavigablePointToDestination(GetBaseNavProfile(MARINE_BASE_NAV_PROFILE), SearchPoint, CommChair->v.origin, BALANCE_VAR(kCommandStationBuildDistance));
+
+	if (!vIsZero(NearestPointToChair))
+	{
+		float Distance = vDist2D(NearestPointToChair, CommChair->v.origin);
+		float RandomDist = UTIL_MetresToGoldSrcUnits(5.0f) - Distance;
+
+		BuildLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestPointToChair, RandomDist);
+
+		if (!vIsZero(BuildLocation))
+		{
+			bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
+
+			if (bSuccess) { return true; }
+		}
+
+	}
+
+	BuildLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), CommChair->v.origin, BALANCE_VAR(kCommandStationBuildDistance));
 
 	if (vIsZero(BuildLocation)) { return false; }
 
@@ -3055,7 +3062,6 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	}
 
-
 	if (NextRequest->RequestType == BUILD_PHASEGATE && !AITAC_ResearchIsComplete(CommanderTeam, TECH_RESEARCH_PHASETECH))
 	{
 		char msg[128];
@@ -3065,7 +3071,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 		return false;
 	}
 
-	if (NextRequest->RequestType == BUILD_OBSERVATORY && !AITAC_ResearchIsComplete(CommanderTeam, TECH_RESEARCH_PHASETECH))
+	if (NextRequest->RequestType == BUILD_OBSERVATORY || NextRequest->RequestType == BUILD_ARMSLAB)
 	{
 		DeployableSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTeam = CommanderTeam;
@@ -3079,6 +3085,39 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 		{
 			char msg[128];
 			sprintf(msg, "We haven't got an armory yet, %s. Ask again later.", STRING(Requestor->v.netname));
+			BotSay(pBot, true, 0.5f, msg);
+			NextRequest->bResponded = true;
+			return false;
+		}
+	}
+
+	if (NextRequest->RequestType == BUILD_PROTOTYPE_LAB)
+	{
+		DeployableSearchFilter RequiredFilter;
+		RequiredFilter.DeployableTeam = CommanderTeam;
+		RequiredFilter.DeployableTypes = STRUCTURE_MARINE_ADVARMOURY;
+		RequiredFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+		RequiredFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+
+		bool bHasArmoury = AITAC_DeployableExistsAtLocation(ZERO_VECTOR, &RequiredFilter);
+
+		if (!bHasArmoury)
+		{
+			char msg[128];
+			sprintf(msg, "We haven't got an advanced armory yet, %s. Ask again later.", STRING(Requestor->v.netname));
+			BotSay(pBot, true, 0.5f, msg);
+			NextRequest->bResponded = true;
+			return false;
+		}
+
+		RequiredFilter.DeployableTypes = STRUCTURE_MARINE_ARMSLAB;
+
+		bool bHasArmsLab = AITAC_DeployableExistsAtLocation(ZERO_VECTOR, &RequiredFilter);
+
+		if (!bHasArmsLab)
+		{
+			char msg[128];
+			sprintf(msg, "We haven't got an arms lab yet, %s. Ask again later.", STRING(Requestor->v.netname));
 			BotSay(pBot, true, 0.5f, msg);
 			NextRequest->bResponded = true;
 			return false;
@@ -3115,6 +3154,18 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 		RequiredRes = BALANCE_VAR(kPhaseGateCost);
 		StructureToDeploy = STRUCTURE_MARINE_PHASEGATE;
 		break;
+	case BUILD_INFANTRYPORTAL:
+		RequiredRes = BALANCE_VAR(kInfantryPortalCost);
+		StructureToDeploy = STRUCTURE_MARINE_INFANTRYPORTAL;
+		break;
+	case BUILD_PROTOTYPE_LAB:
+		RequiredRes = BALANCE_VAR(kPrototypeLabCost);
+		StructureToDeploy = STRUCTURE_MARINE_PROTOTYPELAB;
+		break;
+	case BUILD_ARMSLAB:
+		RequiredRes = BALANCE_VAR(kArmsLabCost);
+		StructureToDeploy = STRUCTURE_MARINE_ARMSLAB;
+		break;
 	default:
 		break;
 	}
@@ -3139,11 +3190,55 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 		return false;
 	}
 
-	Vector IdealDeployLocation = Requestor->v.origin + (UTIL_GetForwardVector2D(Requestor->v.angles) * 75.0f);
+	float ProjectDistance = (NextRequest->RequestType == BUILD_INFANTRYPORTAL || NextRequest->RequestType == BUILD_SIEGE) ? 32.0f : 75.0f;
+
+	Vector IdealDeployLocation = Requestor->v.origin + (UTIL_GetForwardVector2D(Requestor->v.angles) * ProjectDistance);
 	Vector ProjectedDeployLocation = AdjustPointForPathfinding(IdealDeployLocation, GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
 
 	if (!vIsZero(ProjectedDeployLocation))
 	{
+		if (NextRequest->RequestType == BUILD_INFANTRYPORTAL)
+		{
+			DeployableSearchFilter CCFilter;
+			CCFilter.DeployableTeam = CommanderTeam;
+			CCFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
+			CCFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+			CCFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+			CCFilter.MaxSearchRadius = BALANCE_VAR(kCommandStationBuildDistance);
+
+			bool bHasChair = AITAC_DeployableExistsAtLocation(ProjectedDeployLocation, &CCFilter);
+
+			if (!bHasChair)
+			{
+				char msg[128];
+				sprintf(msg, "There isn't a comm chair there, %s. Ask again next to the CC", STRING(Requestor->v.netname));
+				BotSay(pBot, true, 0.5f, msg);
+				NextRequest->bResponded = true;
+				return false;
+			}
+		}
+
+		if (NextRequest->RequestType == BUILD_SIEGE)
+		{
+			DeployableSearchFilter TFFilter;
+			TFFilter.DeployableTeam = CommanderTeam;
+			TFFilter.DeployableTypes = STRUCTURE_MARINE_ADVTURRETFACTORY;
+			TFFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+			TFFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+			TFFilter.MaxSearchRadius = BALANCE_VAR(kTurretFactoryBuildDistance);
+
+			bool bHasChair = AITAC_DeployableExistsAtLocation(ProjectedDeployLocation, &TFFilter);
+
+			if (!bHasChair)
+			{
+				char msg[128];
+				sprintf(msg, "There isn't a an advanced armory there, %s. Ask again next to one", STRING(Requestor->v.netname));
+				BotSay(pBot, true, 0.5f, msg);
+				NextRequest->bResponded = true;
+				return false;
+			}
+		}
+
 		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, ProjectedDeployLocation, STRUCTURE_PURPOSE_NONE);
 
 		if (bSuccess)
@@ -3711,6 +3806,22 @@ void AICOMM_ReceiveChatRequest(AvHAIPlayer* Commander, edict_t* Requestor, const
 	else if (!stricmp(Request, "obs") || !stricmp(Request, "observatory"))
 	{
 		NewRequestType = BUILD_OBSERVATORY;
+	}
+	else if (!stricmp(Request, "pl") || !stricmp(Request, "protolab") || !stricmp(Request, "proto lab") || !stricmp(Request, "prototype lab"))
+	{
+		NewRequestType = BUILD_PROTOTYPE_LAB;
+	}
+	else if (!stricmp(Request, "ip") || !stricmp(Request, "portal") || !stricmp(Request, "inf portal") || !stricmp(Request, "infantry portal"))
+	{
+		NewRequestType = BUILD_INFANTRYPORTAL;
+	}
+	else if (!stricmp(Request, "al") || !stricmp(Request, "armslab") || !stricmp(Request, "arms lab"))
+	{
+		NewRequestType = BUILD_ARMSLAB;
+	}
+	else if (!stricmp(Request, "sc") || !stricmp(Request, "st") || !stricmp(Request, "siegeturret") || !stricmp(Request, "siege turret") || !stricmp(Request, "siegecannon") || !stricmp(Request, "siege cannon"))
+	{
+		NewRequestType = BUILD_SIEGE;
 	}
 
 	if (NewRequestType == MESSAGE_NULL) { return; }
