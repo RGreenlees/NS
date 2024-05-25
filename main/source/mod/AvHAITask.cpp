@@ -876,9 +876,9 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 	if (bActiveHiveWithoutTechExists) { return true; }
 
 	DeployableSearchFilter StructureFilter;
-	StructureFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER | ALIEN_BUILD_DEFENSE_CHAMBER | ALIEN_BUILD_MOVEMENT_CHAMBER | ALIEN_BUILD_SENSORY_CHAMBER;
+	StructureFilter.DeployableTypes = SEARCH_ALL_ALIEN_STRUCTURES;
 	StructureFilter.MaxSearchRadius = (IsEdictHive(Task->TaskTarget)) ? UTIL_MetresToGoldSrcUnits(10.0f) : UTIL_MetresToGoldSrcUnits(5.0f);
-	StructureFilter.DeployableTeam = pBot->Player->GetTeam();
+	StructureFilter.DeployableTeam = BotTeam;
 
 	vector<AvHAIBuildableStructure> AllNearbyStructures = AITAC_FindAllDeployables(Task->TaskTarget->v.origin, &StructureFilter);
 
@@ -1356,9 +1356,12 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We had a go, whether it succeeded or not we should try a new location
 	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_FAILED || Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_SUCCESS)
 	{
+		Task->TaskStartedTime = gpGlobals->time;
 		Task->TaskLocation = ZERO_VECTOR;
 		Task->ActiveBuildInfo.BuildStatus = BUILD_ATTEMPT_NONE;
 	}
+
+	if (gpGlobals->time - Task->TaskStartedTime < 1.0f) { return; }
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 

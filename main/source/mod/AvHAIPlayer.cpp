@@ -1887,17 +1887,116 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
-	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
-
-	if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_MARINE)
+	if (pBot->Player->GetResources() < 80.0f)
 	{
-		AITASK_SetAssaultMarineBaseTask(pBot, &pBot->PrimaryBotTask, AITAC_GetTeamStartingLocation(EnemyTeam), true);
+		pBot->Player->GiveResources(10.0f);
 	}
 
 	pBot->CurrentTask = &pBot->PrimaryBotTask;
 
-	BotProgressTask(pBot, pBot->CurrentTask);
+	AITASK_BotUpdateAndClearTasks(pBot);
+
+	if (pBot->CurrentTask->TaskType == TASK_REINFORCE_STRUCTURE)
+	{
+		BotProgressTask(pBot, pBot->CurrentTask);
+		return;
+	}
+
+	// No missing upgrade chambers to drop, let's look for empty hives we can start staking a claim to, to deny to the enemy
+	vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
+
+	AvHAIHiveDefinition* HiveToSecure = nullptr;
+
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
+
+	float MinDist = 0.0f;
+
+	for (auto it = AllHives.begin(); it != AllHives.end(); it++)
+	{
+		AvHAIHiveDefinition* ThisHive = (*it);
+
+		if (ThisHive->Status == HIVE_STATUS_UNBUILT)
+		{
+			unsigned int StructureTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
+
+			if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_ALIEN)
+			{
+				StructureTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+			}
+
+			DeployableSearchFilter EnemyStructureFilter;
+			EnemyStructureFilter.DeployableTeam = EnemyTeam;
+			EnemyStructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+			EnemyStructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+			EnemyStructureFilter.DeployableTypes = StructureTypes;
+			EnemyStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+
+			bool bEnemyHaveFoothold = AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStructureFilter);
+
+			if (bEnemyHaveFoothold) { continue; }
+
+			if (AITAC_GetNumPlayersOfTeamInArea(EnemyTeam, ThisHive->FloorLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER) > 1) { continue; }
+
+			int OtherBuilders = AITAC_GetNumPlayersOfTeamAndClassInArea(EnemyTeam, ThisHive->FloorLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_ALIEN_PLAYER2);
+
+			if (OtherBuilders >= 2) { continue; }
+
+			DeployableSearchFilter ExistingReinforcementFilter;
+			ExistingReinforcementFilter.DeployableTeam = BotTeam;
+			ExistingReinforcementFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+			ExistingReinforcementFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
+
+			vector<AvHAIBuildableStructure> AllReinforcingStructures = AITAC_FindAllDeployables(ThisHive->FloorLocation, &ExistingReinforcementFilter);
+
+			int NumOCs = 0;
+			int NumDCs = 0;
+			int NumMCs = 0;
+			int NumSCs = 0;
+
+			for (auto it = AllReinforcingStructures.begin(); it != AllReinforcingStructures.end(); it++)
+			{
+				switch ((*it).StructureType)
+				{
+				case STRUCTURE_ALIEN_OFFENCECHAMBER:
+					NumOCs++;
+					break;
+				case STRUCTURE_ALIEN_DEFENCECHAMBER:
+					NumDCs++;
+					break;
+				case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
+					NumMCs++;
+					break;
+				case STRUCTURE_ALIEN_SENSORYCHAMBER:
+					NumSCs++;
+					break;
+				default:
+					break;
+				}
+			}
+
+			if (NumOCs < 3
+				|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_DEFENSE_CHAMBER) && NumDCs < 2)
+				|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_MOVEMENT_CHAMBER) && NumMCs < 1)
+				|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_SENSORY_CHAMBER) && NumSCs < 1))
+			{
+				float ThisDist = vDist2DSq(pBot->Edict->v.origin, ThisHive->FloorLocation);
+
+				if (!HiveToSecure || ThisDist < MinDist)
+				{
+					HiveToSecure = ThisHive;
+					MinDist = ThisDist;
+				}
+			}
+
+		}
+	}
+
+	if (HiveToSecure)
+	{
+		AITASK_SetReinforceStructureTask(pBot, &pBot->PrimaryBotTask, HiveToSecure->HiveEdict, false);
+		return;
+	}
 }
 
 void DroneThink(AvHAIPlayer* pBot)
@@ -5615,14 +5714,12 @@ void AIPlayerEndMatchThink(AvHAIPlayer* pBot)
 	{
 		if (IsPlayerMarine(pBot->Player))
 		{
-			MarineCombatThink(pBot);
+			if (MarineCombatThink(pBot)) { return; }
 		}
 		else
 		{
-			AlienCombatThink(pBot);
+			if (AlienCombatThink(pBot)) { return; }
 		}
-
-		return;
 	}
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
@@ -5667,15 +5764,15 @@ void AIPlayerDMThink(AvHAIPlayer* pBot)
 	{
 		if (IsPlayerMarine(pBot->Player))
 		{
-			MarineCombatThink(pBot);
+			if (MarineCombatThink(pBot)) { return; }
 		}
 		else
 		{
-			AlienCombatThink(pBot);
+			if (AlienCombatThink(pBot)) { return; }
 		}
-
-		return;
 	}
+
+	pBot->CurrentTask = &pBot->PrimaryBotTask;
 
 	AITASK_BotUpdateAndClearTasks(pBot);
 
