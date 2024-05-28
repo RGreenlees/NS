@@ -839,7 +839,7 @@ int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, AvHAIBotRole Role, A
 	{
 		if (&(*it) == IgnoreAIPlayer) { continue; }
 
-		if (it->Player->GetTeam() == Team)
+		if (it->Player->GetTeam() == Team && IsPlayerActiveInGame((*it).Edict))
 		{
 			if (it->BotRole == Role)
 			{

@@ -5843,11 +5843,6 @@ Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team)
 				MinDist = ThisDist;
 			}
 		}
-
-		
-
-
-
 	}
 
 	// No hives to relocate to

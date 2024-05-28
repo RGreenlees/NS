@@ -3239,7 +3239,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 			}
 		}
 
-		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, ProjectedDeployLocation, STRUCTURE_PURPOSE_NONE);
+		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, ProjectedDeployLocation, STRUCTURE_PURPOSE_GENERAL);
 
 		if (bSuccess)
 		{
@@ -3252,7 +3252,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (!vIsZero(DeployLocation))
 	{
-		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_NONE);
+		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_GENERAL);
 
 		if (bSuccess)
 		{
@@ -3265,7 +3265,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (!vIsZero(DeployLocation))
 	{
-		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_NONE);
+		bool bSuccess = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_GENERAL);
 
 		if (bSuccess)
 		{
@@ -3399,6 +3399,13 @@ void AICOMM_CommanderThink(AvHAIPlayer* pBot)
 
 			if (!vIsZero(pBot->RelocationSpot))
 			{
+				vector<AvHAIPlayer*> AllMarineBots = AIMGR_GetAIPlayersOnTeam(pBot->Player->GetTeam());
+
+				for (auto it = AllMarineBots.begin(); it != AllMarineBots.end(); it++)
+				{
+					(*it)->RelocationSpot = pBot->RelocationSpot;
+				}
+
 				const AvHAIHiveDefinition* RelocationHive = AITAC_GetHiveNearestLocation(pBot->RelocationSpot);
 
 				if (RelocationHive)
@@ -4026,19 +4033,29 @@ bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot)
 	{
 		Vector BuildPoint = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_COMMCHAIR, pBot->RelocationSpot, UTIL_MetresToGoldSrcUnits(10.0f));
 
-		if (vIsZero(BuildPoint))
+		if (!vIsZero(BuildPoint))
 		{
-			BuildPoint = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), RelocationPoint, UTIL_MetresToGoldSrcUnits(2.0f));
+			bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_COMMCHAIR, BuildPoint, STRUCTURE_PURPOSE_BASE);
+
+			if (bSuccess) { return true; }
 		}
 
-		if (vIsZero(BuildPoint))
-		{
-			BuildPoint = UTIL_ProjectPointToNavmesh(RelocationPoint, Vector(500.0f, 500.0f, 500.0f), GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
-		}
+		BuildPoint = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), pBot->RelocationSpot, UTIL_MetresToGoldSrcUnits(2.0f));
 
 		if (!vIsZero(BuildPoint))
 		{
-			return AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_COMMCHAIR, BuildPoint, STRUCTURE_PURPOSE_BASE);
+			bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_COMMCHAIR, BuildPoint, STRUCTURE_PURPOSE_BASE);
+
+			if (bSuccess) { return true; }
+		}
+
+		BuildPoint = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), pBot->RelocationSpot, UTIL_MetresToGoldSrcUnits(10.0f));
+
+		if (!vIsZero(BuildPoint))
+		{
+			bool bSuccess = AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_COMMCHAIR, BuildPoint, STRUCTURE_PURPOSE_BASE);
+
+			if (bSuccess) { return true; }
 		}
 
 		return false;
