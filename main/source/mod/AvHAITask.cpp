@@ -1272,9 +1272,9 @@ void BotProgressMineStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 	}
 
-	float DistToPlaceLocation = vDist2DSq(pBot->Edict->v.origin, Task->TaskLocation);
+	float DistToPlaceLocation = vDist3DSq(pBot->Edict->v.origin, Task->TaskLocation);
 
-	if (DistToPlaceLocation < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)))
+	if (DistToPlaceLocation < sqrf(50.0f))
 	{
 		pBot->DesiredCombatWeapon = WEAPON_MARINE_MINES;
 	}

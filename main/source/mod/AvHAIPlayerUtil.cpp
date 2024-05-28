@@ -153,7 +153,7 @@ bool IsPlayerOnLadder(const edict_t* Player)
 		Vector NearestPointOnLadder = UTIL_GetClosestPointOnEntityToLocation(Player->v.origin, NearestLadder);
 		Vector NearestPointOnPlayer = UTIL_GetClosestPointOnEntityToLocation(NearestPointOnLadder, Player);
 
-		return (vDist2DSq(NearestPointOnLadder, NearestPointOnPlayer) <= sqrf(4.0f));
+		return (vDist3DSq(NearestPointOnLadder, NearestPointOnPlayer) <= sqrf(2.0f));
 	}
 
 	return (Player->v.movetype == MOVETYPE_FLY);
@@ -990,6 +990,31 @@ Vector UTIL_GetNearestSurfaceNormal(Vector SearchLocation)
 		}
 
 		return ClosestNormal;
+}
+
+Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder)
+{
+	if (FNullEnt(Ladder)) { return ZERO_VECTOR; }
+
+	if (vPointOverlaps3D(SearchLocation, Ladder->v.absmin, Ladder->v.absmax))
+	{
+		return UTIL_GetNearestSurfaceNormal(SearchLocation);
+	}
+	else
+	{
+		Vector CentrePoint = Ladder->v.absmin + (Ladder->v.size * 0.5f);
+		CentrePoint.z = SearchLocation.z;
+
+		trace_t TraceResult;
+		NS_TraceLine(SearchLocation, CentrePoint, 1, PM_WORLD_ONLY, -1, true, TraceResult);
+
+		if (TraceResult.fraction < 1.0f)
+		{
+			return TraceResult.plane.normal;
+		}
+	}
+
+	return ZERO_VECTOR;
 }
 
 Vector UTIL_GetNearestLadderNormal(Vector SearchLocation)

@@ -3848,7 +3848,34 @@ void JumpMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 	}
 }
 
-void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight, unsigned char NextArea)
+void MountLadderMove(AvHAIPlayer* pBot, edict_t* LadderToMount)
+{
+	Vector LadderNormal = UTIL_GetLadderNormal(pBot->Edict->v.origin, LadderToMount);
+	LadderNormal = UTIL_GetVectorNormal2D(LadderNormal);
+
+	Vector NearestPointOnLadder = UTIL_GetClosestPointOnEntityToLocation(pBot->Edict->v.origin, LadderToMount);
+
+	Vector OrientationToLadder = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - NearestPointOnLadder);
+	
+	if (UTIL_GetDotProduct2D(LadderNormal, OrientationToLadder) < 0.8f)
+	{
+		Vector MovePoint = NearestPointOnLadder + (LadderNormal * 32.0f);
+		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(MovePoint - pBot->Edict->v.origin);
+	}
+	else
+	{
+
+		Vector nearestLadderPoint = UTIL_GetCentreOfEntity(LadderToMount);
+		nearestLadderPoint.z = pBot->Edict->v.origin.z;
+		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(NearestPointOnLadder - pBot->Edict->v.origin);
+	}
+
+	Vector LookPoint = NearestPointOnLadder;
+	
+	BotLookAt(pBot, LookPoint, true);
+}
+
+void SkulkLadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight, unsigned char NextArea)
 {
 	edict_t* pEdict = pBot->Edict;
 	AvHPlayer* AIPlayer = pBot->Player;
@@ -3857,48 +3884,173 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 	bool bIsGoingUpLadder = (EndPoint.z > StartPoint.z);
 
-	// Stop holding crouch if we're a skulk so we can climb up/down
-	if (IsPlayerSkulk(pBot->Edict))
+	edict_t* Ladder = UTIL_GetNearestLadderAtPoint(StartPoint);
+
+	if (!FNullEnt(Ladder))
 	{
-		pBot->Button &= ~IN_DUCK;
+		Vector LadderStart = Ladder->v.absmin;
+		Vector LadderEnd = Ladder->v.absmax;
+		LadderEnd.z = LadderStart.z;
 
-		edict_t* Ladder = UTIL_GetNearestLadderAtPoint(StartPoint);
-
-		if (!FNullEnt(Ladder))
+		// The below test will be false if the ladder is to one side, hence do not try to climb it like a wall
+		if (vIntersects2D(StartPoint, EndPoint, LadderStart, LadderEnd))
 		{
-			Vector LadderStart = Ladder->v.absmin;
-			Vector LadderEnd = Ladder->v.absmax;
-			LadderEnd.z = LadderStart.z;
-
-			// Basically, if we're directly climbing up or down the ladder, treat it like a wall. The below test will be false if the ladder is to one side
-			if (vIntersects2D(StartPoint, EndPoint, LadderStart, LadderEnd))
+			if (bIsGoingUpLadder)
 			{
-				if (bIsGoingUpLadder)
-				{
-					WallClimbMove(pBot, StartPoint, EndPoint, RequiredClimbHeight);
-				}
-				else
-				{
-					FallMove(pBot, StartPoint, EndPoint);
-				}
-				return;
+				WallClimbMove(pBot, StartPoint, EndPoint, RequiredClimbHeight);
 			}
+			else
+			{
+				FallMove(pBot, StartPoint, EndPoint);
+			}
+			return;
 		}
 	}
+
+	// Stop holding crouch so we can wall-climb
+	pBot->Button &= ~IN_DUCK;
+
+	if (pBot->Edict->v.origin.z > RequiredClimbHeight)
+	{
+		if (UTIL_QuickHullTrace(pBot->Edict, pBot->Edict->v.origin, EndPoint + Vector(0.0f, 0.0f, 16.0f)))
+		{
+			pBot->desiredMovementDir = vForward;
+			BotLookAt(pBot, EndPoint + Vector(0.0f, 0.0f, 50.0f));
+			return;
+		}
+	}
+
+	if (pBot->Edict->v.origin.z > Ladder->v.absmax.z)
+	{
+		WallClimbMove(pBot, StartPoint, EndPoint, RequiredClimbHeight);
+		return;
+	}
+
+	if (!IsPlayerOnLadder(pBot->Edict))
+	{
+		MountLadderMove(pBot, Ladder);
+		return;
+	}
+
+	pBot->Button |= IN_WALK;
+
+	Vector CurrentLadderNormal = UTIL_GetNearestSurfaceNormal(pBot->Edict->v.origin);
+	Vector LadderRightNormal = UTIL_GetVectorNormal(UTIL_GetCrossProduct(CurrentLadderNormal, UP_VECTOR));
+
+	Vector ClimbRightNormal = LadderRightNormal;
+
+	if (bIsGoingUpLadder)
+	{
+		ClimbRightNormal = -LadderRightNormal;
+	}
+
+	if (IsPlayerClimbingWall(pBot->Edict))
+	{
+		Vector StartLeftTrace = pBot->CollisionHullTopLocation - (ClimbRightNormal * GetPlayerRadius(pBot->Player));
+		Vector StartRightTrace = pBot->CollisionHullTopLocation + (ClimbRightNormal * GetPlayerRadius(pBot->Player));
+
+		Vector EndLeftTrace = (bIsGoingUpLadder) ? StartLeftTrace + Vector(0.0f, 0.0f, 32.0f) : StartLeftTrace - Vector(0.0f, 0.0f, 32.0f);
+		Vector EndRightTrace = (bIsGoingUpLadder) ? StartRightTrace + Vector(0.0f, 0.0f, 32.0f) : StartRightTrace - Vector(0.0f, 0.0f, 32.0f);
+
+		bool bBlockedLeft = !UTIL_QuickHullTrace(pEdict, StartLeftTrace, EndLeftTrace, head_hull);
+		bool bBlockedRight = !UTIL_QuickHullTrace(pEdict, StartRightTrace, EndRightTrace, head_hull);
+
+		if (bBlockedLeft && bBlockedRight)
+		{
+			Vector LadderCentre = UTIL_GetCentreOfEntity(Ladder);
+			int Side = vPointOnLine(LadderCentre, LadderCentre + CurrentLadderNormal, pBot->Edict->v.origin);
+
+			if (Side > 0)
+			{
+				pBot->desiredMovementDir = -LadderRightNormal;
+			}
+			else
+			{
+				pBot->desiredMovementDir = LadderRightNormal;
+			}
+
+			Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
+			LookLocation.z = RequiredClimbHeight + 100.0f;
+			BotMoveLookAt(pBot, LookLocation, true);
+
+			return;
+		}
+
+		// If we are blocked going up the ladder, face the ladder and slide left/right to avoid blockage
+		if (bBlockedLeft)
+		{
+			Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
+			LookLocation.z = RequiredClimbHeight + 100.0f;
+			BotMoveLookAt(pBot, LookLocation, true);
+
+			pBot->desiredMovementDir = ClimbRightNormal;
+			return;
+		}
+
+		if (bBlockedRight)
+		{
+			Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
+			LookLocation.z = RequiredClimbHeight + 100.0f;
+			BotMoveLookAt(pBot, LookLocation, true);
+
+			pBot->desiredMovementDir = -ClimbRightNormal;
+			return;
+		}
+	}
+
+	Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
+	LookLocation.z = (bIsGoingUpLadder) ? RequiredClimbHeight + 100.0f : Ladder->v.absmin.z;
+	BotMoveLookAt(pBot, LookLocation, true);
+
+	pBot->desiredMovementDir = -CurrentLadderNormal;
+
+	Vector CurrentVelocity = UTIL_GetVectorNormal2D(pBot->Edict->v.velocity);
+
+	if (UTIL_GetDotProduct2D(pBot->desiredMovementDir, CurrentVelocity) < 0.5f)
+	{
+		float ZVelocity = pBot->Edict->v.velocity.z;
+		float SpeedXY = pBot->Edict->v.velocity.Length2D();
+
+		pBot->Edict->v.velocity = pBot->desiredMovementDir * SpeedXY;
+		pBot->Edict->v.velocity.z = ZVelocity;
+		
+	}
+	
+}
+
+void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight, unsigned char NextArea)
+{
+	// Basically, if we're a skulk and are directly climbing up or down the ladder, treat it like a basic wall climb
+	if (IsPlayerSkulk(pBot->Edict))
+	{
+		SkulkLadderMove(pBot, StartPoint, EndPoint, RequiredClimbHeight, NextArea);
+		return;
+	}
+
+	edict_t* Ladder = UTIL_GetNearestLadderAtPoint(pBot->Edict->v.origin);
+
+	if (FNullEnt(Ladder)) { return; }
+
+	edict_t* pEdict = pBot->Edict;
+	AvHPlayer* AIPlayer = pBot->Player;
+
+	const Vector vForward = UTIL_GetVectorNormal2D(EndPoint - StartPoint);
+
+	bool bIsGoingUpLadder = (EndPoint.z > StartPoint.z);
 
 	if (IsPlayerOnLadder(pBot->Edict))
 	{
 		// We're on the ladder and actively climbing
 		Vector CurrentLadderNormal;
 		
-		if (IsPlayerSkulk(pBot->Edict))
+		if (pBot->Edict->v.origin.z > UTIL_GetNearestLadderTopPoint(pEdict).z)
 		{
-			CurrentLadderNormal = UTIL_GetNearestSurfaceNormal(pBot->Edict->v.origin);
+			CurrentLadderNormal = UTIL_GetNearestLadderNormal(pBot->CollisionHullBottomLocation + Vector(0.0f, 0.0f, 5.0f));
 		}
 		else
 		{
-			CurrentLadderNormal = UTIL_GetNearestLadderNormal(pBot->CollisionHullBottomLocation + Vector(0.0f, 0.0f, 5.0f));
-		} 
+			CurrentLadderNormal = UTIL_GetNearestLadderNormal(pBot->Edict->v.origin);
+		}
 
 		CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentLadderNormal);
 
@@ -3948,7 +4100,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 				Vector LookLocation = EndPoint;
 				LookLocation.z = pBot->CurrentEyePosition.z + 64.0f;
 
-				BotMoveLookAt(pBot, LookLocation);
+				BotMoveLookAt(pBot, LookLocation, true);
 
 				// If the get-off point is opposite the ladder, then jump to get to it
 				if (UTIL_GetDotProduct(CurrentLadderNormal, vForward) > 0.75f)
@@ -3956,17 +4108,14 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 					BotJump(pBot);
 				}
 
-				if (!IsPlayerGorge(pEdict) && !IsPlayerLerk(pEdict) && !IsPlayerSkulk(pEdict))
+				if (!IsPlayerGorge(pEdict) && !IsPlayerLerk(pEdict))
 				{
 					Vector HeadTraceLocation = GetPlayerTopOfCollisionHull(pEdict, false);
 
 					bool bHittingHead = !UTIL_QuickTrace(pBot->Edict, HeadTraceLocation, HeadTraceLocation + Vector(0.0f, 0.0f, 10.0f));
 					bool bClimbIntoVent = (NextArea == SAMPLE_POLYAREA_CROUCH);
 
-					if (!IsPlayerSkulk(pBot->Edict) && (bHittingHead || bClimbIntoVent))
-					{
-						pBot->Button |= IN_DUCK;
-					}
+					pBot->Button |= IN_DUCK;
 				}
 
 				return;
@@ -3978,7 +4127,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 				{
 					pBot->desiredMovementDir = vForward;
 					// We look up really far to get maximum launch
-					BotMoveLookAt(pBot, EndPoint + Vector(0.0f, 0.0f, 100.0f));
+					BotMoveLookAt(pBot, EndPoint + Vector(0.0f, 0.0f, 100.0f), true);
 					return;
 				}
 
@@ -3987,36 +4136,79 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 				Vector StartLeftTrace = pBot->CollisionHullTopLocation - (ClimbRightNormal * GetPlayerRadius(pBot->Player));
 				Vector StartRightTrace = pBot->CollisionHullTopLocation + (ClimbRightNormal * GetPlayerRadius(pBot->Player));
 
-				bool bBlockedLeft = !UTIL_QuickTrace(pEdict, StartLeftTrace, StartLeftTrace + Vector(0.0f, 0.0f, 32.0f));
-				bool bBlockedRight = !UTIL_QuickTrace(pEdict, StartRightTrace, StartRightTrace + Vector(0.0f, 0.0f, 32.0f));
+				Vector EndLeftTrace = (bIsGoingUpLadder) ? StartLeftTrace + Vector(0.0f, 0.0f, 32.0f) : StartLeftTrace - Vector(0.0f, 0.0f, 32.0f);
+				Vector EndRightTrace = (bIsGoingUpLadder) ? StartRightTrace + Vector(0.0f, 0.0f, 32.0f) : StartRightTrace - Vector(0.0f, 0.0f, 32.0f);
 
-				// Look up at the top of the ladder
+				bool bBlockedLeft = !UTIL_QuickTrace(pEdict, StartLeftTrace, EndLeftTrace);
+				bool bBlockedRight = !UTIL_QuickTrace(pEdict, StartRightTrace, EndRightTrace);
+
+				if (bBlockedLeft && bBlockedRight)
+				{
+					Vector LadderCentre = UTIL_GetCentreOfEntity(Ladder);
+					int Side = vPointOnLine(LadderCentre, LadderCentre + CurrentLadderNormal, pBot->Edict->v.origin);
+
+					if (Side > 0)
+					{
+						pBot->desiredMovementDir = -LadderRightNormal;
+					}
+					else
+					{
+						pBot->desiredMovementDir = LadderRightNormal;
+					}
+
+					Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
+					LookLocation.z = RequiredClimbHeight + 100.0f;
+					BotMoveLookAt(pBot, LookLocation, true);
+
+					return;
+				}
 
 				// If we are blocked going up the ladder, face the ladder and slide left/right to avoid blockage
-				if (bBlockedLeft && !bBlockedRight)
+				if (bBlockedLeft)
 				{
 					Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
 					LookLocation.z = RequiredClimbHeight + 100.0f;
-					BotMoveLookAt(pBot, LookLocation);
+					BotMoveLookAt(pBot, LookLocation, true);
 
 					pBot->desiredMovementDir = ClimbRightNormal;
 					return;
 				}
 
-				if (bBlockedRight && !bBlockedLeft)
+				if (bBlockedRight)
 				{
 					Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
 					LookLocation.z = RequiredClimbHeight + 100.0f;
-					BotMoveLookAt(pBot, LookLocation);
+					BotMoveLookAt(pBot, LookLocation, true);
 
 					pBot->desiredMovementDir = -ClimbRightNormal;
+					return;
+				}
+
+				if (!UTIL_QuickHullTrace(pBot->Edict, pBot->CurrentEyePosition, pBot->CurrentEyePosition + Vector(0.0f, 0.0f, 32.0f)))
+				{
+					Vector LadderCentre = UTIL_GetCentreOfEntity(Ladder);
+					int Side = vPointOnLine(LadderCentre, LadderCentre + CurrentLadderNormal, pBot->Edict->v.origin);
+
+					if (Side > 0)
+					{
+						pBot->desiredMovementDir = -LadderRightNormal;
+					}
+					else
+					{
+						pBot->desiredMovementDir = LadderRightNormal;
+					}
+
+					Vector LookLocation = pBot->Edict->v.origin - (CurrentLadderNormal * 50.0f);
+					LookLocation.z = RequiredClimbHeight + 100.0f;
+					BotMoveLookAt(pBot, LookLocation, true);
+
 					return;
 				}
 
 				// Crouch if we're hitting our head on a ceiling
 				
 
-				if (!IsPlayerGorge(pEdict) && !IsPlayerLerk(pEdict) && !IsPlayerSkulk(pEdict))
+				if (!IsPlayerGorge(pEdict) && !IsPlayerLerk(pEdict))
 				{
 					Vector HeadTraceLocation = GetPlayerTopOfCollisionHull(pEdict, false);
 
@@ -4034,39 +4226,30 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 				Vector LookLocation = EndPoint;
 
-				if (!IsPlayerSkulk(pBot->Edict))
+				float dot = UTIL_GetDotProduct2D(vForward, LadderRightNormal);
+
+				// Get-off point is to the side of the ladder rather than right at the top
+				if (fabsf(dot) > 0.5f)
 				{
-					float dot = UTIL_GetDotProduct2D(vForward, LadderRightNormal);
-
-					// Get-off point is to the side of the ladder rather than right at the top
-					if (fabsf(dot) > 0.5f)
+					if (dot > 0.0f)
 					{
-						if (dot > 0.0f)
-						{
-							LookLocation = pBot->Edict->v.origin + (LadderRightNormal * 50.0f);
-						}
-						else
-						{
-							LookLocation = pBot->Edict->v.origin - (LadderRightNormal * 50.0f);
-						}
-
+						LookLocation = pBot->Edict->v.origin + (LadderRightNormal * 50.0f);
 					}
 					else
 					{
-						// Get-off point is at the top of the ladder, so face the ladder
-						LookLocation = EndPoint - (CurrentLadderNormal * 50.0f);
+						LookLocation = pBot->Edict->v.origin - (LadderRightNormal * 50.0f);
 					}
 
-					LookLocation.z += 100.0f;
 				}
 				else
 				{
 					// Get-off point is at the top of the ladder, so face the ladder
-					LookLocation = UTIL_GetNearestLadderTopPoint(pBot->Edict->v.origin) - (CurrentLadderNormal * 50.0f);
-					LookLocation.z += 100.0f;
+					LookLocation = EndPoint - (CurrentLadderNormal * 50.0f);
 				}
 
-				BotMoveLookAt(pBot, LookLocation);
+				LookLocation.z += 100.0f;
+
+				BotMoveLookAt(pBot, LookLocation, true);
 
 				if (RequiredClimbHeight > pBot->Edict->v.origin.z || IsPlayerSkulk(pBot->Edict))
 				{
@@ -4116,28 +4299,20 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 			Vector LookLocation = EndPoint;
 
-			if (!IsPlayerSkulk(pBot->Edict))
-			{
-				Vector FurthestView = UTIL_GetFurthestVisiblePointOnPath(pBot);
+			Vector FurthestView = UTIL_GetFurthestVisiblePointOnPath(pBot);
 
-				if (vIsZero(FurthestView))
-				{
-					LookLocation = EndPoint + (CurrentLadderNormal * 100.0f);
-				}
-
-				// We're close enough to the end that we can jump off the ladder
-				if (UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, EndPoint) && (pBot->CollisionHullBottomLocation.z - EndPoint.z < 100.0f))
-				{
-					BotJump(pBot);
-				}
-			}
-			else
+			if (vIsZero(FurthestView))
 			{
-				LookLocation = pBot->CurrentEyePosition - (CurrentLadderNormal * 50.0f);
-				LookLocation.z -= 100.0f;
+				LookLocation = EndPoint + (CurrentLadderNormal * 100.0f);
 			}
 
-			BotMoveLookAt(pBot, LookLocation);
+			// We're close enough to the end that we can jump off the ladder
+			if (UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, EndPoint) && (pBot->CollisionHullBottomLocation.z - EndPoint.z < 100.0f))
+			{
+				BotJump(pBot);
+			}
+
+			BotMoveLookAt(pBot, LookLocation, true);
 		}
 
 		return;
@@ -4154,7 +4329,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(TargetPoint - pBot->Edict->v.origin);
 		Vector LookPoint = TargetPoint + Vector(0.0f, 0.0f, 100.0f);
 
-		BotMoveLookAt(pBot, LookPoint);
+		BotMoveLookAt(pBot, LookPoint, true);
 		return;
 	}
 
@@ -4169,7 +4344,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 	}
 
 	// If we're going down the ladder and are approaching it, just keep moving towards it
-	if ((pBot->BotNavInfo.IsOnGround || IsPlayerSkulk(pBot->Edict)) && !bIsGoingUpLadder)
+	if (pBot->BotNavInfo.IsOnGround && !bIsGoingUpLadder)
 	{
 		if (vDist2DSq(pEdict->v.origin, StartPoint) < sqrf(32.0f))
 		{
@@ -4221,12 +4396,29 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 	if (pBot->Edict->v.origin.z < nearestLadderTop.z)
 	{
+		Vector LadderNormal = UTIL_GetNearestLadderNormal(StartPoint);
+		LadderNormal = UTIL_GetVectorNormal2D(LadderNormal);
 
-		Vector nearestLadderPoint = UTIL_GetNearestLadderCentrePoint(pEdict);
-		nearestLadderPoint.z = pEdict->v.origin.z;
-		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(nearestLadderPoint - pEdict->v.origin);
+		edict_t* NearestLadder = UTIL_GetNearestLadderAtPoint(StartPoint);
 
-		Vector LookPoint = nearestLadderPoint + Vector(0.0f, 0.0f, 20.0f);
+		Vector NearestPointOnLadder = UTIL_GetClosestPointOnEntityToLocation(pBot->Edict->v.origin, NearestLadder);
+
+		Vector OrientationToLadder = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - NearestPointOnLadder);
+
+		Vector LookPoint = NearestPointOnLadder + Vector(0.0f, 0.0f, 20.0f);
+
+		if (UTIL_GetDotProduct2D(LadderNormal, OrientationToLadder) < 0.8f)
+		{
+			Vector MovePoint = NearestPointOnLadder + (LadderNormal * 32.0f);
+			pBot->desiredMovementDir = UTIL_GetVectorNormal2D(MovePoint - pBot->Edict->v.origin);
+		}
+		else
+		{
+			
+			Vector nearestLadderPoint = UTIL_GetNearestLadderCentrePoint(pEdict);
+			nearestLadderPoint.z = pEdict->v.origin.z;
+			pBot->desiredMovementDir = UTIL_GetVectorNormal2D(NearestPointOnLadder - pEdict->v.origin);
+		}
 
 		BotMoveLookAt(pBot, LookPoint);
 	}

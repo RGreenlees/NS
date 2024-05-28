@@ -2420,14 +2420,34 @@ AvHAICombatStrategy GetBotCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_statu
 {
 	if (FNullEnt(CurrentEnemy->PlayerEdict) || !IsPlayerActiveInGame(CurrentEnemy->PlayerEdict)) { return COMBAT_STRATEGY_IGNORE; }
 
+	AvHAICombatStrategy IdealStrategy;
+
 	if (IsPlayerAlien(pBot->Edict))
 	{
-		return GetAlienCombatStrategyForTarget(pBot, CurrentEnemy);
+		IdealStrategy = GetAlienCombatStrategyForTarget(pBot, CurrentEnemy);
 	}
 	else
 	{
-		return GetMarineCombatStrategyForTarget(pBot, CurrentEnemy);
+		IdealStrategy = GetMarineCombatStrategyForTarget(pBot, CurrentEnemy);
 	}
+
+	if (IdealStrategy == COMBAT_STRATEGY_ATTACK)
+	{
+		// If we want to attack, but we can't reach the enemy and don't have a ranged weapon then ignore them entirely. Otherwise, skirmish instead
+		if (!UTIL_PointIsReachable(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetFloorUnderEntity(CurrentEnemy->PlayerEdict), max_ai_use_reach))
+		{
+			if (IsPlayerOnos(pBot->Edict) || IsPlayerSkulk(pBot->Edict) || (IsPlayerFade(pBot->Edict) && !PlayerHasWeapon(pBot->Player, WEAPON_FADE_ACIDROCKET)))
+			{
+				return COMBAT_STRATEGY_IGNORE;
+			}
+			else
+			{
+				return COMBAT_STRATEGY_SKIRMISH;
+			}
+		}
+	}
+
+	return IdealStrategy;
 }
 
 AvHAICombatStrategy GetAlienCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_status* CurrentEnemy)
@@ -4091,7 +4111,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
 	bool bNeedsHealth = pBot->Edict->v.health < (pBot->Edict->v.max_health * 0.9f);
-	bool bNeedsAmmo = UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) < (UTIL_GetPlayerPrimaryMaxAmmoReserve(pBot->Player) * 0.9f);
+	bool bNeedsAmmo = UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) < (UTIL_GetPlayerPrimaryMaxAmmoReserve(pBot->Player) * 0.75f);
 
 	if (bNeedsHealth || bNeedsAmmo)
 	{
@@ -4121,7 +4141,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		NearestArmouryFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 		NearestArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 		NearestArmouryFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
-		NearestArmouryFilter.MaxSearchRadius = (bTaskIsUrgent) ? UTIL_MetresToGoldSrcUnits(20.0f) : UTIL_MetresToGoldSrcUnits(5.0f);
+		NearestArmouryFilter.MaxSearchRadius = (bTaskIsUrgent) ? UTIL_MetresToGoldSrcUnits(20.0f) : UTIL_MetresToGoldSrcUnits(3.0f);
 
 		AvHAIBuildableStructure NearestArmoury = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &NearestArmouryFilter);
 
