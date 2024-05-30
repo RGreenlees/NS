@@ -630,20 +630,24 @@ AvHAIBuildableStructure* AITAC_FindFurthestDeployableFromLocationByRef(const Vec
 	return Result;
 }
 
-AvHAIDroppedItem* AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict)
+AvHAIDroppedItem AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict)
 {
-	if (FNullEnt(ItemEdict)) { return nullptr; }
+	AvHAIDroppedItem Result;
+
+	if (FNullEnt(ItemEdict)) { return Result; }
 
 	int EntIndex = ENTINDEX(ItemEdict);
 
-	if (EntIndex < 0) { return nullptr; }
+	if (EntIndex < 0) { return Result; }
 
-	return &MarineDroppedItemMap[EntIndex];
+	Result = MarineDroppedItemMap[EntIndex];
+
+	return Result;
 }
 
-AvHAIDroppedItem* AITAC_FindClosestItemToLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance)
+AvHAIDroppedItem AITAC_FindClosestItemToLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance)
 {
-	AvHAIDroppedItem* Result = NULL;
+	AvHAIDroppedItem Result;
 	float CurrMinDist = 0.0f;
 
 	float MinDistSq = sqrf(MinRadius);
@@ -669,9 +673,9 @@ AvHAIDroppedItem* AITAC_FindClosestItemToLocation(const Vector& Location, const 
 
 		float DistSq = (bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
 
-		if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (!Result || DistSq < CurrMinDist))
+		if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (!Result.IsValid() || DistSq < CurrMinDist))
 		{
-			Result = &it.second;
+			Result = it.second;
 			CurrMinDist = DistSq;
 		}
 

@@ -1453,10 +1453,10 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (bBaseIsDamaged)
 	{
-		AvHAIDroppedItem* NearestWelder = AITAC_FindClosestItemToLocation(AITAC_GetCommChairLocation(CommanderTeam), DEPLOYABLE_ITEM_WELDER, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(15.0f), false);
+		AvHAIDroppedItem NearestWelder = AITAC_FindClosestItemToLocation(AITAC_GetCommChairLocation(CommanderTeam), DEPLOYABLE_ITEM_WELDER, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(15.0f), false);
 		bool bPlayerHasWelder = false;
 
-		if (!NearestWelder)
+		if (!NearestWelder.IsValid())
 		{
 			vector<AvHPlayer*> PlayersAtBase = AITAC_GetAllPlayersOfTeamInArea(CommanderTeam, AITAC_GetCommChairLocation(CommanderTeam), UTIL_MetresToGoldSrcUnits(15.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
 
@@ -1471,7 +1471,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 			}
 		}
 
-		if (!NearestWelder && !bPlayerHasWelder)
+		if (!NearestWelder.IsValid() && !bPlayerHasWelder)
 		{
 			DeployableSearchFilter ArmouryFilter;
 			ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
@@ -1659,11 +1659,11 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (!NearestAdvArmoury.IsValid() || !NearestPrototypeLab.IsValid()) { return false; }
 
-	AvHAIDroppedItem* ExistingHA = AITAC_FindClosestItemToLocation(NearestPrototypeLab.Location, DEPLOYABLE_ITEM_HEAVYARMOUR, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
-	AvHAIDroppedItem* ExistingHMG = AITAC_FindClosestItemToLocation(NearestAdvArmoury.Location, DEPLOYABLE_ITEM_HMG, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
-	AvHAIDroppedItem* ExistingWelder = AITAC_FindClosestItemToLocation(NearestAdvArmoury.Location, DEPLOYABLE_ITEM_WELDER, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
+	AvHAIDroppedItem ExistingHA = AITAC_FindClosestItemToLocation(NearestPrototypeLab.Location, DEPLOYABLE_ITEM_HEAVYARMOUR, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
+	AvHAIDroppedItem ExistingHMG = AITAC_FindClosestItemToLocation(NearestAdvArmoury.Location, DEPLOYABLE_ITEM_HMG, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
+	AvHAIDroppedItem ExistingWelder = AITAC_FindClosestItemToLocation(NearestAdvArmoury.Location, DEPLOYABLE_ITEM_WELDER, CommanderTeam, AI_REACHABILITY_MARINE, 0.0f, UTIL_MetresToGoldSrcUnits(5.0f), false);
 
-	if (ExistingHA && ExistingHMG && ExistingWelder) { return false; }
+	if (ExistingHA.IsValid() && ExistingHMG.IsValid() && ExistingWelder.IsValid()) { return false; }
 
 	vector<edict_t*> NearbyPlayers = AITAC_GetAllPlayersOfClassInArea(CommanderTeam, NearestAdvArmoury.Location, UTIL_MetresToGoldSrcUnits(10.0f), false, pBot->Edict, AVH_USER3_MARINE_PLAYER);
 
@@ -1692,7 +1692,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 		}
 	}
 
-	if (!ExistingHA && !bDropWelder && !bDropWeapon)
+	if (!ExistingHA.IsValid() && !bDropWelder && !bDropWeapon)
 	{
 		Vector DeployLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestPrototypeLab.Location, UTIL_MetresToGoldSrcUnits(3.0f));
 
@@ -1706,7 +1706,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 		return bSuccess;
 	}
 
-	if (bDropWeapon && !ExistingHMG)
+	if (bDropWeapon && !ExistingHMG.IsValid())
 	{
 		Vector DeployLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestAdvArmoury.Location, UTIL_MetresToGoldSrcUnits(3.0f));
 
@@ -1720,7 +1720,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 		return bSuccess;
 	}
 
-	if (bDropWelder && !ExistingWelder)
+	if (bDropWelder && !ExistingWelder.IsValid())
 	{
 		Vector DeployLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestAdvArmoury.Location, UTIL_MetresToGoldSrcUnits(3.0f));
 
@@ -2401,6 +2401,8 @@ bool AICOMM_BuildInfantryPortal(AvHAIPlayer* pBot, edict_t* CommChair)
 	BuildLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), CommChair->v.origin, BALANCE_VAR(kCommandStationBuildDistance));
 
 	if (vIsZero(BuildLocation)) { return false; }
+
+	UTIL_DrawLine(INDEXENT(1), BuildLocation, BuildLocation + Vector(0.0f, 0.0f, 100.0f), 2.0f);
 
 	return AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
 }

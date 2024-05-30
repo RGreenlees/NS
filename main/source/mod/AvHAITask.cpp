@@ -441,11 +441,11 @@ bool AITASK_IsWeldTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	{
 		if (FNullEnt(Task->TaskSecondaryTarget))
 		{
-			AvHAIDroppedItem* NearestWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
+			AvHAIDroppedItem NearestWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
 
-			if (NearestWelder)
+			if (NearestWelder.IsValid())
 			{
-				Task->TaskSecondaryTarget = NearestWelder->edict;
+				Task->TaskSecondaryTarget = NearestWelder.edict;
 			}
 			else
 			{
@@ -2651,11 +2651,11 @@ void BotProgressWeldTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 		else
 		{
-			AvHAIDroppedItem* Welder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
+			AvHAIDroppedItem Welder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
 
-			if (Welder)
+			if (Welder.IsValid())
 			{
-				Task->TaskSecondaryTarget = Welder->edict;
+				Task->TaskSecondaryTarget = Welder.edict;
 			}
 		}
 
@@ -3537,9 +3537,9 @@ void AITASK_SetPickupTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 		return;
 	}
 
-	AvHAIDroppedItem* ItemToPickup = AITAC_GetDroppedItemRefFromEdict(Target);
+	AvHAIDroppedItem ItemToPickup = AITAC_GetDroppedItemRefFromEdict(Target);
 
-	if (!ItemToPickup)
+	if (!ItemToPickup.IsValid())
 	{
 		AITASK_ClearBotTask(pBot, Task);
 		return;
@@ -3553,7 +3553,7 @@ void AITASK_SetPickupTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 		return;
 	}
 
-	switch (ItemToPickup->ItemType)
+	switch (ItemToPickup.ItemType)
 	{
 		case DEPLOYABLE_ITEM_AMMO:
 			Task->TaskType = TASK_GET_AMMO;
@@ -3633,16 +3633,16 @@ void AITASK_SetWeldTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Targe
 
 	if (!PlayerHasWeapon(pBot->Player, WEAPON_MARINE_WELDER))
 	{
-		AvHAIDroppedItem* NearestWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
+		AvHAIDroppedItem NearestWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
 
-		if (!NearestWelder)
+		if (!NearestWelder.IsValid())
 		{
 			AITASK_ClearBotTask(pBot, Task);
 			return;
 		}
 		else
 		{
-			Task->TaskSecondaryTarget = NearestWelder->edict;
+			Task->TaskSecondaryTarget = NearestWelder.edict;
 		}
 	}
 

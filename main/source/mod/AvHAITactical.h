@@ -67,11 +67,11 @@ Vector						AITAC_GetTeamRelocationPoint(AvHTeamNumber Team);
 
 AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags);
 
-AvHAIDroppedItem*			AITAC_FindClosestItemToLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
+AvHAIDroppedItem			AITAC_FindClosestItemToLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
 bool						AITAC_ItemExistsInLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
 int							AITAC_GetNumItemsInLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
 
-AvHAIDroppedItem*			AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict);
+AvHAIDroppedItem			AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict);
 
 Vector						AITAC_GetRandomBuildHintInLocation(const unsigned int StructureType, const Vector SearchLocation, const float SearchRadius);
 
