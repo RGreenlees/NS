@@ -7555,7 +7555,31 @@ void BotFollowPath(AvHAIPlayer* pBot)
 
 	bot_path_node CurrentNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
 
-	if (IsPlayerStandingOnPlayer(pBot->Edict) && CurrentNode.flag != SAMPLE_POLYFLAGS_WALLCLIMB && CurrentNode.flag != SAMPLE_POLYFLAGS_LADDER)
+	if (CurrentNode.flag == SAMPLE_POLYFLAGS_LADDER || CurrentNode.flag == SAMPLE_POLYFLAGS_WALLCLIMB)
+	{
+		vector<AvHPlayer*> TeamMates = AIMGR_GetAllPlayersOnTeam(pBot->Player->GetTeam());
+
+		for (auto it = TeamMates.begin(); it != TeamMates.end(); it++)
+		{
+			AvHPlayer* ThisPlayer = (*it);
+
+			if (ThisPlayer == pBot->Player) { continue; }
+
+			if (ThisPlayer->pev->groundentity == pBot->Edict)
+			{
+				// If we have a point we can go back to, and we can reach it, then go for it. Otherwise, keep pushing on and hope the other guy moves
+				if (!vIsZero(pBot->BotNavInfo.LastOpenLocation))
+				{
+					if (UTIL_PointIsReachable(pBot->BotNavInfo.NavProfile, pBot->Edict->v.origin, pBot->BotNavInfo.LastOpenLocation, GetPlayerRadius(pBot->Edict)))
+					{
+						NAV_SetMoveMovementTask(pBot, pBot->BotNavInfo.LastOpenLocation, nullptr);
+						return;
+					}
+				}
+			}
+		}
+	}
+	else if (IsPlayerStandingOnPlayer(pBot->Edict))
 	{
 		Vector ForwardDir = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
 		
