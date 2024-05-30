@@ -6448,9 +6448,9 @@ void MarineUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle)
 
 	if (!bHasWelder)
 	{
-		AvHAIDroppedItem* NearbyWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+		AvHAIDroppedItem NearbyWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
-		bHasWelder = (NearbyWelder != nullptr);
+		bHasWelder = (NearbyWelder.IsValid());
 	}
 
 	// Did our nav profile previously indicate we could go through weldable doors?
@@ -6914,11 +6914,11 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 			{
 				nav_profile BaseProfile = GetBaseNavProfile(MARINE_BASE_NAV_PROFILE);
 
-				AvHAIDroppedItem* NearestWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), BaseProfile.ReachabilityFlag, 0.0f, 0.0f, true);
+				AvHAIDroppedItem NearestWelder = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, pBot->Player->GetTeam(), BaseProfile.ReachabilityFlag, 0.0f, 0.0f, true);
 
-				if (NearestWelder)
+				if (NearestWelder.IsValid())
 				{
-					NAV_SetPickupMovementTask(pBot, NearestWelder->edict, nullptr);
+					NAV_SetPickupMovementTask(pBot, NearestWelder.edict, nullptr);
 					return true;
 				}
 			}

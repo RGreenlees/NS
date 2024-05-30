@@ -372,6 +372,8 @@ typedef struct _DROPPED_MARINE_ITEM
 	unsigned int TeamBReachabilityFlags = AI_REACHABILITY_NONE;
 	bool bReachabilityMarkedDirty = false; // Reachability needs to be recalculated
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the item has been removed from play
+
+	bool IsValid() { return !FNullEnt(edict) && !edict->free && !(edict->v.flags & EF_NODRAW) && edict->v.deadflag == DEAD_NO; }
 } AvHAIDroppedItem;
 
 // How far a bot can be from a useable object when trying to interact with it. Used also for melee attacks. We make it slightly less than actual to avoid edge cases

@@ -20,6 +20,8 @@ bot_skill BotSkillLevels[4];
 
 std::vector<AvHMessageID> ChamberSequence;
 
+bool bRNGSeeded = false;
+
 string DefaultBotNames[MAX_PLAYERS] = { "MrRobot",
                                     "Wall-E",
                                     "BeepBoop",
@@ -185,7 +187,6 @@ void CONFIG_PopulateBotNames()
     if (BotNames.size() > 2)
     {
         auto rng = std::default_random_engine{};
-        rng.seed(time(0));
         std::shuffle(begin(BotNames), end(BotNames), rng);
     }
 
@@ -200,7 +201,6 @@ void CONFIG_PopulateBotNames()
     if (DefaultNames.size() > 2)
     {
         auto rng = std::default_random_engine{};
-        rng.seed(time(0));
         std::shuffle(begin(DefaultNames), end(DefaultNames), rng);
     }
 
@@ -274,9 +274,15 @@ void CONFIG_ParseConfigFile()
     ChamberSequence.push_back(ALIEN_BUILD_MOVEMENT_CHAMBER);
     ChamberSequence.push_back(ALIEN_BUILD_SENSORY_CHAMBER);
 
-    std::srand(time(0));
     auto rng = std::default_random_engine{};
-    rng.seed(time(0));
+
+    if (!bRNGSeeded)
+    {
+        srand(time(NULL));
+        rng.seed(time(NULL));
+        bRNGSeeded = true;
+    }
+
     std::shuffle(std::begin(ChamberSequence), std::end(ChamberSequence), rng);
 
     string BotConfigFile = string(getModDirectory()) + "/nsbots.ini";

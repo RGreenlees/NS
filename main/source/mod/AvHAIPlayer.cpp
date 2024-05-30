@@ -1896,107 +1896,36 @@ void CustomThink(AvHAIPlayer* pBot)
 
 	AITASK_BotUpdateAndClearTasks(pBot);
 
-	if (pBot->CurrentTask->TaskType == TASK_REINFORCE_STRUCTURE)
+	if (!PlayerHasWeapon(pBot->Player, WEAPON_MARINE_MINES))
 	{
-		BotProgressTask(pBot, pBot->CurrentTask);
-		return;
-	}
-
-	// No missing upgrade chambers to drop, let's look for empty hives we can start staking a claim to, to deny to the enemy
-	vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
-
-	AvHAIHiveDefinition* HiveToSecure = nullptr;
-
-	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
-	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
-
-	float MinDist = 0.0f;
-
-	for (auto it = AllHives.begin(); it != AllHives.end(); it++)
-	{
-		AvHAIHiveDefinition* ThisHive = (*it);
-
-		if (ThisHive->Status == HIVE_STATUS_UNBUILT)
+		if (pBot->CurrentTask->TaskType != TASK_GET_WEAPON)
 		{
-			unsigned int StructureTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
+			AvHAIDroppedItem Mines = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_MINES, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, false);
 
-			if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_ALIEN)
+			if (Mines.IsValid())
 			{
-				StructureTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+				AITASK_SetPickupTask(pBot, pBot->CurrentTask, Mines.edict, true);
 			}
+		}
+	}
+	else
+	{
+		if (pBot->CurrentTask->TaskType != TASK_PLACE_MINE)
+		{
 
-			DeployableSearchFilter EnemyStructureFilter;
-			EnemyStructureFilter.DeployableTeam = EnemyTeam;
-			EnemyStructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
-			EnemyStructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
-			EnemyStructureFilter.DeployableTypes = StructureTypes;
-			EnemyStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+			DeployableSearchFilter TFFilter;
+			TFFilter.DeployableTypes = STRUCTURE_MARINE_TURRETFACTORY;
 
-			bool bEnemyHaveFoothold = AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStructureFilter);
+			AvHAIBuildableStructure NearestTF = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &TFFilter);
 
-			if (bEnemyHaveFoothold) { continue; }
-
-			if (AITAC_GetNumPlayersOfTeamInArea(EnemyTeam, ThisHive->FloorLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_COMMANDER_PLAYER) > 1) { continue; }
-
-			int OtherBuilders = AITAC_GetNumPlayersOfTeamAndClassInArea(EnemyTeam, ThisHive->FloorLocation, UTIL_MetresToGoldSrcUnits(10.0f), false, nullptr, AVH_USER3_ALIEN_PLAYER2);
-
-			if (OtherBuilders >= 2) { continue; }
-
-			DeployableSearchFilter ExistingReinforcementFilter;
-			ExistingReinforcementFilter.DeployableTeam = BotTeam;
-			ExistingReinforcementFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
-			ExistingReinforcementFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
-
-			vector<AvHAIBuildableStructure> AllReinforcingStructures = AITAC_FindAllDeployables(ThisHive->FloorLocation, &ExistingReinforcementFilter);
-
-			int NumOCs = 0;
-			int NumDCs = 0;
-			int NumMCs = 0;
-			int NumSCs = 0;
-
-			for (auto it = AllReinforcingStructures.begin(); it != AllReinforcingStructures.end(); it++)
+			if (NearestTF.IsValid())
 			{
-				switch ((*it).StructureType)
-				{
-				case STRUCTURE_ALIEN_OFFENCECHAMBER:
-					NumOCs++;
-					break;
-				case STRUCTURE_ALIEN_DEFENCECHAMBER:
-					NumDCs++;
-					break;
-				case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
-					NumMCs++;
-					break;
-				case STRUCTURE_ALIEN_SENSORYCHAMBER:
-					NumSCs++;
-					break;
-				default:
-					break;
-				}
+				AITASK_SetMineStructureTask(pBot, pBot->CurrentTask, NearestTF.edict, true);
 			}
-
-			if (NumOCs < 3
-				|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_DEFENSE_CHAMBER) && NumDCs < 2)
-				|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_MOVEMENT_CHAMBER) && NumMCs < 1)
-				|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_SENSORY_CHAMBER) && NumSCs < 1))
-			{
-				float ThisDist = vDist2DSq(pBot->Edict->v.origin, ThisHive->FloorLocation);
-
-				if (!HiveToSecure || ThisDist < MinDist)
-				{
-					HiveToSecure = ThisHive;
-					MinDist = ThisDist;
-				}
-			}
-
 		}
 	}
 
-	if (HiveToSecure)
-	{
-		AITASK_SetReinforceStructureTask(pBot, &pBot->PrimaryBotTask, HiveToSecure->HiveEdict, false);
-		return;
-	}
+	BotProgressTask(pBot, pBot->CurrentTask);
 }
 
 void DroneThink(AvHAIPlayer* pBot)
@@ -3273,8 +3202,8 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 	edict_t* CurrentEnemy = pBot->TrackedEnemies[pBot->CurrentEnemy].PlayerEdict;
 	enemy_status* TrackedEnemyRef = &pBot->TrackedEnemies[pBot->CurrentEnemy];
 
-	AvHAIDroppedItem* NearestHealthPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HEALTHPACK, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
-	AvHAIDroppedItem* NearestAmmoPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_AMMO, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+	AvHAIDroppedItem NearestHealthPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HEALTHPACK, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+	AvHAIDroppedItem NearestAmmoPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_AMMO, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
 	AvHAIWeapon DesiredCombatWeapon = BotMarineChooseBestWeapon(pBot, CurrentEnemy);
 
@@ -3294,17 +3223,17 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 	{
 		pBot->DesiredCombatWeapon = DesiredCombatWeapon;
 
-		if (NearestHealthPack && (pBot->Edict->v.health < pBot->Edict->v.max_health * 0.7f))
+		if (NearestHealthPack.IsValid() && (pBot->Edict->v.health < pBot->Edict->v.max_health * 0.7f))
 		{
-			MoveTo(pBot, NearestHealthPack->Location, MOVESTYLE_NORMAL);
+			MoveTo(pBot, NearestHealthPack.Location, MOVESTYLE_NORMAL);
 		}
-		else if (NearestAmmoPack && UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) < UTIL_GetPlayerPrimaryMaxAmmoReserve(pBot->Player))
+		else if (NearestAmmoPack.IsValid() && UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) < UTIL_GetPlayerPrimaryMaxAmmoReserve(pBot->Player))
 		{
-			if (vDist2DSq(pBot->Edict->v.origin, NearestAmmoPack->Location) < sqrf(150.0f))
+			if (vDist2DSq(pBot->Edict->v.origin, NearestAmmoPack.Location) < sqrf(150.0f))
 			{
 				pBot->DesiredCombatWeapon = UTIL_GetPlayerPrimaryWeapon(pBot->Player);
 			}
-			MoveTo(pBot, NearestAmmoPack->Location, MOVESTYLE_NORMAL);
+			MoveTo(pBot, NearestAmmoPack.Location, MOVESTYLE_NORMAL);
 		}
 		else
 		{
@@ -4119,18 +4048,18 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 		float SearchRadius = (bTaskIsUrgent) ? UTIL_MetresToGoldSrcUnits(5.0f) : UTIL_MetresToGoldSrcUnits(10.0f);
 
-		AvHAIDroppedItem* NearestHealthPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HEALTHPACK, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, SearchRadius, false);
-		AvHAIDroppedItem* NearestAmmoPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_AMMO, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, SearchRadius, false);
+		AvHAIDroppedItem NearestHealthPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HEALTHPACK, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, SearchRadius, false);
+		AvHAIDroppedItem NearestAmmoPack = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_AMMO, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, SearchRadius, false);
 
-		if (bNeedsHealth && NearestHealthPack)
+		if (bNeedsHealth && NearestHealthPack.IsValid())
 		{
-			AITASK_SetPickupTask(pBot, Task, NearestHealthPack->edict, bTaskIsUrgent);
+			AITASK_SetPickupTask(pBot, Task, NearestHealthPack.edict, bTaskIsUrgent);
 			return;
 		}
 
-		if (bNeedsAmmo && NearestAmmoPack)
+		if (bNeedsAmmo && NearestAmmoPack.IsValid())
 		{
-			AITASK_SetPickupTask(pBot, Task, NearestAmmoPack->edict, bTaskIsUrgent);
+			AITASK_SetPickupTask(pBot, Task, NearestAmmoPack.edict, bTaskIsUrgent);
 			return;
 		}
 
@@ -4176,11 +4105,11 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 	if (!PlayerHasEquipment(pBot->Edict))
 	{
-		AvHAIDroppedItem* NearbyHA = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HEAVYARMOUR, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+		AvHAIDroppedItem NearbyHA = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HEAVYARMOUR, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
-		if (NearbyHA)
+		if (NearbyHA.IsValid())
 		{
-			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyHA->Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
+			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyHA.Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
 			bool bHumanNearby = false;
 			bool bHumanWaitingRespawn = false;
 
@@ -4198,7 +4127,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 			if (!bHumanNearby)
 			{
-				AITASK_SetPickupTask(pBot, Task, NearbyHA->edict, vDist2DSq(pBot->Edict->v.origin, NearbyHA->Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
+				AITASK_SetPickupTask(pBot, Task, NearbyHA.edict, vDist2DSq(pBot->Edict->v.origin, NearbyHA.Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
 				return;
 			}
 		}
@@ -4208,14 +4137,14 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	{
 		if (!PlayerHasSpecialWeapon(pBot->Player))
 		{
-			AvHAIDroppedItem* NearbyHMG = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HMG, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
-			AvHAIDroppedItem* NearbyGL = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_GRENADELAUNCHER, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+			AvHAIDroppedItem NearbyHMG = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_HMG, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+			AvHAIDroppedItem NearbyGL = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_GRENADELAUNCHER, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
-			AvHAIDroppedItem* NearbyWeapon = (NearbyHMG != nullptr) ? NearbyHMG : NearbyGL;
+			AvHAIDroppedItem NearbyWeapon = (NearbyHMG.IsValid()) ? NearbyHMG : NearbyGL;
 
-			if (NearbyWeapon)
+			if (NearbyWeapon.IsValid())
 			{
-				vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon->Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
+				vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon.Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
 				bool bHumanNearby = false;
 
 				for (auto it = NearbyPlayers.begin(); it != NearbyPlayers.end(); it++)
@@ -4232,7 +4161,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 				if (!bHumanNearby)
 				{
-					AITASK_SetPickupTask(pBot, Task, NearbyWeapon->edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon->Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
+					AITASK_SetPickupTask(pBot, Task, NearbyWeapon.edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon.Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
 					return;
 				}
 			}
@@ -4241,11 +4170,11 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 	if (!PlayerHasWeapon(pBot->Player, WEAPON_MARINE_WELDER))
 	{
-		AvHAIDroppedItem* NearbyWeapon = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+		AvHAIDroppedItem NearbyWeapon = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_WELDER, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
-		if (NearbyWeapon)
+		if (NearbyWeapon.IsValid())
 		{
-			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon->Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
+			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon.Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
 			bool bHumanNearby = false;
 
 			for (auto it = NearbyPlayers.begin(); it != NearbyPlayers.end(); it++)
@@ -4262,7 +4191,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 			if (!bHumanNearby)
 			{
-				AITASK_SetPickupTask(pBot, Task, NearbyWeapon->edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon->Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
+				AITASK_SetPickupTask(pBot, Task, NearbyWeapon.edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon.Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
 				return;
 			}
 		}
@@ -4270,11 +4199,11 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 	if (!PlayerHasSpecialWeapon(pBot->Player))
 	{
-		AvHAIDroppedItem* NearbyWeapon = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_SHOTGUN, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+		AvHAIDroppedItem NearbyWeapon = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_SHOTGUN, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
-		if (NearbyWeapon)
+		if (NearbyWeapon.IsValid())
 		{
-			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon->Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
+			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon.Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
 			bool bHumanNearby = false;
 
 			for (auto it = NearbyPlayers.begin(); it != NearbyPlayers.end(); it++)
@@ -4291,7 +4220,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 			if (!bHumanNearby)
 			{
-				AITASK_SetPickupTask(pBot, Task, NearbyWeapon->edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon->Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
+				AITASK_SetPickupTask(pBot, Task, NearbyWeapon.edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon.Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
 				return;
 			}
 		}
@@ -4299,11 +4228,11 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 	if (!PlayerHasWeapon(pBot->Player, WEAPON_MARINE_MINES))
 	{
-		AvHAIDroppedItem* NearbyWeapon = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_MINES, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
+		AvHAIDroppedItem NearbyWeapon = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_MINES, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, UTIL_MetresToGoldSrcUnits(10.0f), true);
 
-		if (NearbyWeapon)
+		if (NearbyWeapon.IsValid())
 		{
-			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon->Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
+			vector<AvHPlayer*> NearbyPlayers = AITAC_GetAllPlayersOfTeamInArea(BotTeam, NearbyWeapon.Location, UTIL_MetresToGoldSrcUnits(5.0f), false, pBot->Edict, AVH_USER3_COMMANDER_PLAYER);
 			bool bHumanNearby = false;
 
 			for (auto it = NearbyPlayers.begin(); it != NearbyPlayers.end(); it++)
@@ -4320,7 +4249,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 			if (!bHumanNearby)
 			{
-				AITASK_SetPickupTask(pBot, Task, NearbyWeapon->edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon->Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
+				AITASK_SetPickupTask(pBot, Task, NearbyWeapon.edict, vDist2DSq(pBot->Edict->v.origin, NearbyWeapon.Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
 				return;
 			}
 		}

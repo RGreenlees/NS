@@ -403,7 +403,6 @@ Vector UTIL_RandomPointOnCircle(const Vector origin, const float radius)
 {
 	Vector result;
 
-	srand(time(NULL));
 	float random = ((float)rand()) / (float)RAND_MAX;
 
 	float a = random * (MATH_PI * 2);
@@ -643,7 +642,6 @@ float fInterpConstantTo(float start, float end, float DeltaTime, float InterpSpe
 
 float frandrange(float MinValue, float MaxValue)
 {
-	srand(time(NULL));
 	return ((float(rand()) / float(RAND_MAX)) * (MaxValue - MinValue)) + MinValue;
 }
 
@@ -651,22 +649,17 @@ int irandrange(int MinValue, int MaxValue)
 {
 	if (MinValue == MaxValue) { return MinValue; }
 
-	srand(time(NULL));
-
 	return MinValue + rand() / (RAND_MAX / (MaxValue - MinValue + 1) + 1);
 }
 
 bool randbool()
 {
-	srand(time(NULL));
 	return (rand() & 1);
 }
 
 Vector random_unit_vector_within_cone(const Vector Direction, double cone_half_angle)
 {
 	Vector Result = ZERO_VECTOR;
-
-	srand(time(NULL));
 
 	double u = ((double)rand() / RAND_MAX) * 2 - 1; // random number in [-1, 1]
 	double phi = ((double)rand() / RAND_MAX) * 2 * M_PI; // random number in [0, 2*pi]
