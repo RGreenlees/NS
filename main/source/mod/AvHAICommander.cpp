@@ -2402,8 +2402,6 @@ bool AICOMM_BuildInfantryPortal(AvHAIPlayer* pBot, edict_t* CommChair)
 
 	if (vIsZero(BuildLocation)) { return false; }
 
-	UTIL_DrawLine(INDEXENT(1), BuildLocation, BuildLocation + Vector(0.0f, 0.0f, 100.0f), 2.0f);
-
 	return AICOMM_DeployStructure(pBot, STRUCTURE_MARINE_INFANTRYPORTAL, BuildLocation, STRUCTURE_PURPOSE_BASE);
 }
 
