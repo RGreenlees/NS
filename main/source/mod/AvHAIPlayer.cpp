@@ -5217,7 +5217,7 @@ void AIPlayerSetPrimaryCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	if (randbool())
 	{
-		Vector RandomVisitPoint = UTIL_GetRandomPointOnNavmeshInDonut(pBot->BotNavInfo.NavProfile, StructureToAttack->v.origin, UTIL_MetresToGoldSrcUnits(20.0f), UTIL_MetresToGoldSrcUnits(40.0f));
+		Vector RandomVisitPoint = UTIL_GetRandomPointOnNavmeshInDonut(pBot->BotNavInfo.NavProfile, UTIL_GetEntityGroundLocation(StructureToAttack), UTIL_MetresToGoldSrcUnits(20.0f), UTIL_MetresToGoldSrcUnits(40.0f));
 
 		if (!vIsZero(RandomVisitPoint))
 		{
@@ -5227,8 +5227,6 @@ void AIPlayerSetPrimaryCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	}
 
 	AITASK_SetAttackTask(pBot, Task, StructureToAttack, false);
-
-
 }
 
 void AIPlayerSetSecondaryCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -5582,6 +5580,8 @@ void AIPlayerSetSecondaryCOAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	const AvHAIHiveDefinition* TheHive = AITAC_GetNearestTeamHive(BotTeam, pBot->Edict->v.origin, true);
 
+	if (!TheHive) { return; }
+
 	if (TheHive->bIsUnderAttack)
 	{
 		int NumAttackers = AITAC_GetNumPlayersOfTeamInArea(EnemyTeam, TheHive->FloorLocation, UTIL_MetresToGoldSrcUnits(15.0f), false, nullptr, AVH_USER3_NONE);
@@ -5934,6 +5934,10 @@ bool ShouldBotThink(AvHAIPlayer* pBot)
 
 void BotResumePlay(AvHAIPlayer* pBot)
 {
+	pBot->BotNavInfo.LastNavMeshPosition = g_vecZero;
+	pBot->BotNavInfo.LastNavMeshCheckPosition = g_vecZero;
+	pBot->BotNavInfo.LastOpenLocation = g_vecZero;
+
 	ClearBotMovement(pBot);
 	SetBaseNavProfile(pBot);
 
