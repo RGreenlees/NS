@@ -20,6 +20,7 @@ bot_skill BotSkillLevels[4];
 
 std::vector<AvHMessageID> ChamberSequence;
 
+std::default_random_engine rng;
 bool bRNGSeeded = false;
 
 string DefaultBotNames[MAX_PLAYERS] = { "MrRobot",
@@ -186,7 +187,6 @@ void CONFIG_PopulateBotNames()
 
     if (BotNames.size() > 2)
     {
-        auto rng = std::default_random_engine{};
         std::shuffle(begin(BotNames), end(BotNames), rng);
     }
 
@@ -200,7 +200,6 @@ void CONFIG_PopulateBotNames()
 
     if (DefaultNames.size() > 2)
     {
-        auto rng = std::default_random_engine{};
         std::shuffle(begin(DefaultNames), end(DefaultNames), rng);
     }
 
@@ -274,12 +273,10 @@ void CONFIG_ParseConfigFile()
     ChamberSequence.push_back(ALIEN_BUILD_MOVEMENT_CHAMBER);
     ChamberSequence.push_back(ALIEN_BUILD_SENSORY_CHAMBER);
 
-    auto rng = std::default_random_engine{};
-
     if (!bRNGSeeded)
     {
-        srand(time(NULL));
-        rng.seed(time(NULL));
+        srand(time(0));
+        rng.seed(time(0));
         bRNGSeeded = true;
     }
 

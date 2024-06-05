@@ -3490,6 +3490,7 @@ void NewMove(AvHAIPlayer* pBot)
 		FallMove(pBot, MoveFrom, MoveTo);
 		break;
 	case SAMPLE_POLYFLAGS_JUMP:
+	case SAMPLE_POLYFLAGS_DUCKJUMP:
 		JumpMove(pBot, MoveFrom, MoveTo);
 		break;
 	case SAMPLE_POLYFLAGS_BLOCKED:

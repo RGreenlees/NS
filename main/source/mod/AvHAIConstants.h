@@ -341,6 +341,7 @@ typedef struct _AVH_AI_GUARD_INFO
 typedef struct _AVH_AI_BUILDABLE_STRUCTURE
 {
 	AvHBaseBuildable* EntityRef = nullptr;
+	int EntIndex = -1;
 	edict_t* edict = nullptr; // Reference to structure edict
 	Vector Location = g_vecZero; // origin of the structure edict
 	float healthPercent = 0.0f; // Current health of the building
@@ -356,9 +357,11 @@ typedef struct _AVH_AI_BUILDABLE_STRUCTURE
 	Vector LastSuccessfulCommanderAngle = g_vecZero; // Tracks the last commander input angle ("click" location) used to successfully place or select building
 	StructurePurpose Purpose = STRUCTURE_PURPOSE_NONE;
 	bool bReachabilityMarkedDirty = false; // If true, reachability flags will be recalculated for this structure
+	bool bPlacedByHuman = true; // This structure was placed by a human: AI commander will not recycle these unless it absolutely makes sense to
 
 	bool IsValid() { return !FNullEnt(edict) && !edict->free && !(edict->v.flags & EF_NODRAW) && edict->v.deadflag == DEAD_NO; }
 	bool IsCompleted() { return (StructureStatusFlags & STRUCTURE_STATUS_COMPLETED); }
+	bool IsIdle() { return !(StructureStatusFlags & STRUCTURE_STATUS_RESEARCHING); }
 
 } AvHAIBuildableStructure;
 
@@ -470,6 +473,24 @@ enum NavDoorType
 	DOORTYPE_PLAT,    // Door activated by using it directly
 	DOORTYPE_TRAIN	// Door activated by touching a trigger_once or trigger_multiple
 };
+
+// The type of base a marine outpost could be. Used to help the AI establish and expand outposts across the map
+enum MarineBaseType
+{
+	MARINE_BASE_MAINBASE,   // The main marine base, where the CC, infantry portals and stuff like arms labs go
+	MARINE_BASE_OUTPOST,    // A permanent outpost designed to control an area of the map, but not the main marine base
+	MARINE_BASE_SIEGE		// A siege base designed to take down an enemy base
+};
+
+typedef struct _AI_MARINE_BASE
+{
+	AvHTeamNumber BaseTeam = TEAM_IND;
+	MarineBaseType BaseType = MARINE_BASE_OUTPOST; // The purpose of the base. Determines what structures the commander will place
+	Vector BaseLocation = ZERO_VECTOR; // Where the base should be located. The base will be grown around this location
+	vector<int> PlacedStructures; // Which structures are part of this base.
+	bool bRecycleBase = false;  // Should the commander pack up and remove this base?
+	bool bBaseInitialised = false; // Has the commander started building this base? Will be true once a structure has been placed
+} AvHAIMarineBase;
 
 // Bot path node. A path will be several of these strung together to lead the bot to its destination
 typedef struct _BOT_PATH_NODE
@@ -817,6 +838,8 @@ typedef struct AVH_AI_PLAYER
 	int DebugValue = 0; // Used for debugging the bot
 
 	Vector RelocationSpot = ZERO_VECTOR; // If the bot is commanding and wants to relocate, then this is where they plan to go
+
+	vector<AvHAIMarineBase> Bases;
 
 } AvHAIPlayer;
 
