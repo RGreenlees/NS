@@ -31,6 +31,8 @@ AvHAIBuildableStructure		AITAC_GetDeployableFromEdict(const edict_t* Structure);
 AvHAIBuildableStructure*	AITAC_GetDeployableRefFromEdict(const edict_t* Structure);
 AvHAIBuildableStructure		AITAC_GetNearestDeployableDirectlyReachable(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter);
 AvHAIBuildableStructure*	AITAC_GetNearestDeployableDirectlyReachableByRef(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter);
+AvHAIBuildableStructure		AITAC_GetDeployableStructureByEntIndex(AvHTeamNumber Team, int EntIndex);
+AvHAIBuildableStructure*	AITAC_GetDeployableStructureRefByEntIndex(AvHTeamNumber Team, int EntIndex);
 int							AITAC_GetNumDeployablesNearLocation(const Vector& Location, const DeployableSearchFilter* Filter);
 void						AITAC_PopulateHiveData();
 void						AITAC_RefreshHiveData();
@@ -219,5 +221,15 @@ bool AITAC_IsRelocationCompleted(AvHTeamNumber RelocationTeam, Vector Relocation
 bool AITAC_IsRelocationEnabled();
 
 void AITAC_DetermineRelocationEnabled();
+
+bool AITAC_IsMarineBaseValid(AvHAIMarineBase* Base);
+void AITAC_ManageActiveMarineBases();
+void AITAC_AddNewBase(AvHTeamNumber Team, Vector NewBaseLocation, MarineBaseType NewBaseType);
+bool AITAC_CanBuildOutBase(const AvHAIMarineBase* Base);
+bool AITAC_CanBuildOutMainBase(const AvHAIMarineBase* Base);
+bool AITAC_CanBuildOutOutpost(const AvHAIMarineBase* Base);
+bool AITAC_CanBuildOutSiege(const AvHAIMarineBase* Base);
+
+vector<AvHAIMarineBase>& AITAC_GetTeamBases(AvHTeamNumber Team);
 
 #endif

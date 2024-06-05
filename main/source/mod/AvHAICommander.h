@@ -14,7 +14,7 @@
 
 static const float MIN_COMMANDER_REMIND_TIME = 20.0f; // How frequently the commander can nag a player to do something, if they don't think they're doing it
 
-bool AICOMM_DeployStructure(AvHAIPlayer* pBot, const AvHAIDeployableStructureType StructureToDeploy, const Vector Location, StructurePurpose Purpose = STRUCTURE_PURPOSE_GENERAL);
+AvHAIBuildableStructure* AICOMM_DeployStructure(AvHAIPlayer* pBot, const AvHAIDeployableStructureType StructureToDeploy, const Vector Location, StructurePurpose Purpose = STRUCTURE_PURPOSE_GENERAL, bool bPlacedByHuman = false);
 bool AICOMM_DeployItem(AvHAIPlayer* pBot, const AvHAIDeployableItemType ItemToDeploy, const Vector Location);
 bool AICOMM_UpgradeStructure(AvHAIPlayer* pBot, AvHAIBuildableStructure* StructureToUpgrade);
 bool AICOMM_ResearchTech(AvHAIPlayer* pBot, AvHAIBuildableStructure* StructureToResearch, AvHMessageID Research);
@@ -75,5 +75,12 @@ void AICOMM_ReceiveChatRequest(AvHAIPlayer* Commander, edict_t* Requestor, const
 bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot);
 
 bool AICOMM_GetRelocationMessage(Vector RelocationPoint, char* MessageBuffer);
+
+void AICOMM_AddNewBase(AvHAIPlayer* pBot, Vector NewBaseLocation, MarineBaseType NewBaseType);
+
+bool AICOMM_BuildOutBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
+bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
+bool AICOMM_BuildOutOutpost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
+bool AICOMM_BuildOutSiege(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
 
 #endif // AVH_AI_COMMANDER_H

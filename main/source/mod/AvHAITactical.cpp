@@ -74,6 +74,9 @@ float LastSeenLerkTeamBTime = 0.0f;
 
 vector<AvHAISquad> ActiveSquads;
 
+vector<AvHAIMarineBase> ActiveTeamABases; // If Team A are marines, any active bases they have established around the map
+vector<AvHAIMarineBase> ActiveTeamBBases; // If Team B are marines, any active bases they have established around the map
+
 std::vector<AvHAIBuildableStructure> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter)
 {
 	std::vector<AvHAIBuildableStructure> Result;
@@ -874,6 +877,16 @@ AvHAIBuildableStructure AITAC_GetNearestDeployableDirectlyReachable(AvHAIPlayer*
 	}
 
 	return Result;
+}
+
+AvHAIBuildableStructure AITAC_GetDeployableStructureByEntIndex(AvHTeamNumber Team, int EntIndex)
+{
+	return (Team == AIMGR_GetTeamANumber()) ? TeamAStructureMap[EntIndex] : TeamBStructureMap[EntIndex];
+}
+
+AvHAIBuildableStructure* AITAC_GetDeployableStructureRefByEntIndex(AvHTeamNumber Team, int EntIndex)
+{
+	return (Team == AIMGR_GetTeamANumber()) ? &TeamAStructureMap[EntIndex] : &TeamBStructureMap[EntIndex];
 }
 
 AvHAIBuildableStructure* AITAC_GetNearestDeployableDirectlyReachableByRef(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter)
@@ -2452,6 +2465,7 @@ AvHAIBuildableStructure* AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 		if (StructureRef->LastSeen == 0)
 		{
 			StructureRef->Location = BuildingEdict->v.origin;
+			StructureRef->EntIndex = EntIndex;
 			StructureRef->edict = BuildingEdict;
 			StructureRef->healthPercent = 1.0f;
 			StructureRef->EntityRef = nullptr;
@@ -2480,6 +2494,7 @@ AvHAIBuildableStructure* AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 	{
 		StructureRef->EntityRef = BaseBuildable;
 		StructureRef->edict = BuildingEdict;
+		StructureRef->EntIndex = EntIndex;
 
 		StructureRef->OffMeshConnections.clear();
 		StructureRef->Obstacles.clear();
@@ -5945,4 +5960,269 @@ void AITAC_DetermineRelocationEnabled()
 
 		bEnableRelocation = (RandomRoll <= CONFIG_GetRelocationChance());
 	}
+}
+
+bool AITAC_IsMarineBaseValid(AvHAIMarineBase* Base)
+{
+	if (Base->PlacedStructures.size() > 0) { return true; }
+
+	if ((Base->bRecycleBase || Base->bBaseInitialised) && Base->PlacedStructures.size() == 0) { return false; }
+
+	return true;
+}
+
+void AITAC_ManageActiveMarineBases()
+{
+	for (auto it = ActiveTeamABases.begin(); it != ActiveTeamABases.end();)
+	{
+		for (auto structIt = it->PlacedStructures.begin(); structIt != it->PlacedStructures.end();)
+		{
+			AvHAIBuildableStructure StructureRef = TeamAStructureMap[*structIt];
+			
+			if (!StructureRef.IsValid() || (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_RECYCLING))
+			{
+				structIt = it->PlacedStructures.erase(structIt);
+			}
+			else
+			{
+				structIt++;
+			}
+		}
+
+		if (!AITAC_IsMarineBaseValid(&(*it)))
+		{
+			it = ActiveTeamABases.erase(it);
+		}
+		else
+		{
+			it++;
+		}
+	}
+
+	for (auto it = ActiveTeamBBases.begin(); it != ActiveTeamBBases.end();)
+	{
+		for (auto structIt = it->PlacedStructures.begin(); structIt != it->PlacedStructures.end();)
+		{
+			AvHAIBuildableStructure StructureRef = TeamBStructureMap[*structIt];
+
+			if (!StructureRef.IsValid() || (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_RECYCLING))
+			{
+				structIt = it->PlacedStructures.erase(structIt);
+			}
+			else
+			{
+				structIt++;
+			}
+		}
+
+		if (!AITAC_IsMarineBaseValid(&(*it)))
+		{
+			it = ActiveTeamBBases.erase(it);
+		}
+		else
+		{
+			it++;
+		}
+	}
+}
+
+void AITAC_AddNewBase(AvHTeamNumber Team, Vector NewBaseLocation, MarineBaseType NewBaseType)
+{
+	vector<AvHAIMarineBase>& BaseList = (Team == AIMGR_GetTeamANumber()) ? ActiveTeamABases : ActiveTeamBBases;
+
+	AvHAIMarineBase NewBase;
+	NewBase.BaseLocation = NewBaseLocation;
+	NewBase.BaseType = NewBaseType;
+	NewBase.BaseTeam = Team;
+
+	BaseList.push_back(NewBase);
+}
+
+bool AITAC_CanBuildOutBase(const AvHAIMarineBase* Base)
+{
+	if (!Base) { return false; }
+
+	switch (Base->BaseType)
+	{
+		case MARINE_BASE_MAINBASE:
+			return AITAC_CanBuildOutMainBase(Base);
+		case MARINE_BASE_OUTPOST:
+			return AITAC_CanBuildOutOutpost(Base);
+		case MARINE_BASE_SIEGE:
+			return AITAC_CanBuildOutSiege(Base);
+	}
+
+	return false;
+}
+
+bool AITAC_CanBuildOutMainBase(const AvHAIMarineBase* Base)
+{
+	bool bHasCommChair = false;
+	int NumInfPortals = 0;
+	bool bHasArmoury = false;
+	bool bHasAdvArmoury = false;
+	bool bArmouryCompleted = false;
+	bool bHasArmsLab = false;
+	bool bArmsLabCompleted = false;
+	bool bHasProtoLab = false;
+	bool bHasObs = false;
+	bool bHasPhase = false;
+	bool bHasTF = false;
+	int NumTurrets = 0;
+
+	std::unordered_map<int, AvHAIBuildableStructure>& BuildingMap = (Base->BaseTeam == AIMGR_GetTeamANumber()) ? TeamAStructureMap : TeamBStructureMap;
+
+	for (auto it = Base->PlacedStructures.begin(); it != Base->PlacedStructures.end(); it++)
+	{
+		AvHAIBuildableStructure StructureRef = BuildingMap[*it];
+
+		switch (StructureRef.StructureType)
+		{
+			case STRUCTURE_MARINE_COMMCHAIR:
+				bHasCommChair = true;
+				break;
+			case STRUCTURE_MARINE_INFANTRYPORTAL:
+				NumInfPortals++;
+				break;
+			case STRUCTURE_MARINE_ARMOURY:
+				bArmouryCompleted = (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED);
+				bHasArmoury = true;
+				break;
+			case STRUCTURE_MARINE_ADVARMOURY:
+				bArmouryCompleted = (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED);
+				bHasArmoury = true;
+				bHasAdvArmoury = true;
+				break;
+			case STRUCTURE_MARINE_ARMSLAB:
+				bHasArmsLab = true;
+				bArmsLabCompleted = (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED);
+				break;
+			case STRUCTURE_MARINE_PROTOTYPELAB:
+				bHasProtoLab = true;
+				break;
+			case STRUCTURE_MARINE_OBSERVATORY:
+				bHasObs = true;
+				break;
+			case STRUCTURE_MARINE_PHASEGATE:
+				bHasPhase = true;
+				break;
+			case STRUCTURE_MARINE_TURRETFACTORY:
+			case STRUCTURE_MARINE_ADVTURRETFACTORY:
+				bHasTF = true;
+				break;
+			case STRUCTURE_MARINE_TURRET:
+				NumTurrets++;
+				break;
+			default:
+				break;
+		}
+	}
+
+	return (!bHasCommChair
+		|| NumInfPortals < 2
+		|| !bHasArmoury
+		|| !bHasAdvArmoury
+		|| (!bHasArmsLab && bArmouryCompleted)
+		|| (!bHasProtoLab && bHasAdvArmoury && bArmsLabCompleted)
+		|| (!bHasObs && bArmouryCompleted)
+		|| (!bHasPhase && AITAC_ResearchIsComplete(Base->BaseTeam, TECH_PHASE_GATE))
+		|| !bHasTF
+		|| NumTurrets < 5);
+
+}
+
+bool AITAC_CanBuildOutOutpost(const AvHAIMarineBase* Base)
+{
+	bool bHasArmoury = false;
+	bool bHasObs = false;
+	bool bHasPhase = false;
+	bool bHasTF = false;
+	int NumTurrets = 0;
+
+	std::unordered_map<int, AvHAIBuildableStructure>& BuildingMap = (Base->BaseTeam == AIMGR_GetTeamANumber()) ? TeamAStructureMap : TeamBStructureMap;
+
+	for (auto it = Base->PlacedStructures.begin(); it != Base->PlacedStructures.end(); it++)
+	{
+		AvHAIBuildableStructure StructureRef = BuildingMap[*it];
+
+		switch (StructureRef.StructureType)
+		{
+		case STRUCTURE_MARINE_ARMOURY:
+		case STRUCTURE_MARINE_ADVARMOURY:
+			bHasArmoury = true;
+			break;
+		case STRUCTURE_MARINE_OBSERVATORY:
+			bHasObs = true;
+			break;
+		case STRUCTURE_MARINE_PHASEGATE:
+			bHasPhase = true;
+			break;
+		case STRUCTURE_MARINE_TURRETFACTORY:
+		case STRUCTURE_MARINE_ADVTURRETFACTORY:
+			bHasTF = true;
+			break;
+		case STRUCTURE_MARINE_TURRET:
+			NumTurrets++;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return (!bHasArmoury
+		|| !bHasObs
+		|| (!bHasPhase && AITAC_ResearchIsComplete(Base->BaseTeam, TECH_PHASE_GATE))
+		|| !bHasTF
+		|| NumTurrets < 5);
+
+}
+
+bool AITAC_CanBuildOutSiege(const AvHAIMarineBase* Base)
+{
+	bool bHasArmoury = false;
+	bool bHasObs = false;
+	bool bHasPhase = false;
+	bool bHasTF = false;
+	int NumTurrets = 0;
+
+	std::unordered_map<int, AvHAIBuildableStructure>& BuildingMap = (Base->BaseTeam == AIMGR_GetTeamANumber()) ? TeamAStructureMap : TeamBStructureMap;
+
+	for (auto it = Base->PlacedStructures.begin(); it != Base->PlacedStructures.end(); it++)
+	{
+		AvHAIBuildableStructure StructureRef = BuildingMap[*it];
+
+		switch (StructureRef.StructureType)
+		{
+		case STRUCTURE_MARINE_ARMOURY:
+		case STRUCTURE_MARINE_ADVARMOURY:
+			bHasArmoury = true;
+			break;
+		case STRUCTURE_MARINE_OBSERVATORY:
+			bHasObs = true;
+			break;
+		case STRUCTURE_MARINE_PHASEGATE:
+			bHasPhase = true;
+			break;
+		case STRUCTURE_MARINE_ADVTURRETFACTORY:
+			bHasTF = true;
+			break;
+		case STRUCTURE_MARINE_SIEGETURRET:
+			NumTurrets++;
+			break;
+		default:
+			break;
+		}
+	}
+
+	return (!bHasArmoury
+		|| !bHasObs
+		|| (!bHasPhase && AITAC_ResearchIsComplete(Base->BaseTeam, TECH_PHASE_GATE))
+		|| !bHasTF
+		|| NumTurrets < 3);
+
+}
+
+vector<AvHAIMarineBase>& AITAC_GetTeamBases(AvHTeamNumber Team)
+{
+	return (Team == AIMGR_GetTeamANumber()) ? ActiveTeamABases : ActiveTeamBBases;
 }

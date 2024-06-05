@@ -1887,45 +1887,21 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	if (pBot->Player->GetResources() < 80.0f)
+	if (IsPlayerAlien(pBot->Edict)) { return; }
+
+	if (!IsPlayerCommander(pBot->Edict))
 	{
-		pBot->Player->GiveResources(10.0f);
+		BotProgressTakeCommandTask(pBot);
+		return;
 	}
 
-	pBot->CurrentTask = &pBot->PrimaryBotTask;
-
-	AITASK_BotUpdateAndClearTasks(pBot);
-
-	if (!PlayerHasWeapon(pBot->Player, WEAPON_MARINE_MINES))
+	for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
 	{
-		if (pBot->CurrentTask->TaskType != TASK_GET_WEAPON)
+		if (AITAC_CanBuildOutBase(&(*it)))
 		{
-			AvHAIDroppedItem Mines = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_MINES, pBot->Player->GetTeam(), pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, false);
-
-			if (Mines.IsValid())
-			{
-				AITASK_SetPickupTask(pBot, pBot->CurrentTask, Mines.edict, true);
-			}
+			if (AICOMM_BuildOutBase(pBot, &(*it))) { return; }
 		}
 	}
-	else
-	{
-		if (pBot->CurrentTask->TaskType != TASK_PLACE_MINE)
-		{
-
-			DeployableSearchFilter TFFilter;
-			TFFilter.DeployableTypes = STRUCTURE_MARINE_TURRETFACTORY;
-
-			AvHAIBuildableStructure NearestTF = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &TFFilter);
-
-			if (NearestTF.IsValid())
-			{
-				AITASK_SetMineStructureTask(pBot, pBot->CurrentTask, NearestTF.edict, true);
-			}
-		}
-	}
-
-	BotProgressTask(pBot, pBot->CurrentTask);
 }
 
 void DroneThink(AvHAIPlayer* pBot)
