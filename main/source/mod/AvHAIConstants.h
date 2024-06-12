@@ -274,7 +274,7 @@ typedef struct _HIVE_DEFINITION_T
 	AvHTeamNumber OwningTeam = TEAM_IND;			// Which team owns this hive currently (TEAM_IND if empty)
 	unsigned int TeamAReachabilityFlags = AI_REACHABILITY_NONE;		// Who on team A can reach this node?
 	unsigned int TeamBReachabilityFlags = AI_REACHABILITY_NONE;		// Who on team B can reach this node?
-	char HiveName[64];
+	char HiveName[64] = {'\0'};
 } AvHAIHiveDefinition;
 
 // A nav profile combines a nav mesh reference (indexed into NavMeshes) and filters to determine how a bot should find paths
@@ -479,7 +479,8 @@ enum MarineBaseType
 {
 	MARINE_BASE_MAINBASE,   // The main marine base, where the CC, infantry portals and stuff like arms labs go
 	MARINE_BASE_OUTPOST,    // A permanent outpost designed to control an area of the map, but not the main marine base
-	MARINE_BASE_SIEGE		// A siege base designed to take down an enemy base
+	MARINE_BASE_SIEGE,		// A siege base designed to take down an enemy base
+	MARINE_BASE_GUARDPOST	// A cut-down version of an outpost with just sentry turrets and an observatory
 };
 
 typedef struct _AI_MARINE_BASE
@@ -488,8 +489,13 @@ typedef struct _AI_MARINE_BASE
 	MarineBaseType BaseType = MARINE_BASE_OUTPOST; // The purpose of the base. Determines what structures the commander will place
 	Vector BaseLocation = ZERO_VECTOR; // Where the base should be located. The base will be grown around this location
 	vector<int> PlacedStructures; // Which structures are part of this base.
+	int NumBuilders = 0; // How many potential builders are there, able to construct stuff?
+	int NumEnemies = 0; // How many enemies are in and around the base?
 	bool bRecycleBase = false;  // Should the commander pack up and remove this base?
+	bool bIsActive = true;  // Should the commander actively build and maintain this base?
 	bool bBaseInitialised = false; // Has the commander started building this base? Will be true once a structure has been placed
+	bool bCanBeBuiltOut = false; // Can this base be built out currently?
+	bool bIsBaseEstablished = false; // Have enough key structures been placed to consider this "established", even if it's not finished yet?
 } AvHAIMarineBase;
 
 // Bot path node. A path will be several of these strung together to lead the bot to its destination
@@ -658,61 +664,16 @@ typedef struct _NAV_STATUS
 	AvHAIPlayerMoveTask MovementTask;
 } nav_status;
 
-// Type of goal the commander wants to achieve
-typedef enum _COMMANDERACTIONTYPE
-{
-	ACTION_NONE = 0,
-	ACTION_UPGRADE,
-	ACTION_RESEARCH,
-	ACTION_RECYCLE,
-	ACTION_GIVEORDER,
-	ACTION_DEPLOY // Deploy a structure or item into the map
-
-} CommanderActionType;
-
-// Some commander actions are multi-step (e.g. click to select building, release to complete selection, input recycle command etc). Tracks where the commander is in the process
-typedef enum _COMMANDERACTIONSTEP
-{
-	ACTION_STEP_NONE = 0,
-	ACTION_STEP_BEGIN_SELECT, // Click mouse button down to start select
-	ACTION_STEP_END_SELECT, // Release mouse button to complete select
-
-} CommanderActionStep;
-
-
-// Used by the AI commander instead of bot_task. Has data specifically to handle commander-specific stuff
-typedef struct _COMMANDER_ACTION
-{
-	bool bIsActive = false;
-	CommanderActionType ActionType = ACTION_NONE; // What action to perform (e.g. build, recycle, drop item etc)
-	CommanderActionStep ActionStep = ACTION_STEP_NONE; // Used for multi-stage processes such as selecting a building, issuing recycle command etc.
-	AvHAIDeployableStructureType StructureToBuild = STRUCTURE_NONE; // What structure to build if build action
-	AvHAIDeployableItemType ItemToPlace = DEPLOYABLE_ITEM_NONE;
-	int NumInstances = 0;
-	int NumDesiredInstances = 0;
-	StructurePurpose ActionPurpose = STRUCTURE_PURPOSE_NONE;
-	Vector BuildLocation = g_vecZero; // Where to build the structure
-	Vector DesiredCommanderLocation = g_vecZero; // To perform this action, where does the commander's view need to be? For building, usually directly above location, but could be off to side if obstructed by geometry
-	Vector LastAttemptedCommanderLocation = g_vecZero; // The position of the commander's view at the last action attempt
-	Vector LastAttemptedCommanderAngle = g_vecZero; // The click angle of the last action attempt
-	int AssignedPlayer = 0; // Which player index is assigned to perform the action (e.g. build structure)? Will send orders to that player (move here, build this structure etc.)
-	edict_t* StructureOrItem = nullptr; // Reference the structure edict. If a structure has been successfully placed but not yet fully built, it will be referenced here
-	edict_t* ActionTarget = nullptr; // Mostly used for dropping health packs and ammo for players where the drop location might be moving around
-	bool bHasAttemptedAction = false; // Has the commander tried placing a structure or item at the build location? If so, and it didn't appear, will try to adjust view around until it works
-	float StructureBuildAttemptTime = 0.0f; // When the commander tried placing a structure. Commander will wait a short while to confirm if the building appeared or if it should try again
-	int NumActionAttempts = 0; // Commander will give up after a certain number of attempts to place structure/item
-	AvHMessageID ResearchId = MESSAGE_NULL; // What research to perform if research action
-	bool bIsAwaitingBuildLink = false; // The AI has tried placing a structure or item and is waiting to confirm it worked or not
-	bool bIsActionUrgent = false;
-
-} commander_action;
-
 typedef enum
 {
 	ORDERPURPOSE_NONE,
 	ORDERPURPOSE_SECURE_HIVE,
 	ORDERPURPOSE_SIEGE_HIVE,
-	ORDERPURPOSE_SECURE_RESNODE
+	ORDERPURPOSE_SECURE_RESNODE,
+	ORDERPURPOSE_BUILD_MAINBASE,
+	ORDERPURPOSE_BUILD_SIEGE,
+	ORDERPURPOSE_BUILD_OUTPOST,
+	ORDERPURPOSE_BUILD_GUARDPOST
 } AvHAIOrderPurpose;
 
 typedef struct _AI_COMMANDER_ORDER

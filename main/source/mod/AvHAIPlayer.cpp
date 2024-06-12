@@ -1897,7 +1897,7 @@ void CustomThink(AvHAIPlayer* pBot)
 
 	for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
 	{
-		if (AITAC_CanBuildOutBase(&(*it)))
+		if (it->bCanBeBuiltOut)
 		{
 			if (AICOMM_BuildOutBase(pBot, &(*it))) { return; }
 		}
@@ -5718,6 +5718,8 @@ void AIPlayerDMThink(AvHAIPlayer* pBot)
 void AIPlayerThink(AvHAIPlayer* pBot)
 {
 
+	StartNewBotFrame(pBot);
+
 #ifdef BOTDEBUG
 	for (int i = 0; i < gpGlobals->maxClients; i++)
 	{
@@ -5752,9 +5754,7 @@ void AIPlayerThink(AvHAIPlayer* pBot)
 		ClearBotInputs(pBot);
 		pBot->bIsInactive = true;
 		return;
-	}
-
-	StartNewBotFrame(pBot);
+	}	
 
 	if (avh_botdebugmode.value == 1)
 	{
@@ -7477,19 +7477,19 @@ void AIPlayerSetWantsAndNeedsAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		{
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_DEFENCE) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_DEFENCE))
 			{
-				pBot->Edict->v.impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_DEFENCE);
+				pBot->Impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_DEFENCE);
 				return;
 			}
 
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_MOVEMENT) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_MOVEMENT))
 			{
-				pBot->Edict->v.impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_MOVEMENT);
+				pBot->Impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_MOVEMENT);
 				return;
 			}
 
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_SENSORY) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_SENSORY))
 			{
-				pBot->Edict->v.impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_SENSORY);
+				pBot->Impulse = AlienGetDesiredUpgrade(pBot, HIVE_TECH_SENSORY);
 				return;
 			}
 		}
