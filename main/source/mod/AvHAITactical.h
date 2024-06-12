@@ -229,6 +229,7 @@ bool AITAC_CanBuildOutBase(const AvHAIMarineBase* Base);
 bool AITAC_CanBuildOutMainBase(const AvHAIMarineBase* Base);
 bool AITAC_CanBuildOutOutpost(const AvHAIMarineBase* Base);
 bool AITAC_CanBuildOutSiege(const AvHAIMarineBase* Base);
+bool AITAC_CanBuildOutGuardPost(const AvHAIMarineBase* Base);
 
 vector<AvHAIMarineBase>& AITAC_GetTeamBases(AvHTeamNumber Team);
 

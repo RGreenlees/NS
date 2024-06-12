@@ -27,14 +27,16 @@ bool AICOMM_IssueSiegeHiveOrder(AvHAIPlayer* pBot, edict_t* Recipient, const AvH
 bool AICOMM_IssueSecureResNodeOrder(AvHAIPlayer* pBot, edict_t* Recipient, const AvHAIResourceNode* ResNode);
 
 void AICOMM_AssignNewPlayerOrder(AvHAIPlayer* pBot, edict_t* Assignee, edict_t* TargetEntity, AvHAIOrderPurpose OrderPurpose);
+void AICOMM_AssignNewPlayerOrder(AvHAIPlayer* pBot, edict_t* Assignee, Vector OrderLocation, AvHAIOrderPurpose OrderPurpose);
 int AICOMM_GetNumPlayersAssignedToOrder(AvHAIPlayer* pBot, edict_t* TargetEntity, AvHAIOrderPurpose OrderPurpose);
+int AICOMM_GetNumPlayersAssignedToOrderType(AvHAIPlayer* pBot, AvHAIOrderPurpose OrderPurpose);
+int AICOMM_GetNumPlayersAssignedToOrderLocation(AvHAIPlayer* pBot, Vector OrderLocation, AvHAIOrderPurpose OrderPurpose);
 bool AICOMM_IsOrderStillValid(AvHAIPlayer* pBot, ai_commander_order* Order);
 void AICOMM_UpdatePlayerOrders(AvHAIPlayer* pBot);
 edict_t* AICOMM_GetPlayerWithNoOrderNearestLocation(AvHAIPlayer* pBot, Vector SearchLocation);
+edict_t* AICOMM_GetPlayerWithoutSpecificOrderNearestLocation(AvHAIPlayer* pBot, Vector SearchLocation, AvHAIOrderPurpose OrderPurpose);
 bool AICOMM_DoesPlayerOrderNeedReminder(AvHAIPlayer* pBot, ai_commander_order* Order);
 void AICOMM_IssueOrderForAssignedJob(AvHAIPlayer* pBot, ai_commander_order* Order);
-
-void AICOMM_ClearAction(commander_action* Action);
 
 bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot);
@@ -43,10 +45,7 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot);
 
-void AICOMM_SetDropHealthAction(AvHAIPlayer* pBot, commander_action* Action, edict_t* Recipient);
-void AICOMM_SetDropAmmoAction(AvHAIPlayer* pBot, commander_action* Action, edict_t* Recipient);
-void AICOMM_SetDeployStructureAction(AvHAIPlayer* pBot, commander_action* Action, AvHAIDeployableStructureType StructureToBuild, const Vector Location, bool bIsUrgent);
-void AICOMM_SetDeployItemAction(AvHAIPlayer* pBot, commander_action* Action, AvHAIDeployableItemType ItemToBuild, const Vector Location, bool bIsUrgent);
+Vector AICOMM_GetNextScanLocation(AvHAIPlayer* pBot);
 
 void AICOMM_CommanderThink(AvHAIPlayer* pBot);
 
@@ -76,11 +75,26 @@ bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot);
 
 bool AICOMM_GetRelocationMessage(Vector RelocationPoint, char* MessageBuffer);
 
-void AICOMM_AddNewBase(AvHAIPlayer* pBot, Vector NewBaseLocation, MarineBaseType NewBaseType);
+AvHAIMarineBase* AICOMM_AddNewBase(AvHAIPlayer* pBot, Vector NewBaseLocation, MarineBaseType NewBaseType);
+bool AICOMM_AddStructureToBase(AvHAIPlayer* pBot, AvHAIDeployableStructureType StructureToDeploy, Vector BuildLocation, AvHAIMarineBase* BaseToAdd);
+
+void AICOMM_ManageActiveBases(AvHAIPlayer* pBot);
+bool AICOMM_IsMarineBaseValid(AvHAIMarineBase* Base);
+void AICOMM_DeployBases(AvHAIPlayer* pBot);
+vector<AvHAIBuildableStructure> AICOMM_GetBaseStructures(AvHAIMarineBase* Base);
+
+void AICOMM_UpdateBaseStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base);
+void AICOMM_UpdateSiegeBaseStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base);
+void AICOMM_UpdateOutpostStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base);
+void AICOMM_UpdateGuardpostStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base);
+void AICOMM_UpdateMainBaseStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base);
 
 bool AICOMM_BuildOutBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
 bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
 bool AICOMM_BuildOutOutpost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
 bool AICOMM_BuildOutSiege(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
+bool AICOMM_BuildOutGuardPost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut);
+
+AvHAIMarineBase* AICOMM_GetNearestBaseToLocation(AvHAIPlayer* pBot, Vector SearchLocation);
 
 #endif // AVH_AI_COMMANDER_H

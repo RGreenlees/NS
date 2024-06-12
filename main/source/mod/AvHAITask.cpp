@@ -1351,7 +1351,11 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 {
 	if (FNullEnt(Task->TaskTarget)) { return; }
 
-	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return; }
+	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING)
+	{
+		pBot->Impulse = 0;
+		return;
+	}
 
 	// We had a go, whether it succeeded or not we should try a new location
 	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_FAILED || Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_SUCCESS)
@@ -1361,7 +1365,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		Task->ActiveBuildInfo.BuildStatus = BUILD_ATTEMPT_NONE;
 	}
 
-	if (gpGlobals->time - Task->TaskStartedTime < 1.0f) { return; }
+	if (gpGlobals->time - Task->TaskStartedTime < 0.5f) { return; }
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
@@ -2160,6 +2164,7 @@ void AlienProgressBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We tried and failed to place the structure
 	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING)
 	{
+		pBot->Impulse = 0;
 		return;
 	}
 
@@ -2172,6 +2177,8 @@ void AlienProgressBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	if (Task->ActiveBuildInfo.LinkedStructure)
 	{
 		edict_t* LinkedEdict = Task->ActiveBuildInfo.LinkedStructure->edict;
+
+		Task->TaskTarget = LinkedEdict;
 
 		if (UTIL_StructureIsFullyBuilt(LinkedEdict)) { return; }
 
@@ -2240,7 +2247,11 @@ void BotAlienPlaceChamber(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, AvHAIDeploya
 {
 	if (vIsZero(Task->TaskLocation) || DesiredStructure == STRUCTURE_NONE) { return; }
 
-	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return; }
+	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) 
+	{
+		pBot->Impulse = 0;
+		return;
+	}
 
 	float DistFromBuildLocation = vDist2DSq(pBot->Edict->v.origin, Task->TaskLocation);
 
