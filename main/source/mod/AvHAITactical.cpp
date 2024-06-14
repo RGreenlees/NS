@@ -1090,6 +1090,20 @@ Vector AITAC_GetFloorLocationForHive(const AvHAIHiveDefinition* Hive)
 
 }
 
+string AITAC_GetLocationName(Vector Location)
+{
+	string Result;
+
+	string theLocationName;
+	if (AvHSHUGetNameOfLocation(GetGameRules()->GetInfoLocations(), Location, theLocationName))
+	{
+		UTIL_LocalizeText(theLocationName.c_str(), theLocationName);
+		Result = theLocationName;
+	}
+
+	return Result;
+}
+
 void AITAC_PopulateHiveData()
 {
 	Hives.clear();
@@ -1114,17 +1128,16 @@ void AITAC_PopulateHiveData()
 
 		NewHive.FloorLocation = UTIL_GetFloorUnderEntity(NewHive.HiveEdict); // Some hives are suspended in the air, this is the floor location directly beneath it
 
-		string HiveName;
+		string HiveName = AITAC_GetLocationName(NewHive.Location);
 
-		string theLocationName;
-		if (AvHSHUGetNameOfLocation(GetGameRules()->GetInfoLocations(), NewHive.Location, theLocationName))
+		if (HiveName.empty())
 		{
-			UTIL_LocalizeText(theLocationName.c_str(), theLocationName);
-			HiveName = theLocationName;
+			sprintf(NewHive.HiveName, "Hive");
 		}
-
-		sprintf(NewHive.HiveName, HiveName.c_str(), "%s");
-
+		else
+		{
+			sprintf(NewHive.HiveName, HiveName.c_str(), "%s");
+		}
 
 		Hives.push_back(NewHive);
 
@@ -1226,6 +1239,15 @@ Vector AITAC_GetTeamRelocationPoint(AvHTeamNumber Team)
 	}
 
 	return (Team == GetGameRules()->GetTeamANumber()) ? TeamARelocationPoint : TeamBRelocationPoint;
+}
+
+Vector AITAC_GetTeamOriginalStartLocation(AvHTeamNumber Team)
+{
+	AvHTeam* TeamRef = AIMGR_GetTeamRef(Team);
+
+	if (!TeamRef) { return ZERO_VECTOR; }
+
+	return TeamRef->GetStartingLocation();
 }
 
 Vector AITAC_GetTeamStartingLocation(AvHTeamNumber Team)

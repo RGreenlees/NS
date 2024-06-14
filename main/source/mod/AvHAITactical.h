@@ -64,8 +64,12 @@ const AvHAIHiveDefinition*	AITAC_GetNonEmptyHiveNearestLocation(const Vector Sea
 Vector						AITAC_GetCommChairLocation(AvHTeamNumber Team);
 edict_t*					AITAC_GetCommChair(AvHTeamNumber Team);
 
+Vector						AITAC_GetTeamOriginalStartLocation(AvHTeamNumber Team);
 Vector						AITAC_GetTeamStartingLocation(AvHTeamNumber Team);
 Vector						AITAC_GetTeamRelocationPoint(AvHTeamNumber Team);
+
+							// Returns the name of the supplied location on the map. This will be the same as what appears in the bottom left of the player's screen
+string						AITAC_GetLocationName(Vector Location);
 
 AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags);
 

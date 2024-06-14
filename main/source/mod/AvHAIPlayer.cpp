@@ -3620,9 +3620,9 @@ void AIPlayerSetMarineSweeperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Tas
 {
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
-	Vector CommChairLocation = AITAC_GetCommChairLocation(BotTeam);
+	Vector CommChairLocation = AITAC_GetTeamStartingLocation(BotTeam);
 
-	// Always built IPs first, so we don't end up getting wiped right at the start
+	// Always build IPs first, so we don't end up getting wiped right at the start
 
 	DeployableSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;

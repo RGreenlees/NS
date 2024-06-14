@@ -1797,12 +1797,31 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				}
 
 				MoveTo(pBot, pBot->LastSafeLocation, MOVESTYLE_NORMAL);
-				return;
 			}
+
+			return;
 		}
 	}
 
 	BotAttackResult AttackResult = PerformAttackLOSCheck(pBot, Weapon, Task->TaskTarget);
+
+	if (AttackResult == ATTACK_BLOCKED)
+	{
+		TraceResult hit;
+
+		Vector StartTrace = pBot->CurrentEyePosition;
+
+		Vector AttackDir = UTIL_GetVectorNormal(UTIL_GetCentreOfEntity(Task->TaskTarget) - StartTrace);
+
+		Vector EndTrace = pBot->CurrentEyePosition + (AttackDir * UTIL_MetresToGoldSrcUnits(50.0f));
+
+		UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &hit);
+
+		if (!FNullEnt(hit.pHit) && hit.pHit->v.team == AIMGR_GetEnemyTeam(pBot->Player->GetTeam()) && vDist2DSq(hit.pHit->v.origin, Task->TaskTarget->v.origin) < sqrf(UTIL_MetresToGoldSrcUnits(2.0f)))
+		{
+			AttackResult = ATTACK_SUCCESS;
+		}
+	}
 
 	if (AttackResult == ATTACK_SUCCESS)
 	{
@@ -1838,16 +1857,13 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 			Vector RightDir = UTIL_GetCrossProduct(EnemyOrientation, UP_VECTOR);
 
-			pBot->desiredMovementDir = (pBot->BotNavInfo.bZig) ? UTIL_GetVectorNormal2D(RightDir) : UTIL_GetVectorNormal2D(-RightDir);
+			Vector EvasiveDir = GetZigZagDirection(pBot, Task->TaskTarget, nullptr);
 
-			// Let's get ziggy with it
-			if (gpGlobals->time > pBot->BotNavInfo.NextZigTime)
+			if (!vIsZero(EvasiveDir))
 			{
-				pBot->BotNavInfo.bZig = !pBot->BotNavInfo.bZig;
-				pBot->BotNavInfo.NextZigTime = gpGlobals->time + frandrange(0.5f, 1.0f);
+				pBot->desiredMovementDir = EvasiveDir;
+				BotMovementInputs(pBot);
 			}
-
-			BotMovementInputs(pBot);
 		}
 
 		return;

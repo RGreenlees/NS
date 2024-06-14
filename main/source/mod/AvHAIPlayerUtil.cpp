@@ -2,6 +2,7 @@
 #include "AvHAIPlayerUtil.h"
 #include "AvHAIPlayer.h"
 #include "AvHAIHelper.h"
+#include "AvHAIWeaponHelper.h"
 
 #include "AvHPlayerUpgrade.h"
 #include "AvHAIMath.h"
@@ -636,7 +637,10 @@ bool PlayerHasEquipment(edict_t* Player)
 bool PlayerHasSpecialWeapon(const AvHPlayer* Player)
 {
 	if (!IsPlayerMarine(Player)) { return false; }
-	return !PlayerHasWeapon(Player, WEAPON_MARINE_MG);
+
+	AvHAIWeapon PrimaryWeaponType = UTIL_GetPlayerPrimaryWeapon(Player);
+
+	return PrimaryWeaponType != WEAPON_INVALID && PrimaryWeaponType != WEAPON_MARINE_MG;
 }
 
 bool UTIL_PlayerHasLOSToEntity(const edict_t* Player, const edict_t* Target, const float MaxRange, const bool bUseHullSweep)
