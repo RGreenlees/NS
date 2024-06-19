@@ -58,7 +58,7 @@ Vector TeamBStartingLocation = ZERO_VECTOR;
 Vector TeamARelocationPoint = ZERO_VECTOR;
 Vector TeamBRelocationPoint = ZERO_VECTOR;
 
-bool bEnableRelocation = false; // For this round, should the AI commander try relocating (if appropriate)?
+bool bEnableRelocationAtStart = false; // For this round, should the AI commander try relocating at the start of the match?
 
 extern nav_mesh NavMeshes[MAX_NAV_MESHES]; // Array of nav meshes. Currently only 3 are used (building, onos, and regular)
 extern nav_profile BaseNavProfiles[MAX_NAV_PROFILES]; // Array of nav profiles
@@ -5967,20 +5967,20 @@ bool AITAC_IsRelocationCompleted(AvHTeamNumber RelocationTeam, Vector Relocation
 	return true;
 }
 
-bool AITAC_IsRelocationEnabled()
+bool AITAC_IsRelocationAtStartEnabled()
 {
-	return bEnableRelocation;
+	return bEnableRelocationAtStart;
 }
 
 void AITAC_DetermineRelocationEnabled()
 {
-	bEnableRelocation = false;
+	bEnableRelocationAtStart = false;
 
 	if (CONFIG_IsRelocationAllowed())
 	{
 		float RandomRoll = frandrange(0.0f, 1.0f);
 
-		bEnableRelocation = (RandomRoll <= CONFIG_GetRelocationChance());
+		bEnableRelocationAtStart = (RandomRoll <= CONFIG_GetRelocationChance());
 	}
 }
 

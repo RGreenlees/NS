@@ -224,6 +224,7 @@ void AICOMM_AssignNewPlayerOrder(AvHAIPlayer* pBot, edict_t* Assignee, edict_t* 
 	ai_commander_order NewOrder;
 	NewOrder.Assignee = Assignee;
 	NewOrder.OrderTarget = TargetEntity;
+	NewOrder.OrderLocation = TargetEntity->v.origin;
 	NewOrder.OrderPurpose = OrderPurpose;
 	NewOrder.LastReminderTime = 0.0f;
 	NewOrder.LastPlayerDistance = 0.0f;
@@ -1326,8 +1327,9 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 		}
 	}
 
-	// This is important, make sure we always prioritise setting up the infantry portals in our base before we do anything else
-	// If we don't have enough resources to drop an infantry portal with resources to spare, then don't allow the commander to do anything else
+	// This is important, make sure we always prioritise critical base infrastructure over everything else
+	// If we don't have enough resources to drop the critical infrastructure then block the whole commander thought process
+	// This ensures we aren't placing sentries in Eclipse Command when we don't even have an infantry portal at base
 	if (MainBase)
 	{
 		bool bMustPrioritise = !MainBase->bIsBaseEstablished;
@@ -1337,7 +1339,8 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 			vector<AvHAIBuildableStructure> BaseStructures = AICOMM_GetBaseStructures(MainBase);
 
 			bool bHasArmoury = false;
-			bool bHasTF = true;
+			bool bHasTF = false;
+			bool bHasPG = false;
 			int NumSentries = 0;
 
 			int DesiredInfPortals = (int)ceilf((float)AIMGR_GetNumPlayersOnTeam(BotTeam) / 4.0f);
@@ -1346,12 +1349,13 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 			for (auto it = BaseStructures.begin(); it != BaseStructures.end(); it++)
 			{
 				if (it->StructureType == STRUCTURE_MARINE_INFANTRYPORTAL) { NumInfantryPortals++; }
+				else if (it->StructureType == STRUCTURE_MARINE_PHASEGATE) { bHasPG = true; }
 				else if (it->StructureType & (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY)) { bHasArmoury = true; }
 				else if (it->StructureType & (STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY)) { bHasTF = true; }
 				else if (it->StructureType == STRUCTURE_MARINE_TURRET) { NumSentries++; }				
 			}
 
-			bMustPrioritise = !bHasArmoury || !bHasTF || NumInfantryPortals < DesiredInfPortals || NumSentries < 3;
+			bMustPrioritise = !bHasArmoury || !bHasTF || NumInfantryPortals < DesiredInfPortals || NumSentries < 3 || (!bHasPG && AITAC_ResearchIsComplete(BotTeam, TECH_RESEARCH_PHASETECH));
 		}
 
 		if (bMustPrioritise)
@@ -1807,7 +1811,11 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot)
 
 		if (Armoury.IsValid())
 		{
-			return AICOMM_ResearchTech(pBot, &Armoury, RESEARCH_GRENADES);
+			bool bSuccess = AICOMM_ResearchTech(pBot, &Armoury, RESEARCH_GRENADES);
+
+			if (bSuccess) { return true; }
+
+			return pBot->Player->GetResources() < (BALANCE_VAR(kGrenadesResearchCost) * 1.5f);
 		}
 	}
 
@@ -1820,7 +1828,11 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot)
 	{
 		if (ArmsLab.IsValid())
 		{
-			return AICOMM_ResearchTech(pBot, &ArmsLab, RESEARCH_ARMOR_ONE);
+			bool bSuccess = AICOMM_ResearchTech(pBot, &ArmsLab, RESEARCH_ARMOR_ONE);
+
+			if (bSuccess) { return true; }
+
+			return pBot->Player->GetResources() < (BALANCE_VAR(kArmorOneResearchCost) * 1.5f);
 		}
 	}
 
@@ -1828,7 +1840,11 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot)
 	{
 		if (ArmsLab.IsValid())
 		{
-			return AICOMM_ResearchTech(pBot, &ArmsLab, RESEARCH_WEAPONS_ONE);
+			bool bSuccess = AICOMM_ResearchTech(pBot, &ArmsLab, RESEARCH_WEAPONS_ONE);
+
+			if (bSuccess) { return true; }
+
+			return pBot->Player->GetResources() < (BALANCE_VAR(kWeaponsOneResearchCost) * 1.5f);
 		}
 	}
 
@@ -1841,7 +1857,11 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot)
 	{
 		if (Observatory.IsValid())
 		{
-			return AICOMM_ResearchTech(pBot, &Observatory, RESEARCH_PHASETECH);
+			bool bSuccess = AICOMM_ResearchTech(pBot, &Observatory, RESEARCH_PHASETECH);
+
+			if (bSuccess) { return true; }
+
+			return pBot->Player->GetResources() < (BALANCE_VAR(kPhaseTechResearchCost) * 1.5f);
 		}
 	}
 
@@ -3807,102 +3827,43 @@ void AICOMM_UpdateSiegeBaseStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base)
 
 	const AvHAIHiveDefinition* NearestHive = AITAC_GetHiveNearestLocation(Base->BaseLocation);
 
-	if (bStillStuffToSiege)
+	if (bStillStuffToSiege || (NearestHive && NearestHive->Status != HIVE_STATUS_UNBUILT && vDist2DSq(Base->BaseLocation, NearestHive->Location) < sqrf(BALANCE_VAR(kSiegeTurretRange))))
 	{
 		Base->bRecycleBase = false;
 		Base->bIsActive = true;
+		return;
 	}
 	else
 	{
-		if (!NearestHive || NearestHive->Status == HIVE_STATUS_UNBUILT)
+		if (!NearestHive || vDist2DSq(Base->BaseLocation, NearestHive->Location) > sqrf(BALANCE_VAR(kSiegeTurretRange)))
 		{
-			Base->bRecycleBase = true;
+			Base->bRecycleBase = false;
 			Base->bIsActive = false;
+			return;
 		}
 		else
 		{
-			float Dist = vDist2DSq(NearestHive->Location, Base->BaseLocation);
-
-			if (Dist > sqrf(BALANCE_VAR(kSiegeTurretRange)))
+			for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
 			{
-				Base->bRecycleBase = true;
-				Base->bIsActive = false;
-			}
-		}
-	}
-
-	if (Base->bRecycleBase) { return; }
-
-	if (Base->bIsActive)
-	{
-		vector<AvHAIBuildableStructure> BaseStructures = AICOMM_GetBaseStructures(Base);
-
-		bool bHasPG = true;
-		bool bHasAdvTF = true;
-		bool bHasSiege = true;
-
-		for (auto structIt = BaseStructures.begin(); structIt != BaseStructures.end(); structIt++)
-		{
-			AvHAIBuildableStructure ThisStructure = (*structIt);
-
-			if (ThisStructure.StructureType == STRUCTURE_MARINE_PHASEGATE) { bHasPG = true; }
-			if (ThisStructure.StructureType == STRUCTURE_MARINE_ADVTURRETFACTORY) { bHasAdvTF = true; }
-			if (ThisStructure.StructureType == STRUCTURE_MARINE_SIEGETURRET) { bHasSiege = true; }
-		}
-
-		Base->bIsBaseEstablished = (bHasPG || !AITAC_ResearchIsComplete(BotTeam, TECH_RESEARCH_PHASETECH)) && bHasAdvTF && bHasSiege;
-
-		return;
-	}
-
-	// We don't need to keep building out this siege base as it has nothing to siege, but let's check if we can safely recycle it
-	Base->bIsActive = false;
-
-	for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
-	{
-		AvHAIMarineBase* ThisBase = &(*it);
-
-		// Basically, if we have an outpost in the hive, and it has a phase gate (if available), a turret factory and at least 2 turrets, we can safely
-		// discard this siege base since the outpost is established enough to take over
-		if (ThisBase->BaseType == MARINE_BASE_OUTPOST && vDist2DSq(NearestHive->FloorLocation, ThisBase->BaseLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
-		{
-			vector<AvHAIBuildableStructure> BaseStructures = AICOMM_GetBaseStructures(ThisBase);
-
-			bool bHasPG = false;
-			bool bHasTF = false;
-			int NumTurrets = 0;
-
-			for (auto structIt = BaseStructures.begin(); structIt != BaseStructures.end(); structIt++)
-			{
-				AvHAIBuildableStructure ThisStructure = (*structIt);
-
-				if (ThisStructure.StructureType == STRUCTURE_MARINE_PHASEGATE)
+				if (it->BaseType == MARINE_BASE_OUTPOST && vDist2DSq(NearestHive->FloorLocation, it->BaseLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
 				{
-					bHasPG = true;
-				}
-
-				if (ThisStructure.StructureType & (STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY))
-				{
-					bHasTF = true;
-				}
-
-				if (ThisStructure.StructureType == STRUCTURE_MARINE_TURRET)
-				{
-					NumTurrets++;
+					if (it->bIsBaseEstablished)
+					{
+						Base->bRecycleBase = true;
+						Base->bIsActive = false;
+						return;
+					}
 				}
 			}
 
-			if ((!AITAC_ResearchIsComplete(BotTeam, TECH_RESEARCH_PHASETECH) || bHasPG)
-				&& bHasTF
-				&& NumTurrets > 1)
-			{
-				Base->bRecycleBase = true;
-				return;
-			}
+			Base->bRecycleBase = false;
+			Base->bIsActive = false;
+			return;
 		}
 	}
 
 	Base->bRecycleBase = false;
+	Base->bIsActive = true;
 }
 
 void AICOMM_DeployBases(AvHAIPlayer* pBot)
@@ -4630,7 +4591,7 @@ bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
 		return (CurrentMainBase->NumBuilders == 0);
 	}
 
-	if (AITAC_IsRelocationEnabled() && AIMGR_GetMatchLength() < 90.0f)
+	if (AITAC_IsRelocationAtStartEnabled() && AIMGR_GetMatchLength() < 90.0f)
 	{
 		// We've not tried relocating yet
 		if (bMainBaseIsAtChair) { return true; }
@@ -5231,7 +5192,9 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 		return pBot->Player->GetResources() <= (BALANCE_VAR(kObservatoryCost) * 1.5f);
 	}
 
-	if (!PhaseGate.IsValid() && AITAC_ResearchIsComplete(BotTeam, TECH_RESEARCH_PHASETECH))
+	if (!AITAC_ResearchIsComplete(BotTeam, TECH_RESEARCH_PHASETECH)) { return false; }
+
+	if (!PhaseGate.IsValid())
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kPhaseGateCost)) { return true; }
 

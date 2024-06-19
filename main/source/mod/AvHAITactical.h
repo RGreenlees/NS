@@ -222,7 +222,7 @@ Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team);
 bool AITAC_IsRelocationPointStillValid(AvHTeamNumber RelocationTeam, Vector RelocationPoint);
 bool AITAC_IsRelocationCompleted(AvHTeamNumber RelocationTeam, Vector RelocationPoint);
 
-bool AITAC_IsRelocationEnabled();
+bool AITAC_IsRelocationAtStartEnabled();
 
 void AITAC_DetermineRelocationEnabled();
 
