@@ -3403,7 +3403,16 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 		}
 		else
 		{
-			if (BotReloadWeapons(pBot)) { return true; }
+			float WeaponClipPercent = GetPlayerCurrentWeaponClipAmmo(pBot->Player) / GetPlayerCurrentWeaponMaxClipAmmo(pBot->Player);
+
+			float ReloadWaitTime = (WeaponClipPercent < 0.2f) ? 3.0f : 5.0f;
+
+			if (DesiredCombatWeapon == WEAPON_MARINE_HMG) { ReloadWaitTime *= 1.5f; } // Wait longer for HMG as we're more likely to be caught with our pants down
+
+			if (TimeSinceLastSeenEnemy > ReloadWaitTime)
+			{
+				if (BotReloadWeapons(pBot)) { return true; }
+			}
 
 			if (PlayerHasWeapon(pBot->Player, WEAPON_MARINE_GRENADE) || (PlayerHasWeapon(pBot->Player, WEAPON_MARINE_GL) && UTIL_GetPlayerPrimaryWeaponClipAmmo(pBot->Player) > 0))
 			{
@@ -3542,7 +3551,14 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 			}
 			else
 			{
-				if (bCanReloadCurrentWeapon && !bEnemyIsRanged && DistToEnemy > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
+
+				float WeaponClipPercent = GetPlayerCurrentWeaponClipAmmo(pBot->Player) / GetPlayerCurrentWeaponMaxClipAmmo(pBot->Player);
+
+				float ReloadWaitTime = (WeaponClipPercent < 0.2f) ? 3.0f : 5.0f;
+
+				if (DesiredCombatWeapon == WEAPON_MARINE_HMG) { ReloadWaitTime *= 1.5f; } // Wait longer for HMG as we're more likely to be caught with our pants down
+
+				if (bCanReloadCurrentWeapon && !bEnemyIsRanged && DistToEnemy > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)) && TimeSinceLastSeenEnemy > ReloadWaitTime)
 				{
 					BotReloadWeapons(pBot);
 				}
@@ -3555,7 +3571,13 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 			return true;
 		}
 
-		if (bCanReloadCurrentWeapon && DistToEnemy > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)) && TimeSinceLastSeenEnemy > 2.0f)
+		float WeaponClipPercent = GetPlayerCurrentWeaponClipAmmo(pBot->Player) / GetPlayerCurrentWeaponMaxClipAmmo(pBot->Player);
+
+		float ReloadWaitTime = (WeaponClipPercent < 0.2f) ? 3.0f : 5.0f;
+
+		if (DesiredCombatWeapon == WEAPON_MARINE_HMG) { ReloadWaitTime *= 1.5f; } // Wait longer for HMG as we're more likely to be caught with our pants down
+
+		if (bCanReloadCurrentWeapon && DistToEnemy > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)) && TimeSinceLastSeenEnemy > ReloadWaitTime)
 		{
 			BotReloadWeapons(pBot);
 			return true;
@@ -7373,6 +7395,26 @@ void AIPlayerSetSecondaryAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	{
 		AvHAIBuildableStructure ThisStructure = (*it);
 
+		if (ThisStructure.StructureType == STRUCTURE_ALIEN_RESTOWER)
+		{
+			const AvHAIResourceNode* ResNode = AITAC_GetResourceNodeFromEdict(ThisStructure.edict);
+
+			if (!ResNode) { continue; }
+
+			// Don't defend a res node if it's inside an enemy hive
+			if (!FNullEnt(ResNode->ParentHive) && ResNode->ParentHive->v.team != BotTeam) { continue; }
+
+			DeployableSearchFilter EnemyStuffFilter;
+			EnemyStuffFilter.DeployableTeam = EnemyTeam;
+			EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+			EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
+			EnemyStuffFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
+			EnemyStuffFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+
+			// Don't defend res nodes if marines have built a base there, leads to bots throwing away their lives trying to save a doomed tower
+			if (AITAC_DeployableExistsAtLocation(ResNode->Location, &EnemyStuffFilter)) { continue; }
+		}
+
 		float ThisDist = vDist2D(pBot->Edict->v.origin, ThisStructure.edict->v.origin);
 
 		int NumAttackers = AITAC_GetNumPlayersOnTeamWithLOS(EnemyTeam, ThisStructure.Location, UTIL_MetresToGoldSrcUnits(15.0f), nullptr);
@@ -7414,6 +7456,8 @@ void AIPlayerSetSecondaryAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			return;
 		}
 	}
+
+	AITASK_ClearBotTask(pBot, &pBot->SecondaryBotTask);
 
 }
 
