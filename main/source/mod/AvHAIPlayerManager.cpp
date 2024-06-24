@@ -1313,6 +1313,64 @@ void AIMGR_SetDebugAIPlayer(edict_t* SpectatingPlayer, edict_t* AIPlayer)
 
 	DebugBots[PlayerIndex] = nullptr;
 }
+
+void AIDEBUG_DisplayTeamGoals()
+{
+	AvHTeamNumber TeamANumber = AIMGR_GetTeamANumber();
+	AvHTeamNumber TeamBNumber = AIMGR_GetTeamBNumber();
+
+	vector<AvHAIPlayer*> Team1Players = AIMGR_GetAIPlayersOnTeam(TeamANumber);
+	vector<AvHAIPlayer*> Team2Players = AIMGR_GetAIPlayersOnTeam(TeamBNumber);
+
+	char buf[511];
+	char interbuf[164];
+
+	sprintf(buf, "Team A (%s)\n\n", (AIMGR_GetTeamType(TeamANumber) == AVH_CLASS_TYPE_MARINE) ? "Marines" : "Aliens");
+
+	for (auto it = Team1Players.begin(); it != Team1Players.end(); it++)
+	{
+		AvHAIPlayer* ThisPlayer = (*it);
+
+		if (!ThisPlayer->CurrentTask || !IsPlayerActiveInGame(ThisPlayer->Edict)) { continue; }
+
+		if (!FNullEnt(ThisPlayer->CurrentTask->TaskTarget))
+		{
+			sprintf(interbuf, "%s: %s (%s)\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType), UTIL_StructTypeToChar(UTIL_IUSER3ToStructureType(ThisPlayer->CurrentTask->TaskTarget->v.iuser3)));
+		}
+		else
+		{
+			sprintf(interbuf, "%s: %s\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType));
+		}
+
+		
+		strcat(buf, interbuf);
+	}
+
+	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1, 0.1f, 255, 255, 255, buf);
+
+	sprintf(buf, "Team B (%s)\n\n", (AIMGR_GetTeamType(TeamBNumber) == AVH_CLASS_TYPE_MARINE) ? "Marines" : "Aliens");
+
+	for (auto it = Team2Players.begin(); it != Team2Players.end(); it++)
+	{
+		AvHAIPlayer* ThisPlayer = (*it);
+
+		if (!ThisPlayer->CurrentTask || !IsPlayerActiveInGame(ThisPlayer->Edict)) { continue; }
+
+		if (!FNullEnt(ThisPlayer->CurrentTask->TaskTarget))
+		{
+			sprintf(interbuf, "%s: %s (%s)\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType), UTIL_StructTypeToChar(UTIL_IUSER3ToStructureType(ThisPlayer->CurrentTask->TaskTarget->v.iuser3)));
+		}
+		else
+		{
+			sprintf(interbuf, "%s: %s\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType));
+		}
+
+
+		strcat(buf, interbuf);
+	}
+
+	UTIL_DrawHUDText(INDEXENT(1), 1, 0.6, 0.1f, 255, 255, 255, buf);
+}
 #endif
 
 void AIMGR_ReceiveCommanderRequest(AvHTeamNumber Team, edict_t* Requestor, const char* Request)

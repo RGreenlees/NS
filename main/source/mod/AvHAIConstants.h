@@ -488,6 +488,7 @@ typedef struct _AI_MARINE_BASE
 	AvHTeamNumber BaseTeam = TEAM_IND;
 	MarineBaseType BaseType = MARINE_BASE_OUTPOST; // The purpose of the base. Determines what structures the commander will place
 	Vector BaseLocation = ZERO_VECTOR; // Where the base should be located. The base will be grown around this location
+	Vector SiegeTarget = ZERO_VECTOR; // For siege bases, this is where the siege base wants to blast stuff
 	vector<int> PlacedStructures; // Which structures are part of this base.
 	int NumBuilders = 0; // How many potential builders are there, able to construct stuff?
 	int NumEnemies = 0; // How many enemies are in and around the base?

@@ -479,7 +479,7 @@ void AIDEBUG_DrawOffMeshConnections(float DrawTime)
 
 bool UTIL_UpdateTileCache()
 {
-	bTileCacheUpToDate = true;
+	bool bNewTileCacheUpToDate = true;
 
 	for (int i = 0; i < MAX_NAV_MESHES; i++)
 	{
@@ -487,9 +487,16 @@ bool UTIL_UpdateTileCache()
 		{
 			bool bUpToDate;
 			NavMeshes[i].tileCache->update(0.0f, NavMeshes[i].navMesh, &bUpToDate);
-			if (!bUpToDate) { bTileCacheUpToDate = false; }
+			if (i != BUILDING_NAV_MESH && !bUpToDate) { bNewTileCacheUpToDate = false; }
 		}
 	}
+
+	if (!bTileCacheUpToDate && bNewTileCacheUpToDate)
+	{
+		bNavMeshModified = true;
+	}
+
+	bTileCacheUpToDate = bNewTileCacheUpToDate;
 
 	return bTileCacheUpToDate;
 }
@@ -604,11 +611,6 @@ unsigned int UTIL_AddTemporaryObstacle(unsigned int NavMeshIndex, const Vector L
 		NavMeshes[NavMeshIndex].tileCache->addObstacle(Pos, Radius, Height, area, &ObsRef);
 
 		ObstacleNum = (unsigned int)ObsRef;
-
-		if (ObstacleNum > 0 && NavMeshIndex != BUILDING_NAV_MESH)
-		{
-			bNavMeshModified = true;
-		}
 	}
 
 	return ObstacleNum;
@@ -670,14 +672,7 @@ void UTIL_RemoveStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
 			if (ObstacleToRemove)
 			{
 				dtStatus RemovalStatus = NavMeshes[NavMeshIndex].tileCache->removeObstacle((dtObstacleRef)it->ObstacleRef);
-				
-				if (dtStatusSucceed(RemovalStatus))
-				{
-					bNavMeshModified = true;
-				}
 			}
-
-			
 		}
 
 		it = Structure->Obstacles.erase(it);
@@ -700,11 +695,6 @@ void UTIL_AddTemporaryObstacles(const Vector Location, float Radius, float Heigh
 			NavMeshes[i].tileCache->addObstacle(Pos, Radius, Height, area, &ObsRef);
 
 			ObstacleRefArray[i] = (unsigned int)ObsRef;
-
-			if ((unsigned int)ObsRef > 0)
-			{
-				bNavMeshModified = true;
-			}
 		}
 	}
 }
@@ -724,12 +714,6 @@ unsigned int UTIL_AddTemporaryBoxObstacle(const Vector bMin, const Vector bMax, 
 			NavMeshes[i].tileCache->addBoxObstacle(bMinf, bMaxf, area, &ObsRef);
 
 			ObstacleNum = (unsigned int)ObsRef;
-
-			if (area == DT_TILECACHE_NULL_AREA || area == DT_TILECACHE_WELD_AREA)
-			{
-				bNavMeshModified = true;
-			}
-
 		}
 	}
 
@@ -746,11 +730,6 @@ void UTIL_RemoveTemporaryObstacle(unsigned int ObstacleRef)
 		{
 			const dtTileCacheObstacle* ObstacleToRemove = NavMeshes[i].tileCache->getObstacleByRef((dtObstacleRef)ObstacleRef);
 
-			if (ObstacleToRemove && (ObstacleToRemove->cylinder.area == DT_TILECACHE_NULL_AREA || ObstacleToRemove->cylinder.area == DT_TILECACHE_WELD_AREA))
-			{
-				bNavMeshModified = true;
-			}
-
 			NavMeshes[i].tileCache->removeObstacle((dtObstacleRef)ObstacleRef);
 		}
 	}
@@ -764,11 +743,6 @@ void UTIL_RemoveTemporaryObstacles(unsigned int* ObstacleRefs)
 		if (NavMeshes[i].tileCache)
 		{
 			const dtTileCacheObstacle* ObstacleToRemove = NavMeshes[i].tileCache->getObstacleByRef((dtObstacleRef)ObstacleRefs[i]);
-
-			if (ObstacleToRemove && (ObstacleToRemove->cylinder.area == DT_TILECACHE_NULL_AREA || ObstacleToRemove->cylinder.area == DT_TILECACHE_WELD_AREA))
-			{
-				bNavMeshModified = true;
-			}
 
 			NavMeshes[i].tileCache->removeObstacle((dtObstacleRef)ObstacleRefs[i]);
 
@@ -6823,6 +6797,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 					if (!vIsZero(BotNavInfo->LastNavMeshPosition))
 					{
 						MoveDirectlyTo(pBot, BotNavInfo->LastNavMeshPosition);
+						UTIL_DrawLine(nullptr, pBot->Edict->v.origin, BotNavInfo->LastNavMeshPosition, 255, 0, 0);
 
 						if (vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->LastNavMeshPosition) < sqrf(8.0f))
 						{
@@ -6846,6 +6821,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 						if (!vIsZero(BotNavInfo->UnstuckMoveLocation))
 						{
 							MoveDirectlyTo(pBot, BotNavInfo->UnstuckMoveLocation);
+							UTIL_DrawLine(nullptr, pBot->Edict->v.origin, BotNavInfo->UnstuckMoveLocation, 255, 255, 0);
 							return false;
 						}
 					}
@@ -6853,6 +6829,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 				else
 				{
 					MoveDirectlyTo(pBot, Destination);
+					UTIL_DrawLine(nullptr, pBot->Edict->v.origin, BotNavInfo->UnstuckMoveLocation, 0, 128, 0);
 					return false;
 				}
 
@@ -8838,8 +8815,6 @@ void UTIL_ModifyOffMeshConnectionFlag(AvHAIOffMeshConnection* Connection, const 
 			NavMeshes[i].tileCache->modifyOffMeshConnection(Connection->ConnectionRefs[i], NewFlag);
 		}
 	}
-
-	bNavMeshModified = true;
 }
 
 void UTIL_UpdateDoors(bool bInitial)
@@ -9584,8 +9559,6 @@ void UTIL_AddOffMeshConnection(Vector StartLoc, Vector EndLoc, unsigned char are
 
 		RemoveConnectionDef->ConnectionRefs[i] = (unsigned int)ref;
 	}
-
-	bNavMeshModified = true;
 }
 
 void UTIL_RemoveOffMeshConnections(AvHAIOffMeshConnection* RemoveConnectionDef)
@@ -9596,8 +9569,6 @@ void UTIL_RemoveOffMeshConnections(AvHAIOffMeshConnection* RemoveConnectionDef)
 
 		RemoveConnectionDef->ConnectionRefs[i] = 0;
 	}
-
-	bNavMeshModified = true;
 }
 
 const nav_profile GetBaseNavProfile(const int index)

@@ -350,9 +350,16 @@ void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<bot_path_node>& path, float 
 
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end)
 {
-	if (FNullEnt(pEntity) || pEntity->free) { return; }
 
-	MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	if (FNullEnt(pEntity) || pEntity->free)
+	{
+		MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	}
+	else
+	{
+		MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	}
+
 	WRITE_BYTE(TE_BEAMPOINTS);
 	WRITE_COORD(start.x);
 	WRITE_COORD(start.y);
@@ -378,12 +385,18 @@ void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end)
 
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, float drawTimeSeconds)
 {
-	if (FNullEnt(pEntity) || pEntity->free) { return; }
-
 	int timeTenthSeconds = (int)floorf(drawTimeSeconds * 10.0f);
 	timeTenthSeconds = fmaxf(timeTenthSeconds, 1);
 
-	MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	if (FNullEnt(pEntity) || pEntity->free)
+	{
+		MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	}
+	else
+	{
+		MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	}
+
 	WRITE_BYTE(TE_BEAMPOINTS);
 	WRITE_COORD(start.x);
 	WRITE_COORD(start.y);
@@ -409,12 +422,18 @@ void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, float drawTimeSec
 
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, float drawTimeSeconds, int r, int g, int b)
 {
-	if (FNullEnt(pEntity) || pEntity->free) { return; }
-
 	int timeTenthSeconds = (int)ceilf(drawTimeSeconds * 10.0f);
 	timeTenthSeconds = fmaxf(timeTenthSeconds, 1);
 
-	MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	if (FNullEnt(pEntity) || pEntity->free)
+	{
+		MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	}
+	else
+	{
+		MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	}
+
 	WRITE_BYTE(TE_BEAMPOINTS);
 	WRITE_COORD(start.x);
 	WRITE_COORD(start.y);
@@ -440,9 +459,15 @@ void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, float drawTimeSec
 
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, int r, int g, int b)
 {
-	if (FNullEnt(pEntity) || pEntity->free) { return; }
+	if (FNullEnt(pEntity) || pEntity->free) 
+	{
+		MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
+	}
+	else
+	{
+		MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
+	}
 
-	MESSAGE_BEGIN(MSG_ONE, SVC_TEMPENTITY, NULL, pEntity);
 	WRITE_BYTE(TE_BEAMPOINTS);
 	WRITE_COORD(start.x);
 	WRITE_COORD(start.y);
@@ -638,11 +663,64 @@ void UTIL_LocalizeText(const char* InputText, string& OutputText)
 
 }
 
+char* UTIL_StructTypeToChar(const AvHAIDeployableStructureType StructureType)
+{
+	switch (StructureType)
+	{
+	case STRUCTURE_MARINE_RESTOWER:
+		return "RT";
+	case STRUCTURE_MARINE_INFANTRYPORTAL:
+		return "IP";
+	case STRUCTURE_MARINE_TURRETFACTORY:
+		return "TF";
+	case STRUCTURE_MARINE_ADVTURRETFACTORY:
+		return "Adv TF";
+	case STRUCTURE_MARINE_ARMOURY:
+		return "Armoury";
+	case STRUCTURE_MARINE_ADVARMOURY:
+		return "Adv Armoury";
+	case STRUCTURE_MARINE_ARMSLAB:
+		return "Armslab";
+	case STRUCTURE_MARINE_PROTOTYPELAB:
+		return "ProtoLab";
+	case STRUCTURE_MARINE_OBSERVATORY:
+		return "Obs";
+	case STRUCTURE_MARINE_PHASEGATE:
+		return "PG";
+	case STRUCTURE_MARINE_TURRET:
+		return "Sentry";
+	case STRUCTURE_MARINE_SIEGETURRET:
+		return "Siege T";
+	case STRUCTURE_MARINE_COMMCHAIR:
+		return "CC";
+	case STRUCTURE_MARINE_DEPLOYEDMINE:
+		return "Mine";
+
+	case STRUCTURE_ALIEN_HIVE:
+		return "Hive";
+	case STRUCTURE_ALIEN_RESTOWER:
+		return "RT";
+	case STRUCTURE_ALIEN_DEFENCECHAMBER:
+		return "DC";
+	case STRUCTURE_ALIEN_SENSORYCHAMBER:
+		return "SC";
+	case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
+		return "MC";
+	case STRUCTURE_ALIEN_OFFENCECHAMBER:
+		return "OC";
+	default:
+		return "None";
+	}
+
+	return "None";
+}
+
 char* UTIL_TaskTypeToChar(const BotTaskType TaskType)
 {
 	switch (TaskType)
 	{
 	case TASK_ATTACK:
+		
 		return "Attack";
 	case TASK_BUILD:
 		return "Build";

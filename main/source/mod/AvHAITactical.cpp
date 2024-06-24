@@ -3154,7 +3154,6 @@ bool UTIL_ShouldStructureCollide(AvHAIDeployableStructureType StructureType)
 	{
 	case STRUCTURE_MARINE_INFANTRYPORTAL:
 	case STRUCTURE_MARINE_PHASEGATE:
-	case STRUCTURE_MARINE_TURRET:
 	case STRUCTURE_MARINE_DEPLOYEDMINE:
 		return false;
 	default:
