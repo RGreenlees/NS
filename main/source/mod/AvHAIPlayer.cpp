@@ -1887,21 +1887,24 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	if (IsPlayerAlien(pBot->Edict)) { return; }
+	if (!IsPlayerAlien(pBot->Edict)) { return; }
 
-	if (!IsPlayerCommander(pBot->Edict))
+	int Enemy = BotGetNextEnemyTarget(pBot);
+
+	if (Enemy > -1)
 	{
-		BotProgressTakeCommandTask(pBot);
-		return;
+		AlienCombatThink(pBot);
 	}
-
-	for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
+	else
 	{
-		if (it->bCanBeBuiltOut)
+		edict_t* CommChair = AITAC_GetCommChair(AIMGR_GetEnemyTeam(pBot->Player->GetTeam()));
+
+		if (!FNullEnt(CommChair))
 		{
-			if (AICOMM_BuildOutBase(pBot, &(*it))) { return; }
+			MoveTo(pBot, CommChair->v.origin, MOVESTYLE_NORMAL);
 		}
 	}
+
 }
 
 void DroneThink(AvHAIPlayer* pBot)
@@ -2059,7 +2062,17 @@ void AIPlayerTakeDamage(AvHAIPlayer* pBot, int damageTaken, edict_t* aggressor)
 		}
 
 		TrackingInfo->AwarenessOfPlayer = 1.0f;
-		TrackingInfo->bHasLOS = true;
+
+		Vector VisiblePoint = GetVisiblePointOnPlayerFromObserver(pBot->Edict, aggressor);
+
+		if (!vIsZero(VisiblePoint))
+		{
+			TrackingInfo->bHasLOS = true;
+			TrackingInfo->bEnemyHasLOS = true;
+			TrackingInfo->LastVisibleTime = gpGlobals->time;
+		}
+
+
 	}
 }
 
@@ -6348,7 +6361,7 @@ void AIPlayerSetAlienCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// If we're already capping a node, are at the node and there is an unfinished tower on there, then finish the job and don't move on yet
 	if (Task->TaskType == TASK_CAP_RESNODE)
 	{
-		const AvHAIResourceNode* ResNodeIndex = AITAC_GetNearestResourceNodeToLocation(Task->TaskLocation);
+		const AvHAIResourceNode* ResNodeIndex = AITAC_GetResourceNodeFromEdict(Task->TaskTarget);
 
 		if (ResNodeIndex && ResNodeIndex->OwningTeam != BotTeam)
 		{
@@ -6358,7 +6371,7 @@ void AIPlayerSetAlienCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			}
 			else
 			{
-				if (!FNullEnt(ResNodeIndex->ActiveTowerEntity) && !UTIL_StructureIsFullyBuilt(ResNodeIndex->ActiveTowerEntity))
+				if (IsPlayerGorge(pBot->Edict) && !FNullEnt(ResNodeIndex->ActiveTowerEntity) && !UTIL_StructureIsFullyBuilt(ResNodeIndex->ActiveTowerEntity))
 				{
 					if (vDist2DSq(pBot->Edict->v.origin, ResNodeIndex->Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f)))
 					{
@@ -6380,7 +6393,7 @@ void AIPlayerSetAlienCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	if (IsPlayerLerk(pBot->Edict) || IsPlayerFade(pBot->Edict) || IsPlayerOnos(pBot->Edict))
 	{
-		bCanPlaceTower = pBot->Player->GetResources() >= 75 && AITAC_GetTeamResNodeOwnership(BotTeam, true) >= 0.5f;
+		bCanPlaceTower = pBot->Player->GetResources() >= 75 && AITAC_GetTeamResNodeOwnership(BotTeam, true) < 0.5f;
 	}
 
 	// If we have enough resources to cap a node, then find an empty one we can slap one down in

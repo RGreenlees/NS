@@ -875,12 +875,32 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 
 	if (bActiveHiveWithoutTechExists) { return true; }
 
+	int NumMissing = 0;
+	AvHAIDeployableStructureType MissingStructure = AITAC_GetNextMissingUpgradeChamberForTeam(BotTeam, NumMissing);
+
+	if (MissingStructure != STRUCTURE_NONE) { return true; }
+
+	Vector ReinforceLocation = Task->TaskTarget->v.origin;
+	float SearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
+
+	if (IsEdictHive(Task->TaskTarget))
+	{
+		AvHAIHiveDefinition* HiveToReinforce = AITAC_GetHiveFromEdict(Task->TaskTarget);
+
+		if (HiveToReinforce)
+		{
+			ReinforceLocation = HiveToReinforce->FloorLocation;
+		}
+
+		SearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+	}
+
 	DeployableSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = SEARCH_ALL_ALIEN_STRUCTURES;
-	StructureFilter.MaxSearchRadius = (IsEdictHive(Task->TaskTarget)) ? UTIL_MetresToGoldSrcUnits(10.0f) : UTIL_MetresToGoldSrcUnits(5.0f);
-	StructureFilter.DeployableTeam = BotTeam;
+	StructureFilter.MaxSearchRadius = SearchRadius * 1.25f;
+	StructureFilter.DeployableTeam = BotTeam;	
 
-	vector<AvHAIBuildableStructure> AllNearbyStructures = AITAC_FindAllDeployables(Task->TaskTarget->v.origin, &StructureFilter);
+	vector<AvHAIBuildableStructure> AllNearbyStructures = AITAC_FindAllDeployables(ReinforceLocation, &StructureFilter);
 
 	bool bUnfinishedStructureExists = false;
 	int NumOffenceChambers = 0;
@@ -916,11 +936,11 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 
 	// Task is still valid if we have any missing structures, or we're a gorge at the target site and there is an incomplete structure that we can finish off
 
-	if (NumOffenceChambers < 2
+	if (NumOffenceChambers < 3
 		|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_DEFENSE_CHAMBER) && NumDefenceChambers < 2)
 		|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_MOVEMENT_CHAMBER) && NumMovementChambers < 1)
 		|| (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_SENSORY_CHAMBER) && NumSensoryChambers < 1)
-		|| (IsPlayerGorge(pBot->Edict) && bUnfinishedStructureExists && vDist2DSq(pBot->Edict->v.origin, Task->TaskTarget->v.origin) <= sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
+		|| (IsPlayerGorge(pBot->Edict) && bUnfinishedStructureExists && vDist2DSq(pBot->Edict->v.origin, ReinforceLocation) <= sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
 		) {	return true; }
 
 	// Otherwise, are there any enemy structures lying around we could clear out?
@@ -934,9 +954,9 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 	EnemyStuff.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 	EnemyStuff.ReachabilityTeam = BotTeam;
 	EnemyStuff.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
-	EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
+	EnemyStuff.MaxSearchRadius = SearchRadius;
 
-	return AITAC_DeployableExistsAtLocation(Task->TaskTarget->v.origin, &EnemyStuff);
+	return AITAC_DeployableExistsAtLocation(ReinforceLocation, &EnemyStuff);
 }
 
 bool AITASK_IsAlienSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -1388,7 +1408,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	DeployableSearchFilter StructureFilter;
 	StructureFilter.DeployableTeam = BotTeam;
-	StructureFilter.MaxSearchRadius = SearchRadius;
+	StructureFilter.MaxSearchRadius = SearchRadius * 1.25f;
 	StructureFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
 
 	int NumOCs = AITAC_GetNumDeployablesNearLocation(ReinforceLocation, &StructureFilter);
@@ -1441,6 +1461,14 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				NextStructure = STRUCTURE_ALIEN_SENSORYCHAMBER;
 			}
 		}
+	}
+
+	if (NextStructure == STRUCTURE_NONE)
+	{
+		int NumMissing = 0;
+		AvHAIDeployableStructureType MissingStructure = AITAC_GetNextMissingUpgradeChamberForTeam(BotTeam, NumMissing);
+
+		NextStructure = MissingStructure;
 	}
 
 	if (NextStructure != STRUCTURE_NONE)

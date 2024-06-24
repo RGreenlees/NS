@@ -60,6 +60,7 @@ void UTIL_ClearLocalizations();
 void UTIL_LocalizeText(const char* InputText, string& OutputText);
 
 char* UTIL_TaskTypeToChar(const BotTaskType TaskType);
+char* UTIL_StructTypeToChar(const AvHAIDeployableStructureType StructureType);
 
 char* UTIL_BotRoleToChar(const AvHAIBotRole Role);
 

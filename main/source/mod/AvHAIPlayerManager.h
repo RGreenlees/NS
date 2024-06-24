@@ -137,4 +137,6 @@ void AIMGR_ProcessPendingSounds();
 void AIMGR_SetFrameDelta(float NewValue);
 float AIMGR_GetFrameDelta();
 
+void AIDEBUG_DisplayTeamGoals();
+
 #endif
