@@ -842,6 +842,8 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 
 	}
 
+	bool bOffMeshChanged = false;
+
 	if (m_nupdate == 0)
 	{
 		for (int i = 0; i < m_params.maxOffMeshConnections; ++i)
@@ -854,6 +856,7 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 				navmesh->baseOffMeshLinks(con);
 				navmesh->GlobalOffMeshLinks(con);
 				con->state = DT_OFFMESH_CLEAN;
+				bOffMeshChanged = true;
 			}
 
 			if (con->state == DT_OFFMESH_REMOVING)
@@ -869,7 +872,7 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 	}
 	
 	if (upToDate)
-		*upToDate = m_nupdate == 0 && m_nreqs == 0 && m_nOffMeshReqs == 0;
+		*upToDate = m_nupdate == 0 && m_nreqs == 0 && m_nOffMeshReqs == 0 && !bOffMeshChanged;
 
 	return status;
 }
