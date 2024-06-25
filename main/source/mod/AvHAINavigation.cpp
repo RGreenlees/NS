@@ -6838,7 +6838,6 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 					if (!vIsZero(BotNavInfo->LastNavMeshPosition))
 					{
 						MoveDirectlyTo(pBot, BotNavInfo->LastNavMeshPosition);
-						UTIL_DrawLine(nullptr, pBot->Edict->v.origin, BotNavInfo->LastNavMeshPosition, 255, 0, 0);
 
 						if (vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->LastNavMeshPosition) < sqrf(8.0f))
 						{
@@ -6862,7 +6861,6 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 						if (!vIsZero(BotNavInfo->UnstuckMoveLocation))
 						{
 							MoveDirectlyTo(pBot, BotNavInfo->UnstuckMoveLocation);
-							UTIL_DrawLine(nullptr, pBot->Edict->v.origin, BotNavInfo->UnstuckMoveLocation, 255, 255, 0);
 							return false;
 						}
 					}
@@ -6870,7 +6868,6 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 				else
 				{
 					MoveDirectlyTo(pBot, Destination);
-					UTIL_DrawLine(nullptr, pBot->Edict->v.origin, BotNavInfo->UnstuckMoveLocation, 0, 128, 0);
 					return false;
 				}
 
