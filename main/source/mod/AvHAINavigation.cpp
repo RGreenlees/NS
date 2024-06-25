@@ -1166,6 +1166,7 @@ void UTIL_PopulateBaseNavProfiles()
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_WALLCLIMB, 1.0f);
+	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 1.0f);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
@@ -1199,6 +1200,7 @@ void UTIL_PopulateBaseNavProfiles()
 	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
 	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
 	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.0f);
+	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 1.0f);
 	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
 	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
 	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
@@ -1215,6 +1217,7 @@ void UTIL_PopulateBaseNavProfiles()
 	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
 	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
 	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
+	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 1.0f);
 	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
 	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
 	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
@@ -2085,17 +2088,48 @@ dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle,
 	}
 
 	Vector FromLocation = pBot->CurrentFloorPosition;
+	Vector FromFloorLocation = FromLocation;
 
-	// Add a slight bias towards trying to move forward if on a railing or other narrow bit of navigable terrain
-	// rather than potentially dropping back off it the wrong way
-	Vector GeneralDir = UTIL_GetVectorNormal2D(ToLocation - pBot->CurrentFloorPosition);
-	Vector CheckLocation = FromLocation + (GeneralDir * 16.0f);
-
-	Vector FromFloorLocation = AdjustPointForPathfinding(CheckLocation);
-
-	if (vIsZero(FromFloorLocation))
+	// If the bot currently has a path, then let's calculate the navigation from the "from" point rather than our exact position right now
+	if (pBot->BotNavInfo.CurrentPathPoint < pBot->BotNavInfo.CurrentPath.size())
 	{
-		FromFloorLocation = AdjustPointForPathfinding(FromLocation);
+		bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
+
+		if (CurrentPathNode.flag == SAMPLE_POLYFLAGS_WALK)
+		{
+			bool bFromReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, CurrentPathNode.Location);
+			bool bToReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, CurrentPathNode.FromLocation);
+			if (bFromReachable && bToReachable)
+			{
+				FromFloorLocation = pBot->CurrentFloorPosition;
+			}
+			else if (bFromReachable)
+			{
+				FromFloorLocation = CurrentPathNode.FromLocation;
+			}
+			else
+			{
+				FromFloorLocation = CurrentPathNode.Location;
+			}
+		}
+		else
+		{
+			FromFloorLocation = CurrentPathNode.FromLocation;
+		}		
+	}
+	else
+	{
+		// Add a slight bias towards trying to move forward if on a railing or other narrow bit of navigable terrain
+		// rather than potentially dropping back off it the wrong way
+		Vector GeneralDir = UTIL_GetVectorNormal2D(ToLocation - pBot->CurrentFloorPosition);
+		Vector CheckLocation = FromLocation + (GeneralDir * 16.0f);
+
+		Vector FromFloorLocation = AdjustPointForPathfinding(CheckLocation);
+
+		if (vIsZero(FromFloorLocation))
+		{
+			FromFloorLocation = AdjustPointForPathfinding(FromLocation);
+		}
 	}
 
 	nav_door* LiftReference = UTIL_GetLiftReferenceByEdict(pBot->Edict->v.groundentity);
@@ -6602,10 +6636,12 @@ bool NAV_MergeAndUpdatePath(AvHAIPlayer* pBot, std::vector<bot_path_node>& NewPa
 		return true;
 	}
 
+	// Start with the bot's current path point
 	std::vector<bot_path_node>::iterator OldPathStart = (pBot->BotNavInfo.CurrentPath.begin() + pBot->BotNavInfo.CurrentPathPoint);
 	std::vector<bot_path_node>::iterator OldPathEnd;
 	std::vector<bot_path_node>::iterator NewPathStart;
 
+	// We skip ahead in the path until we reach the first non-walk node in our CURRENT path
 	for (OldPathEnd = OldPathStart; OldPathEnd != pBot->BotNavInfo.CurrentPath.end(); OldPathEnd++)
 	{
 		if (OldPathEnd->flag != SAMPLE_POLYFLAGS_WALK)
@@ -6614,11 +6650,13 @@ bool NAV_MergeAndUpdatePath(AvHAIPlayer* pBot, std::vector<bot_path_node>& NewPa
 		}
 	}
 
+	// Our path is all walk, so we will return false which will basically cause us to cancel this path completely and adopt a new one
 	if (OldPathEnd == pBot->BotNavInfo.CurrentPath.end())
 	{
 		return false;
 	}
 
+	// We have reached the next non-walk node in our CURRENT path, now we find the next non-walk path in a prospective NEW path
 	for (NewPathStart = NewPath.begin(); NewPathStart != NewPath.end(); NewPathStart++)
 	{
 		if (NewPathStart->flag != SAMPLE_POLYFLAGS_WALK)
@@ -6627,16 +6665,19 @@ bool NAV_MergeAndUpdatePath(AvHAIPlayer* pBot, std::vector<bot_path_node>& NewPa
 		}
 	}
 
+	// New path is all walk, just embrace it and forget the old path
 	if (NewPathStart == NewPath.end())
 	{
 		return false;
 	}
 
+	// The upcoming non-walk node in our current path and the upcoming non-walk node in our new path are different: we have a different path entirely so just get the new path instead
 	if (OldPathEnd->flag != NewPathStart->flag || !vEquals(OldPathEnd->FromLocation, NewPathStart->FromLocation, 16.0f) || !vEquals(OldPathEnd->Location, NewPathStart->Location, 16.0f))
 	{
 		return false;
 	}
 
+	// Now we truncate the current path at the non-walk node, and append the new path from that point
 	OldPathEnd = next(OldPathEnd);
 	NewPathStart = next(NewPathStart);
 

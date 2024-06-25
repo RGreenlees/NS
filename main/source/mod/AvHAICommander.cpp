@@ -3143,6 +3143,88 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 	Vector IdealDeployLocation = Requestor->v.origin + (UTIL_GetForwardVector2D(Requestor->v.angles) * ProjectDistance);
 	Vector ProjectedDeployLocation = AdjustPointForPathfinding(IdealDeployLocation, GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
 
+	AvHAIMarineBase* BaseToDeployIn = nullptr;
+	float MinDist = 0.0f;
+
+	for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
+	{
+		float DistFromBase = vDist2DSq(Requestor->v.origin, it->BaseLocation);
+
+		if (it->BaseType == MARINE_BASE_MAINBASE && DistFromBase < sqrf(UTIL_MetresToGoldSrcUnits(20.0f)))
+		{
+			BaseToDeployIn = &(*it);
+			break;
+		}
+
+		float DesiredDist = (it->BaseType == MARINE_BASE_GUARDPOST) ? BALANCE_VAR(kTurretFactoryBuildDistance) : UTIL_MetresToGoldSrcUnits(15.0f);
+
+		if (DistFromBase < sqrf(DesiredDist))
+		{
+			if (!BaseToDeployIn || DistFromBase < MinDist)
+			{
+				BaseToDeployIn = &(*it);
+				MinDist = DistFromBase;
+			}
+		}
+	}
+
+	// We've requested a building away from any existing bases the commander is building
+	if (!BaseToDeployIn && (NextRequest->RequestType == BUILD_PHASEGATE || NextRequest->RequestType == BUILD_TURRET_FACTORY))
+	{
+		
+		const AvHAIHiveDefinition* NearestHive = AITAC_GetHiveNearestLocation(Requestor->v.origin);
+		float DesiredDistance = (NearestHive->Status != HIVE_STATUS_UNBUILT) ? sqrf(BALANCE_VAR(kSiegeTurretRange)) : sqrf(UTIL_MetresToGoldSrcUnits(10.0f));
+		float DistFromHive = vDist2DSq(NearestHive->Location, Requestor->v.origin);
+
+		if (NearestHive && DistFromHive < DesiredDistance)
+		{
+			AvHAIMarineBase* ExistingBase = nullptr;
+				
+			for (auto it = pBot->Bases.begin(); it != pBot->Bases.end(); it++)
+			{
+				if (!it->bIsActive || !it->bRecycleBase) { continue; }
+
+				if (NearestHive->Status != HIVE_STATUS_UNBUILT)
+				{
+					if (it->BaseType == MARINE_BASE_SIEGE && vEquals2D(it->SiegeTarget, NearestHive->Location))
+					{
+						if (!it->bBaseInitialised)
+						{
+							BaseToDeployIn = &(*it);
+							BaseToDeployIn->BaseLocation = Requestor->v.origin;
+							break;
+						}
+					}
+				}
+				else
+				{
+					if (it->BaseType == MARINE_BASE_OUTPOST && vDist2DSq(it->BaseLocation, NearestHive->FloorLocation) < UTIL_MetresToGoldSrcUnits(15.0f))
+					{
+						if (!it->bBaseInitialised)
+						{
+							BaseToDeployIn = &(*it);
+							break;
+						}
+					}
+				}
+
+			}
+
+			if (!BaseToDeployIn && NearestHive)
+			{
+				MarineBaseType NewBaseType = (NearestHive->Status != HIVE_STATUS_UNBUILT) ? MARINE_BASE_SIEGE : MARINE_BASE_OUTPOST;
+
+				BaseToDeployIn = AICOMM_AddNewBase(pBot, Requestor->v.origin, NewBaseType);
+			}
+		}
+		else
+		{
+			BaseToDeployIn = AICOMM_AddNewBase(pBot, Requestor->v.origin, MARINE_BASE_GUARDPOST);
+		}
+
+
+	}
+
 	if (!vIsZero(ProjectedDeployLocation))
 	{
 		if (NextRequest->RequestType == BUILD_INFANTRYPORTAL)
@@ -3195,9 +3277,20 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 			}
 		}
 
-		AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, ProjectedDeployLocation, STRUCTURE_PURPOSE_GENERAL, true);
+		bool bSuccess = false;
 
-		if (DeployedStructure)
+		if (BaseToDeployIn)
+		{
+			bSuccess = AICOMM_AddStructureToBase(pBot, StructureToDeploy, ProjectedDeployLocation, BaseToDeployIn);
+		}
+		else
+		{
+			AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, ProjectedDeployLocation, STRUCTURE_PURPOSE_GENERAL, true);
+
+			bSuccess = DeployedStructure != nullptr;
+		}
+		
+		if (bSuccess)
 		{
 			NextRequest->bResponded = true;
 			return true;
@@ -3208,9 +3301,21 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (!vIsZero(DeployLocation))
 	{
-		AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_GENERAL);
+		bool bSuccess = false;
 
-		if (DeployedStructure)
+		if (BaseToDeployIn)
+		{
+			bSuccess = AICOMM_AddStructureToBase(pBot, StructureToDeploy, DeployLocation, BaseToDeployIn);
+		}
+		else
+		{
+			AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_GENERAL, true);
+
+			bSuccess = DeployedStructure != nullptr;
+		}
+
+
+		if (bSuccess)
 		{
 			NextRequest->bResponded = true;
 			return true;
@@ -3221,9 +3326,21 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (!vIsZero(DeployLocation))
 	{
-		AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_GENERAL);
+		bool bSuccess = false;
 
-		if (DeployedStructure)
+		if (BaseToDeployIn)
+		{
+			bSuccess = AICOMM_AddStructureToBase(pBot, StructureToDeploy, DeployLocation, BaseToDeployIn);
+		}
+		else
+		{
+			AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, DeployLocation, STRUCTURE_PURPOSE_GENERAL, true);
+
+			bSuccess = DeployedStructure != nullptr;
+		}
+
+
+		if (bSuccess)
 		{
 			NextRequest->bResponded = true;
 			return true;
@@ -3744,6 +3861,8 @@ void AICOMM_UpdateGuardpostStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base)
 		}
 	}
 	
+	Base->bRecycleBase = false;
+	Base->bIsActive = true;
 	
 	// Check how far we are into building this outpost. If we have a TF and at least 3 sentries then we can consider it "established"
 	// even if it isn't finished yet
@@ -4040,7 +4159,11 @@ void AICOMM_DeployBases(AvHAIPlayer* pBot)
 
 				if (!AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStuffFilter))
 				{
-					AICOMM_AddNewBase(pBot, ThisHive->FloorLocation, MARINE_BASE_OUTPOST);
+					Vector ProjectedPoint = UTIL_ProjectPointToNavmesh(ThisHive->FloorLocation, Vector(500.0f, 500.0f, 500.0f), GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+					if (!vIsZero(ProjectedPoint))
+					{
+						AICOMM_AddNewBase(pBot, ProjectedPoint, MARINE_BASE_OUTPOST);
+					}
 				}
 			}
 		}
@@ -4090,7 +4213,12 @@ void AICOMM_DeployBases(AvHAIPlayer* pBot)
 
 							if (!AITAC_DeployableExistsAtLocation(ThisPlayer->pev->origin, &EnemyStuffFilter))
 							{
-								AICOMM_AddNewBase(pBot, ThisPlayer->pev->origin, MARINE_BASE_SIEGE);
+								// Make sure that our siege guy is somewhere we can build
+								Vector ProjectedPoint = UTIL_ProjectPointToNavmesh(ThisPlayer->pev->origin, Vector(100.0f, 100.0f, 100.0f), GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+								if (!vIsZero(ProjectedPoint))
+								{
+									AICOMM_AddNewBase(pBot, ProjectedPoint, MARINE_BASE_SIEGE);
+								}								
 							}
 						}
 					}
@@ -4162,7 +4290,6 @@ bool AICOMM_GetRelocationMessage(Vector RelocationPoint, char* MessageBuffer)
 		sprintf(MessageBuffer, "Get ready to relocate");
 		return true;
 	}
-	
 
 	int MsgIndex = irandrange(0, 2);
 
@@ -4829,6 +4956,8 @@ bool AICOMM_BuildOutBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 			return AICOMM_BuildOutOutpost(pBot, BaseToBuildOut);
 		case MARINE_BASE_MAINBASE:
 			return AICOMM_BuildOutMainBase(pBot, BaseToBuildOut);
+		case MARINE_BASE_GUARDPOST:
+			return AICOMM_BuildOutGuardPost(pBot, BaseToBuildOut);
 		default:
 			return false;
 	}
