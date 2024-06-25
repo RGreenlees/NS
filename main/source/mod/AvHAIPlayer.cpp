@@ -8893,4 +8893,5 @@ void OnBotTeleport(AvHAIPlayer* pBot)
 {
 	ClearBotStuck(pBot);
 	ClearBotStuckMovement(pBot);
+	pBot->BotNavInfo.LastOpenLocation = ZERO_VECTOR;
 }
