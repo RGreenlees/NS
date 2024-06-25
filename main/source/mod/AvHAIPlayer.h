@@ -159,6 +159,8 @@ void AIPlayerHearEnemy(AvHAIPlayer* pBot, edict_t* HeardEnemy, float SoundVolume
 
 int BotGetNextEnemyTarget(AvHAIPlayer* pBot);
 
+void OnBotTeleport(AvHAIPlayer* pBot);
+
 AvHMessageID AlienGetDesiredUpgrade(AvHAIPlayer* pBot, HiveTechStatus DesiredTech);
 
 AvHAICombatStrategy GetBotCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_status* CurrentEnemy);

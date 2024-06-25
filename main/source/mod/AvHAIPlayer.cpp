@@ -1714,7 +1714,14 @@ void StartNewBotFrame(AvHAIPlayer* pBot)
 	ClearBotInputs(pBot);
 	pBot->CurrentEyePosition = GetPlayerEyePosition(pEdict);
 
-	pBot->CurrentFloorPosition = UTIL_GetEntityGroundLocation(pEdict);
+	Vector NewFloorPosition = UTIL_GetEntityGroundLocation(pEdict);
+
+	if (vDist2DSq(NewFloorPosition, pBot->CurrentFloorPosition) > sqrf(UTIL_MetresToGoldSrcUnits(3.0f)))
+	{
+		OnBotTeleport(pBot);
+	}
+
+	pBot->CurrentFloorPosition = NewFloorPosition;
 
 	if (vDist3DSq(pBot->BotNavInfo.LastNavMeshCheckPosition, pBot->CurrentFloorPosition) > sqrf(16.0f))
 	{
@@ -1887,23 +1894,7 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	if (!IsPlayerAlien(pBot->Edict)) { return; }
-
-	int Enemy = BotGetNextEnemyTarget(pBot);
-
-	if (Enemy > -1)
-	{
-		AlienCombatThink(pBot);
-	}
-	else
-	{
-		edict_t* CommChair = AITAC_GetCommChair(AIMGR_GetEnemyTeam(pBot->Player->GetTeam()));
-
-		if (!FNullEnt(CommChair))
-		{
-			MoveTo(pBot, CommChair->v.origin, MOVESTYLE_NORMAL);
-		}
-	}
+	MoveTo(pBot, UTIL_GetFloorUnderEntity(INDEXENT(1)), MOVESTYLE_NORMAL);
 
 }
 
@@ -8896,4 +8887,10 @@ void DEBUG_PrintBotDebugInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot)
 
 	DEBUG_PrintTaskInfo(OutputPlayer, pBot);
 	DEBUG_PrintCombatInfo(OutputPlayer, pBot);
+}
+
+void OnBotTeleport(AvHAIPlayer* pBot)
+{
+	ClearBotStuck(pBot);
+	ClearBotStuckMovement(pBot);
 }
