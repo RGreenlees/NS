@@ -644,6 +644,10 @@ void AIMGR_UpdateAIPlayers()
 
 		BotUpdateViewRotation(bot, FrameDelta);
 
+		// Need to reset this since impulses generally should only be called once at a time, so this
+		// prevents it from being called on consecutive frames if this bot isn't running its think routine every frame
+		bot->Impulse = 0;
+
 		if (bHasRoundStarted)
 		{
 			if (IsPlayerCommander(bot->Edict))

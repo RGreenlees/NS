@@ -3772,7 +3772,16 @@ void BlockedMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoi
 
 		if (vIsZero(vForward))
 		{
-			vForward = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
+			if (pBot->BotNavInfo.CurrentPathPoint < pBot->BotNavInfo.CurrentPath.size() - 1)
+			{
+				bot_path_node NextPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint + 1];
+
+				vForward = UTIL_GetVectorNormal2D(NextPathNode.Location - pBot->Edict->v.origin);
+			}
+			else
+			{
+				vForward = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
+			}
 		}
 	}
 
@@ -6830,7 +6839,8 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 			bool bSucceeded = NAV_GenerateNewBasePath(pBot, Destination, MoveStyle, MaxAcceptableDist);
 
 			if (!bSucceeded)
-			{				
+			{
+				const char* botName = STRING(pBot->Edict->v.netname);
 				pBot->BotNavInfo.StuckInfo.bPathFollowFailed = true;
 
 				if (!UTIL_PointIsOnNavmesh(pBot->CollisionHullBottomLocation, pBot->BotNavInfo.NavProfile))
@@ -6839,7 +6849,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 					{
 						MoveDirectlyTo(pBot, BotNavInfo->LastNavMeshPosition);
 
-						if (vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->LastNavMeshPosition) < sqrf(8.0f))
+						if (vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->LastNavMeshPosition) < 1.0f)
 						{
 							BotNavInfo->LastNavMeshPosition = g_vecZero;
 						}
@@ -6848,7 +6858,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 					}
 					else
 					{
-						if (!vIsZero(BotNavInfo->UnstuckMoveLocation) && vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->UnstuckMoveLocation) < sqrf(8.0f))
+						if (!vIsZero(BotNavInfo->UnstuckMoveLocation) && vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->UnstuckMoveLocation) < 1.0f)
 						{
 							BotNavInfo->UnstuckMoveLocation = ZERO_VECTOR;
 						}
@@ -6867,7 +6877,27 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 				}
 				else
 				{
-					MoveDirectlyTo(pBot, Destination);
+					if (!vIsZero(BotNavInfo->UnstuckMoveLocation) && vDist2DSq(pBot->CurrentFloorPosition, BotNavInfo->UnstuckMoveLocation) < 1.0f)
+					{
+						BotNavInfo->UnstuckMoveLocation = ZERO_VECTOR;
+					}
+
+					if (vIsZero(BotNavInfo->UnstuckMoveLocation))
+					{
+						BotNavInfo->UnstuckMoveLocation = FindClosestPointBackOnPath(pBot, Destination);
+					}
+
+					if (!vIsZero(BotNavInfo->UnstuckMoveLocation))
+					{
+						MoveDirectlyTo(pBot, BotNavInfo->UnstuckMoveLocation);
+						return false;
+					}
+					else
+					{
+						MoveDirectlyTo(pBot, Destination);
+					}
+
+
 					return false;
 				}
 

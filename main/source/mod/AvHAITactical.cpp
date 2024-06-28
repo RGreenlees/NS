@@ -1146,6 +1146,11 @@ void AITAC_PopulateHiveData()
 
 void AITAC_RefreshHiveData()
 {
+	if (ResourceNodes.size() == 0)
+	{
+		AITAC_PopulateResourceNodes();
+	}
+
 	if (Hives.size() == 0)
 	{
 		AITAC_PopulateHiveData();
@@ -4827,7 +4832,7 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 		HiveCost += BALANCE_VAR(kGorgeCost);
 	}
 
-	if (pBot->Player->GetResources() < HiveCost) { return false; }
+	if (pBot->Player->GetResources() < HiveCost - 10) { return false; }
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);

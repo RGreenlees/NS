@@ -4215,7 +4215,7 @@ void AICOMM_DeployBases(AvHAIPlayer* pBot)
 							{
 								// Make sure that our siege guy is somewhere we can build
 								Vector ProjectedPoint = UTIL_ProjectPointToNavmesh(ThisPlayer->pev->origin, Vector(100.0f, 100.0f, 100.0f), GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
-								if (!vIsZero(ProjectedPoint))
+								if (!vIsZero(ProjectedPoint) && vDist2DSq(ProjectedPoint, ThisHive->Location) < sqrf(BALANCE_VAR(kSiegeTurretRange)))
 								{
 									AICOMM_AddNewBase(pBot, ProjectedPoint, MARINE_BASE_SIEGE);
 								}								
@@ -4982,6 +4982,8 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	int NumTurrets = 0;
 	int NumIncomplete = 0;
 
+	vector<Vector> TurretLocations;
+
 	int DesiredInfPortals = (int)ceilf((float)AIMGR_GetNumPlayersOnTeam(BotTeam) / 4.0f);
 
 	for (auto it = BaseToBuildOut->PlacedStructures.begin(); it != BaseToBuildOut->PlacedStructures.end(); it++)
@@ -5056,6 +5058,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 		break;
 		case STRUCTURE_MARINE_TURRET:
 			NumTurrets++;
+			TurretLocations.push_back(StructureRef.Location);
 			break;
 		default:
 			break;
@@ -5207,6 +5210,30 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 			bool bSuccess = AICOMM_AddStructureToBase(pBot, STRUCTURE_MARINE_TURRETFACTORY, BuildLocation, BaseToBuildOut);
 
 			if (bSuccess) { return true; }
+		}
+
+		if (NumTurrets > 0)
+		{
+			Vector Centroid = ZERO_VECTOR;
+
+			for (auto tLocs = TurretLocations.begin(); tLocs != TurretLocations.end(); tLocs++)
+			{
+				Centroid = Centroid + *tLocs;
+			}
+
+			Centroid = Centroid / TurretLocations.size();
+
+			if (!vIsZero(Centroid))
+			{
+				Vector CentroidBuildLocation = UTIL_ProjectPointToNavmesh(Centroid, GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+
+				if (!vIsZero(CentroidBuildLocation))
+				{
+					bool bSuccess = AICOMM_AddStructureToBase(pBot, STRUCTURE_MARINE_TURRETFACTORY, CentroidBuildLocation, BaseToBuildOut);
+
+					if (bSuccess) { return true; }
+				}
+			}
 		}
 
 		int NumAttempts = 0;
@@ -5475,6 +5502,8 @@ bool AICOMM_BuildOutOutpost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	int NumTurrets = 0;
 	int NumIncomplete = 0;
 
+	vector<Vector> TurretLocations;
+
 	for (auto it = BaseToBuildOut->PlacedStructures.begin(); it != BaseToBuildOut->PlacedStructures.end(); it++)
 	{
 		AvHAIBuildableStructure StructureRef = AITAC_GetDeployableStructureByEntIndex(BaseToBuildOut->BaseTeam, *it);
@@ -5499,6 +5528,7 @@ bool AICOMM_BuildOutOutpost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 				break;
 			case STRUCTURE_MARINE_TURRET:
 				NumTurrets++;
+				TurretLocations.push_back(StructureRef.Location);
 				break;
 			default:
 				break;
@@ -5584,6 +5614,33 @@ bool AICOMM_BuildOutOutpost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 		if (bSuccess) { return true; }
 	}
 
+	if (StructureToDeploy == STRUCTURE_MARINE_TURRETFACTORY)
+	{
+		if (NumTurrets > 0)
+		{
+			Vector Centroid = ZERO_VECTOR;
+
+			for (auto tLocs = TurretLocations.begin(); tLocs != TurretLocations.end(); tLocs++)
+			{
+				Centroid = Centroid + *tLocs;
+			}
+
+			Centroid = Centroid / TurretLocations.size();
+
+			if (!vIsZero(Centroid))
+			{
+				Vector CentroidBuildLocation = UTIL_ProjectPointToNavmesh(Centroid, GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+
+				if (!vIsZero(CentroidBuildLocation))
+				{
+					bool bSuccess = AICOMM_AddStructureToBase(pBot, StructureToDeploy, CentroidBuildLocation, BaseToBuildOut);
+
+					if (bSuccess) { return true; }
+				}
+			}
+		}
+	}
+
 	int NumAttempts = 0;
 
 	while (NumAttempts < 5)
@@ -5624,6 +5681,8 @@ bool AICOMM_BuildOutSiege(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	int NumTurrets = 0;
 	int NumIncomplete = 0;
 
+	vector<Vector> TurretLocations;
+
 	for (auto it = BaseToBuildOut->PlacedStructures.begin(); it != BaseToBuildOut->PlacedStructures.end(); it++)
 	{
 		AvHAIBuildableStructure StructureRef = AITAC_GetDeployableStructureByEntIndex(BaseToBuildOut->BaseTeam, *it);
@@ -5651,6 +5710,7 @@ bool AICOMM_BuildOutSiege(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 			break;
 		case STRUCTURE_MARINE_SIEGETURRET:
 			NumTurrets++;
+			TurretLocations.push_back(StructureRef.Location);
 			break;
 		default:
 			break;
@@ -5709,6 +5769,30 @@ bool AICOMM_BuildOutSiege(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 		}
 
 		int NumAttempts = 0;
+
+		if (NumTurrets > 0)
+		{
+			Vector Centroid = ZERO_VECTOR;
+
+			for (auto tLocs = TurretLocations.begin(); tLocs != TurretLocations.end(); tLocs++)
+			{
+				Centroid = Centroid + *tLocs;
+			}
+
+			Centroid = Centroid / TurretLocations.size();
+
+			if (!vIsZero(Centroid))
+			{
+				Vector BuildLocation = UTIL_ProjectPointToNavmesh(Centroid, GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+
+				if (!vIsZero(BuildLocation))
+				{
+					bool bSuccess = AICOMM_AddStructureToBase(pBot, StructureToDeploy, BuildLocation, BaseToBuildOut);
+
+					if (bSuccess) { return true; }
+				}
+			}			
+		}
 
 		while (NumAttempts < 5)
 		{
@@ -5820,6 +5904,8 @@ bool AICOMM_BuildOutGuardPost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut
 	int NumTurrets = 0;
 	int NumIncomplete = 0;
 
+	vector<Vector> TurretLocations;
+
 	for (auto it = BaseToBuildOut->PlacedStructures.begin(); it != BaseToBuildOut->PlacedStructures.end(); it++)
 	{
 		AvHAIBuildableStructure StructureRef = AITAC_GetDeployableStructureByEntIndex(BaseToBuildOut->BaseTeam, *it);
@@ -5839,6 +5925,7 @@ bool AICOMM_BuildOutGuardPost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut
 		else if (StructureRef.StructureType == STRUCTURE_MARINE_TURRET)
 		{
 			NumTurrets++;
+			TurretLocations.push_back(StructureRef.Location);
 		}
 		else if (StructureRef.StructureType == STRUCTURE_MARINE_OBSERVATORY)
 		{
@@ -5919,6 +6006,33 @@ bool AICOMM_BuildOutGuardPost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut
 		if (bSuccess) { return true; }
 	}
 
+	if (StructureToDeploy == STRUCTURE_MARINE_TURRETFACTORY)
+	{
+		if (NumTurrets > 0)
+		{
+			Vector Centroid = ZERO_VECTOR;
+
+			for (auto tLocs = TurretLocations.begin(); tLocs != TurretLocations.end(); tLocs++)
+			{
+				Centroid = Centroid + *tLocs;
+			}
+
+			Centroid = Centroid / TurretLocations.size();
+
+			if (!vIsZero(Centroid))
+			{
+				Vector CentroidBuildLocation = UTIL_ProjectPointToNavmesh(Centroid, GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE));
+
+				if (!vIsZero(CentroidBuildLocation))
+				{
+					bool bSuccess = AICOMM_AddStructureToBase(pBot, StructureToDeploy, CentroidBuildLocation, BaseToBuildOut);
+
+					if (bSuccess) { return true; }
+				}
+			}
+		}
+	}
+
 	int NumAttempts = 0;
 
 	while (NumAttempts < 5)
@@ -5953,7 +6067,7 @@ AvHAIMarineBase* AICOMM_AddNewBase(AvHAIPlayer* pBot, Vector NewBaseLocation, Ma
 
 bool AICOMM_AddStructureToBase(AvHAIPlayer* pBot, AvHAIDeployableStructureType StructureToDeploy, Vector BuildLocation, AvHAIMarineBase* BaseToAdd)
 {
-	if (vIsZero(BuildLocation)) { return false; }
+	if (!BaseToAdd || vIsZero(BuildLocation)) { return false; }
 
 	AvHAIBuildableStructure* DeployedStructure = AICOMM_DeployStructure(pBot, StructureToDeploy, BuildLocation);
 
@@ -5961,6 +6075,18 @@ bool AICOMM_AddStructureToBase(AvHAIPlayer* pBot, AvHAIDeployableStructureType S
 	{
 		BaseToAdd->PlacedStructures.push_back(DeployedStructure->EntIndex);
 		BaseToAdd->bBaseInitialised = true;
+		if (BaseToAdd->BaseType == MARINE_BASE_MAINBASE)
+		{
+			DeployedStructure->Purpose = STRUCTURE_PURPOSE_BASE;
+		}
+		else if (BaseToAdd->BaseType == MARINE_BASE_SIEGE)
+		{
+			DeployedStructure->Purpose = STRUCTURE_PURPOSE_SIEGE;
+		}
+		else
+		{
+			DeployedStructure->Purpose = STRUCTURE_PURPOSE_FORTIFY;
+		}
 		return true;
 	}
 
