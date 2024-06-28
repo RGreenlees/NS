@@ -1006,9 +1006,7 @@ bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 	AvHAIHiveDefinition* HiveToSecure = AITAC_GetHiveFromEdict(Task->TaskTarget);
 
 	if (!HiveToSecure || HiveToSecure->Status != HIVE_STATUS_UNBUILT) { return false; }
-
 	
-
 	// A marine bot will consider their "secure hive" task completed if the following structures have been fully built:
 	// Phase gate (only if tech available)
 	// Turret factory (regular or advanced)
@@ -1380,6 +1378,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We had a go, whether it succeeded or not we should try a new location
 	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_FAILED || Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_SUCCESS)
 	{
+		pBot->Impulse = 0;
 		Task->TaskStartedTime = gpGlobals->time;
 		Task->TaskLocation = ZERO_VECTOR;
 		Task->ActiveBuildInfo.BuildStatus = BUILD_ATTEMPT_NONE;
@@ -1817,7 +1816,7 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 			AvHTurret* TurretRef = dynamic_cast<AvHTurret*>(CBaseEntity::Instance(Task->TaskTarget));
 
-			if (TurretRef && TurretRef->GetIsValidTarget(pBot->Player))
+			if (TurretRef && TurretRef->GetIsValidTarget(pBot->Player) && !vIsZero(GetVisiblePointOnPlayerFromObserver(Task->TaskTarget, pBot->Edict)))
 			{
 				if (vIsZero(pBot->LastSafeLocation))
 				{
@@ -1825,6 +1824,7 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				}
 
 				MoveTo(pBot, pBot->LastSafeLocation, MOVESTYLE_NORMAL);
+				BotLookAt(pBot, Task->TaskTarget);
 			}
 
 			return;
@@ -2908,7 +2908,6 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	StructureFilter.ReachabilityTeam = BotTeam;
 	StructureFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 	StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
-	StructureFilter.PurposeFlags = STRUCTURE_PURPOSE_FORTIFY;
 
 	vector<AvHAIBuildableStructure> BuildableStructures = AITAC_FindAllDeployables(Hive->FloorLocation, &StructureFilter);
 
@@ -2988,10 +2987,10 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	{
 		DeployableSearchFilter EnemyStructures;
 		EnemyStructures.DeployableTypes = SEARCH_ALL_STRUCTURES;
-		EnemyStructures.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 		EnemyStructures.DeployableTeam = EnemyTeam;
 		EnemyStructures.ReachabilityTeam = BotTeam;
 		EnemyStructures.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
+		EnemyStructures.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 
 		AvHAIBuildableStructure EnemyStructure = AITAC_FindClosestDeployableToLocation(Hive->FloorLocation, &EnemyStructures);
 
@@ -3113,8 +3112,6 @@ void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		BotGuardLocation(pBot, Task->TaskLocation);
 	}
-
-
 }
 
 void BotProgressAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -3809,7 +3806,13 @@ void AITASK_SetMoveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, const Vector L
 
 void AITASK_SetBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, const AvHAIDeployableStructureType StructureType, const Vector Location, const bool bIsUrgent)
 {
-	if (Task->TaskType == TASK_BUILD && Task->StructureType == StructureType && vDist2DSq(Task->TaskLocation, Location) < sqrf(UTIL_MetresToGoldSrcUnits(5.0f))) { return; }
+	if (Task->TaskType == TASK_BUILD && Task->StructureType == StructureType && vDist2DSq(Task->TaskLocation, Location) < sqrf(UTIL_MetresToGoldSrcUnits(1.0f)))
+	{
+		Task->bTaskIsUrgent = bIsUrgent;
+		return;
+	}
+
+	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return; }
 	
 	AITASK_ClearBotTask(pBot, Task);
 
@@ -4027,6 +4030,8 @@ void AITASK_SetReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, 
 		Task->bTaskIsUrgent = bIsUrgent;
 		return;
 	}
+
+	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return; }
 
 	AITASK_ClearBotTask(pBot, Task);
 

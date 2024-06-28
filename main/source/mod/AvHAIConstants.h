@@ -768,6 +768,8 @@ typedef struct AVH_AI_PLAYER
 
 	float LastRequestTime = 0.0f; // When bot last used a voice line to request something. Prevents spam
 
+	float LastTeleportTime = 0.0f; // Last time the bot teleported somewhere
+
 	Vector DesiredLookDirection = g_vecZero; // What view angle is the bot currently turning towards
 	Vector InterpolatedLookDirection = g_vecZero; // Used to smoothly interpolate the bot's view rather than snap instantly like an aimbot
 	edict_t* LookTarget = nullptr; // Used to work out what view angle is needed to look at the desired entity

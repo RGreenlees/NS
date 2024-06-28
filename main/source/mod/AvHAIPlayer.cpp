@@ -1433,6 +1433,20 @@ void BotUpdateView(AvHAIPlayer* pBot)
 			}
 		}
 
+		// Detect if a player has teleported away. Basically, if the player has moved significantly far away from where they were last detected in a very short space of time
+		// then they've teleported and we should clear their tracking info. This should work for phase gates, but also any trigger_teleport in the map (e.g. co_daimos phase gates)
+		if (!vIsZero(TrackingInfo->LastDetectedLocation) && gpGlobals->time - TrackingInfo->LastDetectedTime < 1.0f)
+		{
+			if (vDist2DSq(PlayerEdict->v.origin, TrackingInfo->LastDetectedLocation) > sqrf(UTIL_MetresToGoldSrcUnits(5.0f)))
+			{
+				if (!UTIL_PlayerHasLOSToEntity(pBot->Edict, PlayerEdict, UTIL_MetresToGoldSrcUnits(20.0f), false))
+				{
+					BotClearEnemyTrackingInfo(TrackingInfo);
+					continue;
+				}
+			}
+		}
+
 		Vector VisiblePoint = GetVisiblePointOnPlayerFromObserver(pBot->Edict, PlayerEdict);
 		TrackingInfo->VisiblePointOnPlayer = VisiblePoint;
 
@@ -1518,7 +1532,7 @@ void BotUpdateView(AvHAIPlayer* pBot)
 		AvHAIBuildableStructure ThisTurret = (*it);
 		AvHTurret* TurretRef = dynamic_cast<AvHTurret*>(ThisTurret.EntityRef);
 
-		if (TurretRef && TurretRef->GetIsValidTarget(pBot->Player))
+		if (TurretRef && TurretRef->GetIsValidTarget(pBot->Player) && !vIsZero(GetVisiblePointOnPlayerFromObserver(ThisTurret.edict, pBot->Edict)))
 		{
 			bIsInRangeOfEnemyTurret = true;
 			pBot->DangerTurrets.push_back(ThisTurret);
@@ -1723,11 +1737,17 @@ void StartNewBotFrame(AvHAIPlayer* pBot)
 
 	pBot->CurrentFloorPosition = NewFloorPosition;
 
-	if (vDist3DSq(pBot->BotNavInfo.LastNavMeshCheckPosition, pBot->CurrentFloorPosition) > sqrf(16.0f))
+	Vector ProjectPoint = (IsPlayerLerk(pBot->Edict)) ? pBot->CurrentFloorPosition : pBot->CollisionHullBottomLocation;
+
+	if (vDist3DSq(pBot->BotNavInfo.LastNavMeshCheckPosition, ProjectPoint) > sqrf(16.0f))
 	{
-		if (UTIL_PointIsReachable(pBot->BotNavInfo.NavProfile, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), pBot->CurrentFloorPosition, 16.0f))
-		{
-			pBot->BotNavInfo.LastNavMeshPosition = pBot->CurrentFloorPosition;
+		if (UTIL_PointIsReachable(pBot->BotNavInfo.NavProfile, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), ProjectPoint, 16.0f))
+		{			
+			Vector NavPoint = UTIL_ProjectPointToNavmesh(ProjectPoint);
+			UTIL_AdjustPointAwayFromNavWall(NavPoint, 8.0f);
+
+			pBot->BotNavInfo.LastNavMeshPosition = NavPoint;
+			
 
 			if (pBot->BotNavInfo.IsOnGround || IsPlayerLerk(pBot->Edict))
 			{
@@ -1894,7 +1914,24 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	MoveTo(pBot, UTIL_GetFloorUnderEntity(INDEXENT(1)), MOVESTYLE_NORMAL);
+	pBot->CurrentTask = &pBot->PrimaryBotTask;
+
+	AITASK_BotUpdateAndClearTasks(pBot);
+
+	if (pBot->CurrentTask->TaskType != TASK_ATTACK)
+	{
+		DeployableSearchFilter EnemyOCFilter;
+		EnemyOCFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+
+		AvHAIBuildableStructure NearestOC = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyOCFilter);
+
+		if (NearestOC.IsValid())
+		{
+			AITASK_SetAttackTask(pBot, pBot->CurrentTask, NearestOC.edict, false);
+		}
+	}
+
+	BotProgressTask(pBot, pBot->CurrentTask);
 
 }
 
@@ -4305,6 +4342,7 @@ void AIPlayerSetSecondaryMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			if (FNullEnt(NearestDangerTurret.edict) || ThisDist < MinDist)
 			{
 				NearestDangerTurret = (*it);
+				MinDist = ThisDist;
 			}
 		}
 
@@ -4614,6 +4652,9 @@ void AIPlayerNSAlienThink(AvHAIPlayer* pBot)
 	{
 		if (AlienCombatThink(pBot)) { return; }
 	}
+
+	// We've JUST tried placing a structure. Wait until we get confirmation of the structure being placed before doing anything else
+	if (pBot->CurrentTask && pBot->CurrentTask->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return; }
 
 	bool bPlayerMustFinishPrimaryTask = AIPlayerMustFinishCurrentTask(pBot, &pBot->PrimaryBotTask);
 
@@ -7124,6 +7165,7 @@ void AIPlayerSetSecondaryAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			if (FNullEnt(NearestDangerTurret.edict) || ThisDist < MinDist)
 			{
 				NearestDangerTurret = (*it);
+				MinDist = ThisDist;
 			}
 		}
 
@@ -7521,7 +7563,10 @@ void AIPlayerSetWantsAndNeedsAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			bInMiddleOfMove = CurrentMove.flag != SAMPLE_POLYFLAGS_WALK;
 		}
 
-		if (!bInMiddleOfMove)
+		// Don't get upgrades if we're not in our regular desired life form, e.g. we've temporarily gone gorge to drop a res tower
+		bool bTempEvolved = (pBot->BotRole == BOT_ROLE_BUILDER && !IsPlayerGorge(pBot->Edict)) || (pBot->BotRole != BOT_ROLE_BUILDER && IsPlayerGorge(pBot->Edict));
+
+		if (!bInMiddleOfMove && !bTempEvolved)
 		{
 			if (!PlayerHasAlienUpgradeOfType(pBot->Edict, HIVE_TECH_DEFENCE) && AITAC_IsAlienUpgradeAvailableForTeam(pBot->Player->GetTeam(), HIVE_TECH_DEFENCE))
 			{
@@ -8894,4 +8939,5 @@ void OnBotTeleport(AvHAIPlayer* pBot)
 	ClearBotStuck(pBot);
 	ClearBotStuckMovement(pBot);
 	pBot->BotNavInfo.LastOpenLocation = ZERO_VECTOR;
+	pBot->LastTeleportTime = gpGlobals->time;
 }
