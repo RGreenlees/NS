@@ -2386,24 +2386,27 @@ bool HasBotReachedPathPoint(const AvHAIPlayer* pBot)
 	bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
 
 	SamplePolyFlags CurrentNavFlag = (SamplePolyFlags)CurrentPathNode.flag;
+	SamplePolyAreas CurrentNavArea = (SamplePolyAreas)CurrentPathNode.area;
 	Vector MoveFrom = CurrentPathNode.FromLocation;
 	Vector MoveTo = CurrentPathNode.Location;
 	float RequiredClimbHeight = CurrentPathNode.requiredZ;
 
 	Vector NextMoveLocation = ZERO_VECTOR;
 	SamplePolyFlags NextMoveFlag = SAMPLE_POLYFLAGS_DISABLED;
+	SamplePolyAreas NextMoveArea = SAMPLE_POLYAREA_GROUND;
 
 	if ((pBot->BotNavInfo.CurrentPathPoint + 1) < pBot->BotNavInfo.CurrentPath.size())
 	{
 		bot_path_node NextPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint + 1];
 		NextMoveLocation = NextPathNode.Location;
 		NextMoveFlag = (SamplePolyFlags)NextPathNode.flag;
+		NextMoveArea = (SamplePolyAreas)NextPathNode.area;
 	}
 
 	switch (CurrentNavFlag)
 	{		
 		case SAMPLE_POLYFLAGS_WALK:
-			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
 		case SAMPLE_POLYFLAGS_WELD:
 		case SAMPLE_POLYFLAGS_DOOR:
 		case SAMPLE_POLYFLAGS_TEAM1STRUCTURE:
@@ -2425,17 +2428,17 @@ bool HasBotReachedPathPoint(const AvHAIPlayer* pBot)
 		case SAMPLE_POLYFLAGS_LIFT:
 			return HasBotCompletedLiftMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
 		default:
-			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
 	}
 
-	return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+	return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
 }
 
-bool HasBotCompletedWalkMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
+bool HasBotCompletedWalkMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, SamplePolyAreas MoveArea, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag, SamplePolyAreas NextMoveArea)
 {
 	bool bNextPointReachable = false;
 
-	if (NextMoveFlag != SAMPLE_POLYFLAGS_DISABLED)
+	if (NextMoveFlag != SAMPLE_POLYFLAGS_DISABLED && MoveArea == NextMoveArea)
 	{
 		bNextPointReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, NextMoveDestination, GetPlayerRadius(pBot->Edict));
 	}
@@ -3571,6 +3574,8 @@ void GroundMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 	Vector vForward = UTIL_GetVectorNormal2D(EndPoint - CurrentPos);
 
+	bool bShouldCrouch = false;
+
 	// If we are over our current path point and can't get to it, try walking towards the next path point if we have one, or just directly forwards
 	if (vIsZero(vForward))
 	{
@@ -3584,6 +3589,31 @@ void GroundMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 		{
 			vForward = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
 		}
+	}
+
+	if (CanPlayerCrouch(pBot->Edict))
+	{
+		if (CurrentPathNode.area == SAMPLE_POLYAREA_CROUCH)
+		{
+			bShouldCrouch = true;
+		}
+		else
+		{
+			if (pBot->BotNavInfo.CurrentPathPoint < pBot->BotNavInfo.CurrentPath.size() - 1)
+			{
+				bot_path_node NextPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint + 1];
+
+				if (NextPathNode.area == SAMPLE_POLYAREA_CROUCH && vDist2DSq(pBot->Edict->v.origin, NextPathNode.FromLocation) < sqrf(64.0f))
+				{
+					bShouldCrouch = true;
+				}
+			}
+		}
+	}
+
+	if (bShouldCrouch)
+	{
+		pBot->Button |= IN_DUCK;
 	}
 
 	// Same goes for the right vector, might not be the same as the bot's right
@@ -3667,7 +3697,7 @@ void GroundMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 	pBot->desiredMovementDir = UTIL_GetVectorNormal2D(pBot->desiredMovementDir);
 
-	if (CanPlayerCrouch(pEdict))
+	if (!bShouldCrouch && CanPlayerCrouch(pEdict))
 	{
 		Vector HeadLocation = GetPlayerTopOfCollisionHull(pEdict, false);
 
