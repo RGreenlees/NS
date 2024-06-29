@@ -342,7 +342,17 @@ void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<bot_path_node>& path, float 
 			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 128, 128);
 			break;
 		default:
-			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime);
+		{
+			if (it->area == SAMPLE_POLYAREA_CROUCH)
+			{
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 150, 150);
+			}
+			else
+			{
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime);
+			}
+		}
+			
 			break;
 		}
 	}

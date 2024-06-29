@@ -5605,7 +5605,7 @@ bool AICOMM_BuildOutOutpost(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 		return pBot->Player->GetResources() <= 15;
 	}
 
-	Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(StructureToDeploy, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(10.0f));
+	Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(StructureToDeploy, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(15.0f));
 
 	if (!vIsZero(BuildLocation))
 	{
