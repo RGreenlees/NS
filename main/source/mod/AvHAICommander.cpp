@@ -1501,7 +1501,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (!bShouldPrioritiseNodes && pBot->Player->GetResources() >= 20)
 	{
-		NumDesiredWelders = (int)ceilf((float)AIMGR_GetNumPlayersOnTeam(CommanderTeam) * 0.3f);
+		NumDesiredWelders = (int)ceilf((float)(AIMGR_GetNumPlayersOnTeam(CommanderTeam) - 1) * 0.3f);
 	}
 
 	int NumTeamWelders = AITAC_GetNumWeaponsInPlay(CommanderTeam, WEAPON_MARINE_WELDER);
@@ -1539,7 +1539,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 		}
 	}
 
-	NumDesiredWelders = imini(NumDesiredWelders, (int)(ceilf((float)AIMGR_GetNumPlayersOnTeam(CommanderTeam) * 0.5f)));
+	NumDesiredWelders = imini(NumDesiredWelders, (int)(ceilf((float)(AIMGR_GetNumPlayersOnTeam(CommanderTeam) - 1) * 0.5f)));
 
 	if (NumTeamWelders < NumDesiredWelders)
 	{
@@ -1561,9 +1561,15 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 	}
 
 	// Don't drop stuff if we badly need resource nodes
-	if (AICOMM_ShouldCommanderPrioritiseNodes(pBot) && pBot->Player->GetResources() < 20) { return false; }
+	if (AICOMM_ShouldCommanderPrioritiseNodes(pBot) && pBot->Player->GetResources() < 30) { return false; }
 
-	int NumDesiredShotguns = (int)ceilf(AIMGR_GetNumPlayersOnTeam(CommanderTeam) * 0.33f);
+	// Get basic research first
+	if (!AITAC_ResearchIsComplete(CommanderTeam, TECH_RESEARCH_ARMOR_ONE) || !AITAC_ResearchIsComplete(CommanderTeam, TECH_RESEARCH_WEAPONS_ONE)) { return false; }
+
+	// Likewise, don't spend res if we can get phase tech going!
+	if (!AITAC_ResearchIsComplete(CommanderTeam, TECH_RESEARCH_PHASETECH) && AITAC_MarineResearchIsAvailable(CommanderTeam, RESEARCH_PHASETECH)) { return false; }
+
+	int NumDesiredShotguns = (int)ceilf((AIMGR_GetNumPlayersOnTeam(CommanderTeam) - 1) * 0.33f);
 	int NumShottysInPlay = AITAC_GetNumWeaponsInPlay(CommanderTeam, WEAPON_MARINE_SHOTGUN);
 
 	if (NumShottysInPlay < NumDesiredShotguns)
@@ -4746,6 +4752,7 @@ bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
 
 	if (!CurrentMainBase->bIsActive || CurrentMainBase->bRecycleBase) { return true; }
 
+	// If our main base is within 10m of the chair we're sitting in, then we clearly haven't relocated yet
 	bool bMainBaseIsAtChair = vDist2DSq(CurrentCommChair->v.origin, CurrentMainBase->BaseLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f));
 
 	// We're not able to relocate after 90 seconds, best find somewhere else or we're in trouble
@@ -5077,7 +5084,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kCommandStationCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_COMMCHAIR, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(10.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_COMMCHAIR, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -5162,7 +5169,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kArmoryCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_ARMOURY, CommChair.Location, UTIL_MetresToGoldSrcUnits(15.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_ARMOURY, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -5203,7 +5210,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kTurretFactoryCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_TURRETFACTORY, CommChair.Location, UTIL_MetresToGoldSrcUnits(15.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_TURRETFACTORY, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -5315,7 +5322,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kArmsLabCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_ARMSLAB, CommChair.Location, UTIL_MetresToGoldSrcUnits(20.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_ARMSLAB, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -5356,7 +5363,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kObservatoryCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_OBSERVATORY, CommChair.Location, UTIL_MetresToGoldSrcUnits(20.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_OBSERVATORY, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -5399,7 +5406,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kPhaseGateCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_PHASEGATE, CommChair.Location, UTIL_MetresToGoldSrcUnits(20.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_PHASEGATE, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{
@@ -5451,7 +5458,7 @@ bool AICOMM_BuildOutMainBase(AvHAIPlayer* pBot, AvHAIMarineBase* BaseToBuildOut)
 	{
 		if (pBot->Player->GetResources() < BALANCE_VAR(kPrototypeLabCost)) { return true; }
 
-		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_PROTOTYPELAB, CommChair.Location, UTIL_MetresToGoldSrcUnits(20.0f));
+		Vector BuildLocation = AITAC_GetRandomBuildHintInLocation(STRUCTURE_MARINE_PROTOTYPELAB, BaseToBuildOut->BaseLocation, UTIL_MetresToGoldSrcUnits(20.0f));
 
 		if (!vIsZero(BuildLocation))
 		{

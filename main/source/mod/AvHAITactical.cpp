@@ -2938,9 +2938,12 @@ void AITAC_ClearMapAIData(bool bInitialMapLoad)
 
 		AITAC_ClearStructureNavData();
 
-		while (!bTileCacheUpToDate)
+		int NumAttempts = 0;
+
+		while (!bTileCacheUpToDate && NumAttempts < 30)
 		{
 			UTIL_UpdateTileCache();
+			NumAttempts++;
 		}
 	}
 	else

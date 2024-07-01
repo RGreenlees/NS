@@ -996,6 +996,13 @@ Vector UTIL_GetNearestSurfaceNormal(Vector SearchLocation)
 		return ClosestNormal;
 }
 
+bool UTIL_QuickCollisionTrace(Vector StartTrace, Vector EndTrace)
+{
+	trace_t TraceResult;
+	NS_TraceLine(StartTrace, EndTrace, 0, PM_WORLD_ONLY, -1, true, TraceResult);
+	return TraceResult.fraction >= 1.0f;
+}
+
 Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder)
 {
 	if (FNullEnt(Ladder)) { return ZERO_VECTOR; }
