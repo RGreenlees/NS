@@ -6138,16 +6138,22 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	{
 		if (Task->TaskType == TASK_BUILD && Task->StructureType == MissingStructure) { return; }
 
+		int MaxChambersInOnePlace = (MissingStructure == STRUCTURE_ALIEN_DEFENCECHAMBER) ? 3 : 1;
+
 		vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
+		vector<AvHAIResourceNode*> AllNodes = AITAC_GetAllResourceNodes();
 		
 		DeployableSearchFilter ResNodeFilter;
 		ResNodeFilter.DeployableTeam = BotTeam;
 		ResNodeFilter.ReachabilityTeam = BotTeam;
 		ResNodeFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 
-		AvHAIResourceNode* NearestNode = AITAC_FindNearestResourceNodeToLocation(pBot->Edict->v.origin, &ResNodeFilter);
-
 		Vector BuildOrigin = ZERO_VECTOR;
+
+		DeployableSearchFilter ExistingChamberFilter;
+		ExistingChamberFilter.DeployableTeam = BotTeam;
+		ExistingChamberFilter.DeployableTypes = MissingStructure;
+		ExistingChamberFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
 
 		float MinDist = 0.0f;
 
@@ -6156,6 +6162,14 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 			AvHAIHiveDefinition* ThisHive = (*it);
 
 			if (ThisHive->OwningTeam != BotTeam) { continue; }
+
+			if (AITAC_GetNumDeployablesNearLocation(ThisHive->FloorLocation, &ExistingChamberFilter) >= MaxChambersInOnePlace) { continue; }
+
+			if (MaxChambersInOnePlace == 1)
+			{
+				AvHAIPlayer* ExistingBuilder = GetFirstBotWithBuildTask(BotTeam, MissingStructure, pBot->Edict);
+				if (ExistingBuilder && vDist2DSq(ExistingBuilder->PrimaryBotTask.TaskLocation, ThisHive->FloorLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) { continue; }
+			}
 
 			float ThisDist = vDist2DSq(pBot->Edict->v.origin, ThisHive->FloorLocation);
 
@@ -6166,13 +6180,26 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 			}
 		}
 
-		if (NearestNode)
+		for (auto it = AllNodes.begin(); it != AllNodes.end(); it++)
 		{
-			float ThisDist = vDist2DSq(pBot->Edict->v.origin, NearestNode->Location);
+			AvHAIResourceNode* ThisNode = (*it);
+
+			if (ThisNode->OwningTeam == EnemyTeam) { continue; }
+
+			if (AITAC_GetNumDeployablesNearLocation(ThisNode->Location, &ExistingChamberFilter) >= MaxChambersInOnePlace) { continue; }
+
+			if (MaxChambersInOnePlace == 1)
+			{
+				AvHAIPlayer* ExistingBuilder = GetFirstBotWithBuildTask(BotTeam, MissingStructure, pBot->Edict);
+				if (ExistingBuilder && vDist2DSq(ExistingBuilder->PrimaryBotTask.TaskLocation, ThisNode->Location) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) { continue; }
+			}
+
+			float ThisDist = vDist2DSq(pBot->Edict->v.origin, ThisNode->Location);
 
 			if (vIsZero(BuildOrigin) || ThisDist < MinDist)
 			{
-				BuildOrigin = NearestNode->Location;
+				BuildOrigin = ThisNode->Location;
+				MinDist = ThisDist;
 			}
 		}
 

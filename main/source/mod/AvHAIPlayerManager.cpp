@@ -929,9 +929,12 @@ void AIMGR_ResetRound()
 
 	bool bTileCacheFullyUpdated = UTIL_UpdateTileCache();
 
-	while (!bTileCacheFullyUpdated)
+	int NumAttempts = 0;
+
+	while (!bTileCacheFullyUpdated && NumAttempts < 30)
 	{
 		bTileCacheFullyUpdated = UTIL_UpdateTileCache();
+		NumAttempts++;
 	}
 
 	bHasRoundStarted = false;
@@ -1437,9 +1440,12 @@ void AIMGR_OnBotEnabled()
 
 		bool bTileCacheFullyUpdated = UTIL_UpdateTileCache();
 
-		while (!bTileCacheFullyUpdated)
+		int NumAttempts = 0;
+
+		while (!bTileCacheFullyUpdated && NumAttempts < 30)
 		{
 			bTileCacheFullyUpdated = UTIL_UpdateTileCache();
+			NumAttempts++;
 		}
 	}
 	// Figure out the current game status

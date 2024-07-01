@@ -174,6 +174,8 @@ Vector UTIL_GetNearestLadderBottomPoint(edict_t* pEdict);
 
 Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder);
 
+bool UTIL_QuickCollisionTrace(Vector StartTrace, Vector EndTrace);
+
 Vector UTIL_GetNearestSurfaceNormal(Vector SearchLocation);
 
 #endif
