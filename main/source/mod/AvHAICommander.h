@@ -43,17 +43,12 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextRecycleAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot);
 bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot);
-bool AICOMM_CheckForNextRelocationAction(AvHAIPlayer* pBot);
 
 Vector AICOMM_GetNextScanLocation(AvHAIPlayer* pBot);
 
 void AICOMM_CommanderThink(AvHAIPlayer* pBot);
 
 const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPlayer* CommanderBot, const Vector SearchLocation);
-
-bool AICOMM_BuildInfantryPortal(AvHAIPlayer* pBot, edict_t* CommChair);
-bool AICOMM_PerformNextSiegeHiveAction(AvHAIPlayer* pBot, const AvHAIHiveDefinition* HiveToSiege);
-bool AICOMM_PerformNextSecureHiveAction(AvHAIPlayer* pBot, const AvHAIHiveDefinition* HiveToSecure);
 
 ai_commander_request* AICOMM_GetExistingRequestForPlayer(AvHAIPlayer* pBot, edict_t* Requestor);
 void AICOMM_CheckNewRequests(AvHAIPlayer* pBot);
