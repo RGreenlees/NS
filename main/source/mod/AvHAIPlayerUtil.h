@@ -67,6 +67,8 @@ bool IsPlayerGestating(const edict_t* Player);
 bool IsPlayerParasited(const edict_t* Player);
 // Is the player being marked through walls to enemies through being sighted by an ally or affected by motion tracking?
 bool IsPlayerMotionTracked(const edict_t* Player);
+// Is the player being marked through walls by a nearby sensory chamber or scent of fear?
+bool IsPlayerSOF(const edict_t* Player);
 // Is the player currently on a ladder? Always false for Skulks and Lerks as they can't climb ladders
 bool IsPlayerOnLadder(const edict_t* Player);
 // Is the player an onos under the effect of charge?

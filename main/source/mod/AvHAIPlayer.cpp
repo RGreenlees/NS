@@ -1460,7 +1460,7 @@ void BotUpdateView(AvHAIPlayer* pBot)
 		bool bHasLOS = !vIsZero(VisiblePoint);
 		bool bIsPlayerInvisible = UTIL_IsCloakedPlayerInvisible(pBot->Edict, PlayerRef);
 
-		bool bIsTracked = PlayerRef->GetOpacity() > 0.1f && (!bHasLOS && (IsPlayerParasited(PlayerEdict) || (GetHasUpgrade(pBot->Edict->v.iuser4, MASK_UPGRADE_8) && IsPlayerMotionTracked(PlayerEdict))));		
+		bool bIsTracked = PlayerRef->GetOpacity() > 0.1f && (!bHasLOS && (IsPlayerParasited(PlayerEdict) || IsPlayerSOF(PlayerEdict) || (GetHasUpgrade(pBot->Edict->v.iuser4, MASK_UPGRADE_8) && IsPlayerMotionTracked(PlayerEdict))));
 
 		TrackingInfo->bHasLOS = bHasLOS;
 		TrackingInfo->bEnemyHasLOS = bEnemyCanSee;
@@ -1739,15 +1739,14 @@ void StartNewBotFrame(AvHAIPlayer* pBot)
 
 	Vector ProjectPoint = (IsPlayerLerk(pBot->Edict)) ? pBot->CurrentFloorPosition : pBot->CollisionHullBottomLocation;
 
-	if (vDist3DSq(pBot->BotNavInfo.LastNavMeshCheckPosition, ProjectPoint) > sqrf(16.0f))
+	if (UTIL_IsTileCacheUpToDate() && vDist3DSq(pBot->BotNavInfo.LastNavMeshCheckPosition, ProjectPoint) > sqrf(16.0f))
 	{
 		if (UTIL_PointIsReachable(pBot->BotNavInfo.NavProfile, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), ProjectPoint, 16.0f))
 		{			
 			Vector NavPoint = UTIL_ProjectPointToNavmesh(ProjectPoint);
 			UTIL_AdjustPointAwayFromNavWall(NavPoint, 8.0f);
 
-			pBot->BotNavInfo.LastNavMeshPosition = NavPoint;
-			
+			pBot->BotNavInfo.LastNavMeshPosition = NavPoint;			
 
 			if (pBot->BotNavInfo.IsOnGround || IsPlayerLerk(pBot->Edict))
 			{
@@ -3027,7 +3026,7 @@ void AIPlayerNSMarineThink(AvHAIPlayer* pBot)
 		if (MarineCombatThink(pBot)) { return; }
 	}
 
-	if (gpGlobals->time >= pBot->BotNextTaskEvaluationTime)
+	if (UTIL_IsTileCacheUpToDate() && gpGlobals->time >= pBot->BotNextTaskEvaluationTime)
 	{
 		pBot->BotNextTaskEvaluationTime = gpGlobals->time + frandrange(0.2f, 0.5f);
 
@@ -7734,6 +7733,8 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 
 	float DistToEnemy = vDist2DSq(pBot->Edict->v.origin, TrackedEnemyRef->LastDetectedLocation);
 
+	bool bShouldBreakRetreat = false;
+
 	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_RETREAT)
 	{
 		edict_t* NearestHealingSource = AITAC_AlienFindNearestHealingSource(pBot->Player->GetTeam(), pBot->Edict->v.origin, pBot->Edict, true);
@@ -7777,7 +7778,7 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 
 		}
 
-		return false;
+		bShouldBreakRetreat = true;
 	}
 
 	bool bShouldBreakAmbush = false;
@@ -7787,7 +7788,7 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 		bShouldBreakAmbush = DistToEnemy < ((TrackedEnemyRef->bHasLOS) ? sqrf(UTIL_MetresToGoldSrcUnits(5.0f)) : sqrf(UTIL_MetresToGoldSrcUnits(3.0f)));
 	}
 
-	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_ATTACK || (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_AMBUSH && bShouldBreakAmbush))
+	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_ATTACK || bShouldBreakRetreat || (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_AMBUSH && bShouldBreakAmbush))
 	{	
 
 		bool bIsCloaked = (UTIL_IsCloakedPlayerInvisible(CurrentEnemy, pBot->Player) || pBot->Player->GetOpacity() < 0.5f);
@@ -8551,10 +8552,9 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 
 				return true;
 			}
-
-			// If the enemy can see the healing source, then we must go on the attack as we're cornered
-			bShouldBreakRetreat = true;
 		}
+
+		bShouldBreakRetreat = true;
 	}
 
 	bool bShouldBreakAmbush = false;
@@ -8769,10 +8769,10 @@ bool OnosCombatThink(AvHAIPlayer* pBot)
 				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				return true;
 			}
-
-			// If the enemy can see the healing source, then we must go on the attack
-			bShouldBreakRetreat = true;
 		}
+
+		// If the enemy can see the healing source, then we must go on the attack
+		bShouldBreakRetreat = true;
 	}
 
 	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_ATTACK || bShouldBreakRetreat)

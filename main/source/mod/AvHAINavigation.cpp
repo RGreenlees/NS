@@ -510,6 +510,11 @@ bool UTIL_UpdateTileCache()
 	return bTileCacheUpToDate;
 }
 
+bool UTIL_IsTileCacheUpToDate()
+{
+	return bTileCacheUpToDate;
+}
+
 Vector UTIL_AdjustPointAwayFromNavWall(const Vector Location, const float MaxDistanceFromWall)
 {
 
@@ -6865,6 +6870,8 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 		return true; 
 	}
 
+	if (!UTIL_IsTileCacheUpToDate()) { return true; }
+
 	nav_status* BotNavInfo = &pBot->BotNavInfo;
 
 	pBot->BotNavInfo.MoveStyle = MoveStyle;
@@ -7060,10 +7067,8 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 
 Vector FindClosestPointBackOnPath(AvHAIPlayer* pBot, Vector Destination)
 {
-	Vector GeneralMoveDir = UTIL_GetVectorNormal2D(Destination - pBot->Edict->v.origin);
-	Vector CheckDir = pBot->Edict->v.origin + (GeneralMoveDir * 16.0f);
 
-	Vector ValidNavmeshPoint = AdjustPointForPathfinding(CheckDir);
+	Vector ValidNavmeshPoint = AdjustPointForPathfinding(pBot->CollisionHullBottomLocation, pBot->BotNavInfo.NavProfile);
 
 	if (vIsZero(ValidNavmeshPoint))
 	{

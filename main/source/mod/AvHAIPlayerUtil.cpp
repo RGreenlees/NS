@@ -170,6 +170,11 @@ bool IsPlayerMotionTracked(const edict_t* Player)
 	return (Player->v.iuser4 & MASK_VIS_DETECTED);
 }
 
+bool IsPlayerSOF(const edict_t* Player)
+{
+	return (Player->v.iuser4 & MASK_SENSORY_NEARBY);
+}
+
 float GetPlayerEnergy(const edict_t* Player)
 {
 	return (Player->v.fuser3 * 0.001f);

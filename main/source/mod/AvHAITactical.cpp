@@ -5396,6 +5396,8 @@ edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLo
 	edict_t* Result = nullptr;
 	float MinDist = 0.0f;
 
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(Team);
+
 	vector<AvHAIHiveDefinition*> AllTeamHives = AITAC_GetAllTeamHives(Team, true);
 
 	for (auto it = AllTeamHives.begin(); it != AllTeamHives.end(); it++)
@@ -5403,6 +5405,8 @@ edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLo
 		float ThisDist = vDist2DSq((*it)->Location, SearchLocation);
 		// Factor healing radius into the distance checks, we don't have to be right at the hive to heal
 		ThisDist -= BALANCE_VAR(kHiveHealRadius) * 0.75f;
+
+		if (AITAC_AnyPlayerOnTeamHasLOSToLocation(EnemyTeam, (*it)->Location, UTIL_MetresToGoldSrcUnits(30.0f), nullptr)) { continue; }
 		
 		// We're already in healing distance of a hive, that's our healing source
 		if (ThisDist <= 0.0f) { return (*it)->HiveEdict; }
@@ -5429,6 +5433,8 @@ edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLo
 		// Factor healing radius into the distance checks, we don't have to be sat on top of the DC to heal
 		ThisDist -= BALANCE_VAR(kHiveHealRadius) * 0.75f;
 
+		if (AITAC_AnyPlayerOnTeamHasLOSToLocation(EnemyTeam, ThisDC.Location, UTIL_MetresToGoldSrcUnits(30.0f), nullptr)) { continue; }
+
 		// We're already in healing distance of a DC, that's our healing source
 		if (ThisDist <= 0.0f) { return ThisDC.edict; }
 
@@ -5445,6 +5451,11 @@ edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLo
 	{
 		float PlayerSearchDist = (!FNullEnt(Result)) ? MinDist : 0.0f; // As before, we only want players closer than our current "winner"
 		FriendlyGorge = AITAC_GetNearestPlayerOfClassInArea(Team, SearchLocation, PlayerSearchDist, false, SearchingPlayer, AVH_USER3_ALIEN_PLAYER2);
+
+		if (!FNullEnt(FriendlyGorge))
+		{
+			if (AITAC_AnyPlayerOnTeamHasLOSToLocation(EnemyTeam, FriendlyGorge->v.origin, UTIL_MetresToGoldSrcUnits(30.0f), nullptr)) { FriendlyGorge = nullptr; }
+		}
 	}
 
 	return (!FNullEnt(FriendlyGorge) ? FriendlyGorge : Result);

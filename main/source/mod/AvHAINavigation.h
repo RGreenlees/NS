@@ -495,6 +495,8 @@ nav_door* UTIL_GetNavDoorByEdict(const edict_t* DoorEdict);
 nav_door* UTIL_GetClosestLiftToPoints(const Vector StartPoint, const Vector EndPoint);
 AvHAIOffMeshConnection* UTIL_GetOffMeshConnectionForLift(nav_door* LiftRef);
 
+bool UTIL_IsTileCacheUpToDate();
+
 Vector UTIL_AdjustPointAwayFromNavWall(const Vector Location, const float MaxDistanceFromWall);
 
 void UTIL_PopulateBaseNavProfiles();
