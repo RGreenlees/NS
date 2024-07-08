@@ -503,7 +503,7 @@ Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, 
 
 	if (dtStatusSucceed(Status))
 	{
-		return UTIL_GetBestGrenadePointOnPath(Player, GetPlayerEyePosition(Player), CheckPath, TargetLocation, BALANCE_VAR(kGrenadeForce), ExplosionRadius, true);// UTIL_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), CheckPath, bPrecise);
+		return UTIL_GetBestGrenadePointOnPath(Player, GetPlayerEyePosition(Player), CheckPath, TargetLocation, BALANCE_VAR(kGrenadeForce), ExplosionRadius, true);
 	}
 	else
 	{
