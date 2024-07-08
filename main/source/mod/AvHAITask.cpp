@@ -1808,6 +1808,12 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		Weapon = BotAlienChooseBestWeaponForStructure(pBot, Task->TaskTarget);
 	}
 
+	if (Weapon == WEAPON_MARINE_GL)
+	{
+		BotAttackNonPlayerTarget(pBot, Task->TaskTarget);
+		return;
+	}
+
 	if (IsPlayerMarine(pBot->Player) && IsDamagingStructure(Task->TaskTarget) && !IsMeleeWeapon(Weapon))
 	{
 		if (GetPlayerCurrentWeaponClipAmmo(pBot->Player) == 0 || IsPlayerReloading(pBot->Player))
@@ -2900,6 +2906,31 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
+
+	if (pBot->BotRole == BOT_ROLE_BOMBARDIER)
+	{
+		DeployableSearchFilter EnemyStructures;
+		EnemyStructures.DeployableTypes = SEARCH_ALL_STRUCTURES;
+		EnemyStructures.DeployableTeam = EnemyTeam;
+		EnemyStructures.ReachabilityTeam = BotTeam;
+		EnemyStructures.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
+		EnemyStructures.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
+
+		AvHAIBuildableStructure EnemyStructure = AITAC_FindClosestDeployableToLocation(Hive->FloorLocation, &EnemyStructures);
+
+		if (EnemyStructure.IsValid())
+		{
+			BotAttackNonPlayerTarget(pBot, EnemyStructure.edict);
+			return;
+		}
+
+		if (Hive->Status != HIVE_STATUS_UNBUILT)
+		{
+			BotAttackNonPlayerTarget(pBot, Hive->HiveEdict);
+		}
+
+		return;
+	}
 
 	DeployableSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = SEARCH_ALL_MARINE_STRUCTURES;

@@ -651,7 +651,7 @@ void BotMarineAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target)
 	{
 		if (IsPlayerReloading(pBot->Player))
 		{
-			if (StructureType == STRUCTURE_MARINE_TURRET || StructureType == STRUCTURE_ALIEN_OFFENCECHAMBER)
+			if (IsDamagingStructure(StructureType) && !vIsZero(GetVisiblePointOnPlayerFromObserver(Target, pBot->Edict)))
 			{
 				MoveTo(pBot, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), MOVESTYLE_NORMAL);
 				return;
@@ -844,18 +844,19 @@ void BotShootTarget(AvHAIPlayer* pBot, AvHAIWeapon AttackWeapon, edict_t* Target
 
 void BombardierAttackTarget(AvHAIPlayer* pBot, edict_t* Target)
 {
-
 	if (!IsPlayerReloading(pBot->Player))
 	{
-		if (vDist3DSq(pBot->Edict->v.origin, Target->v.origin) < sqrf(BALANCE_VAR(kGrenadeRadius)))
+
+		if (vDist3DSq(pBot->Edict->v.origin, Target->v.origin) < sqrf(BALANCE_VAR(kGrenadeRadius)) && UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, Target->v.origin))
 		{
-			Vector BackDir = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - Target->v.origin);
-			pBot->desiredMovementDir = BackDir;
+			MoveTo(pBot, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), MOVESTYLE_NORMAL);
+			BotLookAt(pBot, Target);
+			return;
 		}
 
-		Vector GrenadeLoc = UTIL_GetGrenadeThrowTarget(pBot->Edict, Target->v.origin, BALANCE_VAR(kGrenadeRadius), true);
+		Vector GrenadeLoc = UTIL_GetGrenadeThrowTarget(pBot->Edict, Target->v.origin, BALANCE_VAR(kGrenadeRadius) * 0.5f, true);
 
-		if (GrenadeLoc != ZERO_VECTOR)
+		if (!vIsZero(GrenadeLoc))
 		{
 			BotShootLocation(pBot, WEAPON_MARINE_GL, GrenadeLoc);
 		}
@@ -880,7 +881,7 @@ void BombardierAttackTarget(AvHAIPlayer* pBot, edict_t* Target)
 	}
 
 	// Back off to reload
-	if (GetStructureTypeFromEdict(Target) == STRUCTURE_ALIEN_OFFENCECHAMBER && UTIL_QuickTrace(pBot->Edict, pBot->CurrentEyePosition, UTIL_GetCentreOfEntity(Target)))
+	if (GetStructureTypeFromEdict(Target) == STRUCTURE_ALIEN_OFFENCECHAMBER && !vIsZero(GetVisiblePointOnPlayerFromObserver(Target, pBot->Edict)))
 	{
 		BotLookAt(pBot, Target);
 		MoveTo(pBot, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), MOVESTYLE_NORMAL);
@@ -1913,24 +1914,35 @@ void EndBotFrame(AvHAIPlayer* pBot)
 
 void CustomThink(AvHAIPlayer* pBot)
 {
-	pBot->CurrentTask = &pBot->PrimaryBotTask;
+	pBot->BotRole = BOT_ROLE_BOMBARDIER;
 
-	AITASK_BotUpdateAndClearTasks(pBot);
-
-	if (pBot->CurrentTask->TaskType != TASK_ATTACK)
+	if (pBot->CurrentEnemy > -1)
 	{
-		DeployableSearchFilter EnemyOCFilter;
-		EnemyOCFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
-
-		AvHAIBuildableStructure NearestOC = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyOCFilter);
-
-		if (NearestOC.IsValid())
-		{
-			AITASK_SetAttackTask(pBot, pBot->CurrentTask, NearestOC.edict, false);
-		}
+		if (MarineCombatThink(pBot)) { return; }
 	}
 
-	BotProgressTask(pBot, pBot->CurrentTask);
+	if (UTIL_IsTileCacheUpToDate() && gpGlobals->time >= pBot->BotNextTaskEvaluationTime)
+	{
+		pBot->BotNextTaskEvaluationTime = gpGlobals->time + frandrange(0.2f, 0.5f);
+
+		AITASK_BotUpdateAndClearTasks(pBot);
+
+		AIPlayerSetPrimaryMarineTask(pBot, &pBot->PrimaryBotTask);
+		AIPlayerSetSecondaryMarineTask(pBot, &pBot->SecondaryBotTask);
+		AIPlayerSetWantsAndNeedsMarineTask(pBot, &pBot->WantsAndNeedsTask);
+	}
+
+	pBot->CurrentTask = AIPlayerGetNextTask(pBot);
+
+	if (pBot->CurrentTask && pBot->CurrentTask->TaskType != TASK_NONE)
+	{
+		BotProgressTask(pBot, pBot->CurrentTask);
+	}
+
+	if (pBot->DesiredCombatWeapon == WEAPON_INVALID)
+	{
+		pBot->DesiredCombatWeapon = BotMarineChooseBestWeapon(pBot, nullptr);
+	}
 
 }
 
@@ -2268,6 +2280,12 @@ void UpdateAIMarinePlayerNSRole(AvHAIPlayer* pBot)
 		return;
 	}
 
+	if (UTIL_GetPlayerPrimaryWeapon(pBot->Player) == WEAPON_MARINE_GL)
+	{
+		SetNewAIPlayerRole(pBot, BOT_ROLE_BOMBARDIER);
+		return;
+	}
+
 	int NumSweeperBots = AIMGR_GetNumAIPlayersWithRoleOnTeam(BotTeamNumber, BOT_ROLE_SWEEPER, pBot);
 
 	int NumDesiredSweeperBots = 1;
@@ -2312,6 +2330,41 @@ void UpdateAIMarinePlayerNSRole(AvHAIPlayer* pBot)
 	{
 		SetNewAIPlayerRole(pBot, BOT_ROLE_FIND_RESOURCES);
 		return;
+	}
+
+	int NumBombardiers = AIMGR_GetNumAIPlayersWithRoleOnTeam(BotTeamNumber, BOT_ROLE_BOMBARDIER, pBot);
+
+	if (NumBombardiers == 0)
+	{
+		const AvHAIHiveDefinition* SiegedHive = AITAC_GetNearestHiveUnderActiveSiege(BotTeamNumber, pBot->Edict->v.origin);
+
+		if (SiegedHive)
+		{
+			bool bAlreadyHasGL = false;
+
+			vector<AvHPlayer*> PlayerList = AIMGR_GetAllPlayersOnTeam(BotTeamNumber);
+
+			for (auto it = PlayerList.begin(); it != PlayerList.end(); it++)
+			{
+				AvHPlayer* PlayerRef = (*it);
+
+				if (!PlayerRef) { continue; }
+
+				edict_t* PlayerEdict = PlayerRef->edict();
+
+				if (PlayerRef && !FNullEnt(PlayerEdict) && IsPlayerActiveInGame(PlayerEdict) && PlayerHasWeapon(PlayerRef, WEAPON_MARINE_GL))
+				{
+					bAlreadyHasGL = true;
+					break;
+				}
+			}
+
+			if (!bAlreadyHasGL)
+			{
+				SetNewAIPlayerRole(pBot, BOT_ROLE_BOMBARDIER);
+				return;
+			}
+		}
 	}
 
 	// Everyone else goes assault
@@ -2891,6 +2944,18 @@ AvHAICombatStrategy GetMarineCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_st
 		}
 	}
 
+	// If we have a GL, only engage if we've seen the enemy recently, or if they are bunched up, ideal for some grenade lovin'
+	if (PlayerHasWeapon(pBot->Player, WEAPON_MARINE_GL))
+	{
+		if (gpGlobals->time - CurrentEnemy->LastVisibleTime > 5.0f)
+		{
+			int NumJuicyTargets = AITAC_GetNumPlayersOnTeamWithLOS(EnemyTeam, EnemyEdict->v.origin, BALANCE_VAR(kGrenadeRadius), EnemyEdict);
+
+			// Crack on with our destructive intents
+			if (NumJuicyTargets == 0) { return COMBAT_STRATEGY_IGNORE; }
+		}
+	}
+
 	// The idea here is to decide when to engage an enemy we're aware of. If we are doing a task that involves idling
 	// such as guarding or securing an area, we're much more likely to go investigate potential threats
 	// than if we have a more direct job to do like building something
@@ -2929,6 +2994,14 @@ AvHAICombatStrategy GetMarineCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_st
 	if (bCanRetreat && (CurrentHealthPercent < 0.3f || (CurrentHealthPercent < 0.5f && NumEnemyAllies > 0) || UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) < UTIL_GetPlayerPrimaryWeaponMaxClipSize(pBot->Player)))
 	{
 		return COMBAT_STRATEGY_RETREAT;
+	}
+
+	// Special case for grenade launcher usage
+	if (pBot->BotRole == BOT_ROLE_BOMBARDIER)
+	{
+		if (NumFriendlies > 0) { return COMBAT_STRATEGY_SKIRMISH; }
+
+		return (vDist2DSq(pBot->Edict->v.origin, EnemyEdict->v.origin) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) ? COMBAT_STRATEGY_RETREAT : COMBAT_STRATEGY_SKIRMISH;
 	}
 
 	// We're out of ammo entirely and can't retreat, DEATH OR GLORY
@@ -4018,9 +4091,78 @@ void AIPlayerSetMarineBombardierPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 {
 	// Go attack sieged hive
 
+	if (Task->TaskType == TASK_SECURE_HIVE) { return; }
+
+	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
+
+	const AvHAIHiveDefinition* SiegedHive = AITAC_GetNearestHiveUnderActiveSiege(BotTeam, pBot->Edict->v.origin);
+
+	if (SiegedHive)
+	{
+		AITASK_SetSecureHiveTask(pBot, Task, SiegedHive->HiveEdict, SiegedHive->FloorLocation, false);
+		return;
+	}
+
+	if (Task->TaskType == TASK_ATTACK) { return; }
+
 	// Go clear res nodes
 
+	DeployableSearchFilter EnemyStuff;
+	EnemyStuff.DeployableTypes = SEARCH_ALL_STRUCTURES;
+	EnemyStuff.DeployableTeam = EnemyTeam;
+	EnemyStuff.ReachabilityTeam = BotTeam;
+	EnemyStuff.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
+	EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
 
+	AvHAIBuildableStructure NearestEnemyStructure = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyStuff);
+
+	if (NearestEnemyStructure.IsValid())
+	{
+		AITASK_SetAttackTask(pBot, Task, NearestEnemyStructure.edict, false);
+		return;
+	}
+
+	EnemyStuff.DeployableTypes = (STRUCTURE_ALIEN_RESTOWER | STRUCTURE_MARINE_RESTOWER);
+	EnemyStuff.MaxSearchRadius = 0.0f;
+
+	AvHAIBuildableStructure NearestEnemyRT = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyStuff);
+
+	if (NearestEnemyStructure.IsValid())
+	{
+		AITASK_SetMoveTask(pBot, Task, NearestEnemyRT.Location, false);
+		return;
+	}
+
+	if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_MARINE)
+	{
+		EnemyStuff.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
+
+		AvHAIBuildableStructure NearestEnemyCC = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyStuff);
+
+		if (NearestEnemyCC.IsValid())
+		{
+			AITASK_SetMoveTask(pBot, Task, NearestEnemyCC.Location, false);
+			return;
+		}
+	}
+	else
+	{
+		const AvHAIHiveDefinition* EnemyHive = AITAC_GetActiveHiveNearestLocation(EnemyTeam, pBot->Edict->v.origin);
+
+		if (EnemyHive)
+		{
+			if (UTIL_PlayerHasLOSToLocation(pBot->Edict, EnemyHive->Location, UTIL_MetresToGoldSrcUnits(30.0f)))
+			{
+				AITASK_SetAttackTask(pBot, Task, EnemyHive->HiveEdict, false);
+			}
+			else
+			{
+				AITASK_SetMoveTask(pBot, Task, EnemyHive->FloorLocation, false);
+			}
+			return;
+		}
+	}
 }
 
 void AIPlayerSetWantsAndNeedsCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -4076,6 +4218,20 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	if (Task->TaskType == TASK_RESUPPLY || Task->TaskType == TASK_GET_HEALTH || Task->TaskType == TASK_GET_AMMO) { return; }
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
+
+	if (pBot->BotRole == BOT_ROLE_BOMBARDIER)
+	{
+		if (UTIL_GetPlayerPrimaryWeapon(pBot->Player) != WEAPON_MARINE_GL)
+		{
+			AvHAIDroppedItem NearestGL = AITAC_FindClosestItemToLocation(pBot->Edict->v.origin, DEPLOYABLE_ITEM_GRENADELAUNCHER, BotTeam, pBot->BotNavInfo.NavProfile.ReachabilityFlag, 0.0f, 0.0f, true);
+
+			if (NearestGL.IsValid())
+			{
+				AITASK_SetPickupTask(pBot, Task, NearestGL.edict, true);
+				return;
+			}
+		}
+	}
 
 	bool bNeedsHealth = pBot->Edict->v.health < (pBot->Edict->v.max_health * 0.9f);
 	bool bNeedsAmmo = UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) < (UTIL_GetPlayerPrimaryMaxAmmoReserve(pBot->Player) * 0.75f);
@@ -4641,6 +4797,11 @@ bool AIPlayerMustFinishCurrentTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 	}
 
+	if (pBot->BotRole == BOT_ROLE_ASSAULT && (Task->TaskType == TASK_SECURE_HIVE || Task->TaskType == TASK_ASSAULT_MARINE_BASE))
+	{
+		if (vDist2DSq(pBot->Edict->v.origin, Task->TaskLocation) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) { return true; }		
+	}
+
 	return false;
 }
 
@@ -4842,11 +5003,6 @@ AvHMessageID GetNextAIPlayerCOMarineUpgrade(AvHAIPlayer* pBot)
 		return BUILD_SHOTGUN;
 	}
 
-	if (!pBot->Player->GetHasCombatModeUpgrade(BUILD_SHOTGUN))
-	{
-		return BUILD_SHOTGUN;
-	}
-
 	if (!pBot->Player->GetHasCombatModeUpgrade(BUILD_HMG))
 	{
 		return BUILD_HMG;
@@ -4869,15 +5025,20 @@ AvHMessageID GetNextAIPlayerCOMarineUpgrade(AvHAIPlayer* pBot)
 
 	if (!pBot->Player->GetHasCombatModeUpgrade(RESEARCH_ARMOR_THREE))
 	{
-		return RESEARCH_ARMOR_TWO;
+		return RESEARCH_ARMOR_THREE;
 	}
 
 	if (!pBot->Player->GetHasCombatModeUpgrade(RESEARCH_WEAPONS_THREE))
 	{
-		return RESEARCH_WEAPONS_TWO;
+		return RESEARCH_WEAPONS_THREE;
 	}
 
-	return MESSAGE_NULL;
+	if (pBot->NextRandomCombatUpgrade == MESSAGE_NULL || pBot->Player->GetHasCombatModeUpgrade(pBot->NextRandomCombatUpgrade))
+	{
+		pBot->NextCombatModeUpgrade = AITAC_GetRandomCombatUpgrade(pBot->Player);
+	}
+
+	return pBot->NextCombatModeUpgrade;
 }
 
 AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
@@ -4955,7 +5116,12 @@ AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
 		}
 
 
-		return MESSAGE_NULL;
+		if (pBot->NextRandomCombatUpgrade == MESSAGE_NULL || pBot->Player->GetHasCombatModeUpgrade(pBot->NextRandomCombatUpgrade))
+		{
+			pBot->NextCombatModeUpgrade = AITAC_GetRandomCombatUpgrade(pBot->Player);
+		}
+
+		return pBot->NextCombatModeUpgrade;
 	}
 
 	
@@ -4976,40 +5142,45 @@ AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
 		// Regen
 		if (!pBot->Player->GetHasCombatModeUpgrade(ALIEN_EVOLUTION_TWO))
 		{
-			return ALIEN_EVOLUTION_EIGHT;
+			return ALIEN_EVOLUTION_TWO;
 		}
 
 		// Celerity
 		if (!pBot->Player->GetHasCombatModeUpgrade(ALIEN_EVOLUTION_SEVEN))
 		{
-			return ALIEN_EVOLUTION_EIGHT;
+			return ALIEN_EVOLUTION_SEVEN;
 		}
 
 		// Redemption
 		if (!pBot->Player->GetHasCombatModeUpgrade(ALIEN_EVOLUTION_THREE))
 		{
-			return ALIEN_EVOLUTION_EIGHT;
+			return ALIEN_EVOLUTION_THREE;
 		}
 
 		// Focus
 		if (!pBot->Player->GetHasCombatModeUpgrade(ALIEN_EVOLUTION_ELEVEN))
 		{
-			return ALIEN_EVOLUTION_EIGHT;
+			return ALIEN_EVOLUTION_ELEVEN;
 		}
 
 		// Silence
 		if (!pBot->Player->GetHasCombatModeUpgrade(ALIEN_EVOLUTION_NINE))
 		{
-			return ALIEN_EVOLUTION_EIGHT;
+			return ALIEN_EVOLUTION_NINE;
 		}
 
 		// Cloak
 		if (!pBot->Player->GetHasCombatModeUpgrade(ALIEN_EVOLUTION_TEN))
 		{
-			return ALIEN_EVOLUTION_EIGHT;
+			return ALIEN_EVOLUTION_TEN;
 		}
 
-		return MESSAGE_NULL;
+		if (pBot->NextRandomCombatUpgrade == MESSAGE_NULL || pBot->Player->GetHasCombatModeUpgrade(pBot->NextRandomCombatUpgrade))
+		{
+			pBot->NextCombatModeUpgrade = AITAC_GetRandomCombatUpgrade(pBot->Player);
+		}
+
+		return pBot->NextCombatModeUpgrade;
 	}
 
 	// ASSAULT and BOMBARDIER STUFF BELOW
@@ -5040,6 +5211,13 @@ AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
 		{
 			return ALIEN_HIVE_THREE_UNLOCK;
 		}
+
+		if (pBot->NextRandomCombatUpgrade == MESSAGE_NULL || pBot->Player->GetHasCombatModeUpgrade(pBot->NextRandomCombatUpgrade))
+		{
+			pBot->NextCombatModeUpgrade = AITAC_GetRandomCombatUpgrade(pBot->Player);
+		}
+
+		return pBot->NextCombatModeUpgrade;
 	}
 
 	// As a bombardier, we can still go fade if we can't afford Onos yet, so calculate our points savings accordingly
@@ -5061,9 +5239,21 @@ AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
 		{
 			return ALIEN_EVOLUTION_TWO;
 		}
+
+		if (pBot->NextRandomCombatUpgrade == MESSAGE_NULL || pBot->Player->GetHasCombatModeUpgrade(pBot->NextRandomCombatUpgrade))
+		{
+			pBot->NextCombatModeUpgrade = AITAC_GetRandomCombatUpgrade(pBot->Player);
+		}
+
+		return pBot->NextCombatModeUpgrade;
 	}
 
-	return MESSAGE_NULL;	
+	if (pBot->NextRandomCombatUpgrade == MESSAGE_NULL || pBot->Player->GetHasCombatModeUpgrade(pBot->NextRandomCombatUpgrade))
+	{
+		pBot->NextCombatModeUpgrade = AITAC_GetRandomCombatUpgrade(pBot->Player);
+	}
+
+	return pBot->NextCombatModeUpgrade;
 }
 
 void AIPlayerCOThink(AvHAIPlayer* pBot)

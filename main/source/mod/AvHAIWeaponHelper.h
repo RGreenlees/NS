@@ -41,6 +41,8 @@ bool WeaponCanBeReloaded(const AvHAIWeapon CheckWeapon);
 bool IsMeleeWeapon(const AvHAIWeapon Weapon);
 
 Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, const float ExplosionRadius, bool bPrecise);
+Vector UTIL_EstimateGrenadeRestingPoint(edict_t* GrenadeThrower, const float LaunchVelocity, const Vector LaunchPosition, const Vector TargetPosition);
+Vector UTIL_GetBestGrenadePointOnPath(edict_t* GrenadeThrower, const Vector ViewerLocation, vector<bot_path_node>& path, const Vector GrenadeTargetLocation, float GrenadeVelocity, float BlastRadius, bool bPrecise);
 
 AvHAIWeapon BotMarineChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target);
 AvHAIWeapon MarineGetBestWeaponForPlayerTarget(AvHAIPlayer* pBot, AvHPlayer* Target);

@@ -121,6 +121,11 @@ bool vIntersects2D(const Vector LineAStart, const Vector LineAEnd, const Vector 
 	return false; // Doesn't fall in any of the above cases 
 }
 
+Vector vReflect(const Vector ApproachAngle, const Vector SurfaceNormal, float BounceFactor)
+{
+	return UTIL_GetVectorNormal(ApproachAngle - (BounceFactor * (UTIL_GetDotProduct(ApproachAngle, SurfaceNormal) * SurfaceNormal)));
+}
+
 Vector vClosestPointOnBB(const Vector Point, const Vector MinBB, const Vector MaxBB)
 {
 	return Vector(clampf(Point.x, MinBB.x, MaxBB.x), clampf(Point.y, MinBB.y, MaxBB.y), clampf(Point.z, MinBB.z, MaxBB.z));

@@ -985,6 +985,11 @@ void AIMGR_RoundStarted()
 	AITAC_RefreshTeamStartingLocations();
 
 	AITAC_OnNavMeshModified();
+
+	if (GetGameRules()->GetMapMode() == MAP_MODE_CO)
+	{
+		AITAC_PopulateCombatUpgrades();
+	}
 }
 
 void AIMGR_SetCommanderAllowedTime(AvHTeamNumber Team, float NewValue)

@@ -237,4 +237,8 @@ bool AITAC_CanBuildOutGuardPost(const AvHAIMarineBase* Base);
 
 vector<AvHAIMarineBase>& AITAC_GetTeamBases(AvHTeamNumber Team);
 
+AvHMessageID AITAC_GetRandomCombatUpgrade(AvHPlayer* Player);
+void AITAC_PopulateCombatUpgrades();
+
+
 #endif

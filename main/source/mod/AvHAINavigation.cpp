@@ -2455,17 +2455,46 @@ bool HasBotCompletedWalkMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector M
 {
 	bool bNextPointReachable = false;
 
+	float PlayerRadius = GetPlayerRadius(pBot->Edict);
+
 	if (NextMoveFlag != SAMPLE_POLYFLAGS_DISABLED && MoveArea == NextMoveArea)
 	{
-		bNextPointReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, NextMoveDestination, GetPlayerRadius(pBot->Edict));
+		bNextPointReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, NextMoveDestination, PlayerRadius);
 	}
 
-	return vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax) || (bNextPointReachable && vDist2DSq(pBot->Edict->v.origin, MoveEnd) < sqrf(GetPlayerRadius(pBot->Edict) * 2.0f));
+	float DistToMoveEnd = vDist2DSq(pBot->Edict->v.origin, MoveEnd);
+
+	// We are physically at the end of the path point, or the next one is directly reachable and we are close to the end
+	if (vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax) || (bNextPointReachable && DistToMoveEnd < sqrf(PlayerRadius * 2.0f))) { return true; }
+
+	// This is an edge case check, in case we are on top of a structure or something else blocking our movement
+	if (pBot->BotNavInfo.IsOnGround && !FNullEnt(pBot->Edict->v.groundentity))
+	{
+		if (DistToMoveEnd > sqrf(PlayerRadius)) { return false; }
+
+		return vDist2DSq(pBot->CurrentFloorPosition, MoveEnd) < sqrf(PlayerRadius * 0.5f);
+	}
+
+	return false;
+
 }
 
 bool HasBotCompletedObstacleMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
 {
-	return vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax);
+	if (vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax)) { return true; }
+
+	// This is an edge case check, in case we are on top of a structure or something else blocking our movement
+	if (pBot->BotNavInfo.IsOnGround && !FNullEnt(pBot->Edict->v.groundentity))
+	{
+		float PlayerRadius = GetPlayerRadius(pBot->Edict);
+		float DistToMoveEnd = vDist2DSq(pBot->Edict->v.origin, MoveEnd);
+
+		if (DistToMoveEnd > sqrf(PlayerRadius * 0.5f)) { return false; }
+
+		return vDist2DSq(pBot->CurrentFloorPosition, MoveEnd) < sqrf(PlayerRadius * 0.5f);
+	}
+
+	return false;
 }
 
 bool HasBotCompletedLadderMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
@@ -2505,7 +2534,22 @@ bool HasBotCompletedFallMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector M
 		}
 	}
 
-	return vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax);
+	if (vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax)) { return true; }
+
+	// This is an edge case check, in case we are on top of a structure or something else blocking our movement
+	if (pBot->BotNavInfo.IsOnGround && !FNullEnt(pBot->Edict->v.groundentity))
+	{
+		float PlayerRadius = GetPlayerRadius(pBot->Edict);
+		float DistToMoveEnd = vDist2DSq(pBot->Edict->v.origin, MoveEnd);
+
+		if (DistToMoveEnd > sqrf(PlayerRadius * 0.5f)) { return false; }
+
+		return vDist2DSq(pBot->CurrentFloorPosition, MoveEnd) < sqrf(PlayerRadius * 0.5f);
+	}
+
+	return false;
+
+
 }
 
 bool HasBotCompletedClimbMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, float RequiredClimbHeight, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
@@ -2575,7 +2619,20 @@ bool HasBotCompletedJumpMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector M
 		}
 	}	
 
-	return vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax);
+	if (vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax)) { return true; }
+
+	// This is an edge case check, in case we are on top of a structure or something else blocking our movement
+	if (pBot->BotNavInfo.IsOnGround && !FNullEnt(pBot->Edict->v.groundentity))
+	{
+		float PlayerRadius = GetPlayerRadius(pBot->Edict);
+		float DistToMoveEnd = vDist2DSq(pBot->Edict->v.origin, MoveEnd);
+
+		if (DistToMoveEnd > sqrf(PlayerRadius * 0.5f)) { return false; }
+
+		return vDist2DSq(pBot->CurrentFloorPosition, MoveEnd) < sqrf(PlayerRadius * 0.5f);
+	}
+
+	return false;
 }
 
 bool HasBotCompletedPhaseGateMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
@@ -4194,8 +4251,10 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 				}
 			}
 
+			Vector LadderTopPoint = UTIL_GetNearestLadderTopPoint(pEdict);
+
 			// This is for cases where the ladder physically doesn't reach the desired get-off point and the bot kind of has to "jump" up off the ladder.
-			if (pBot->CollisionHullTopLocation.z >= UTIL_GetNearestLadderTopPoint(pEdict).z)
+			if (pBot->CollisionHullTopLocation.z >= LadderTopPoint.z && fabsf(pBot->CollisionHullTopLocation.z - RequiredClimbHeight) < GetPlayerHeight(pBot->Edict, false))
 			{
 				pBot->desiredMovementDir = vForward;
 				// We look up really far to get maximum launch
@@ -8522,6 +8581,8 @@ Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<bo
 
 	return g_vecZero;
 }
+
+
 
 Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, edict_t* ButtonEdict)
 {

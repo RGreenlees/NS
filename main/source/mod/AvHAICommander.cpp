@@ -1728,6 +1728,30 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 		return bSuccess;
 	}
 
+	if (NearestAdvArmoury.IsValid())
+	{
+		vector<AvHAIPlayer*> TeamBots = AIMGR_GetAIPlayersOnTeam(CommanderTeam);
+
+		for (auto it = TeamBots.begin(); it != TeamBots.end(); it++)
+		{
+			AvHAIPlayer* ThisPlayer = (*it);
+
+			if (IsPlayerActiveInGame(ThisPlayer->Edict) && ThisPlayer->BotRole == BOT_ROLE_BOMBARDIER && AITAC_GetNumWeaponsInPlay(CommanderTeam, WEAPON_MARINE_GL) == 0)
+			{
+				Vector DeployLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestAdvArmoury.Location, UTIL_MetresToGoldSrcUnits(3.0f));
+
+				if (vIsZero(DeployLocation))
+				{
+					DeployLocation = UTIL_GetRandomPointOnNavmeshInRadius(GetBaseNavProfile(MARINE_BASE_NAV_PROFILE), NearestAdvArmoury.Location, UTIL_MetresToGoldSrcUnits(3.0f));
+				}
+
+				bool bSuccess = AICOMM_DeployItem(pBot, DEPLOYABLE_ITEM_GRENADELAUNCHER, DeployLocation);
+
+				return bSuccess;
+			}
+		}
+	}
+
 	if (bDropWelder && !ExistingWelder.IsValid())
 	{
 		Vector DeployLocation = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(GetBaseNavProfile(STRUCTURE_BASE_NAV_PROFILE), NearestAdvArmoury.Location, UTIL_MetresToGoldSrcUnits(3.0f));

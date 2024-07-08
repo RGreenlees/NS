@@ -488,7 +488,7 @@ Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, 
 
 		NewSpot = UTIL_ProjectPointToNavmesh(NewSpot);
 
-		if (NewSpot != ZERO_VECTOR)
+		if (!vIsZero(NewSpot))
 		{
 			NewSpot.z += 10.0f;
 		}
@@ -503,35 +503,153 @@ Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, 
 
 	if (dtStatusSucceed(Status))
 	{
-		Vector FurthestPointVisible = UTIL_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), CheckPath, bPrecise);
-
-		if (vDist3DSq(FurthestPointVisible, TargetLocation) <= sqrf(ExplosionRadius))
-		{
-			return FurthestPointVisible;
-		}
-
-		Vector ThrowDir = UTIL_GetVectorNormal(FurthestPointVisible - Player->v.origin);
-
-		Vector LineEnd = FurthestPointVisible + (ThrowDir * UTIL_MetresToGoldSrcUnits(5.0f));
-
-		Vector ClosestPointInTrajectory = vClosestPointOnLine(FurthestPointVisible, LineEnd, TargetLocation);
-
-		ClosestPointInTrajectory = UTIL_ProjectPointToNavmesh(ClosestPointInTrajectory);
-		ClosestPointInTrajectory.z += 10.0f;
-
-		if (vDist2DSq(ClosestPointInTrajectory, TargetLocation) < sqrf(ExplosionRadius) && UTIL_PlayerHasLOSToLocation(Player, ClosestPointInTrajectory, UTIL_MetresToGoldSrcUnits(10.0f)) && UTIL_PointIsDirectlyReachable(ClosestPointInTrajectory, TargetLocation))
-		{
-			return ClosestPointInTrajectory;
-		}
-		else
-		{
-			return ZERO_VECTOR;
-		}
+		return UTIL_GetBestGrenadePointOnPath(Player, GetPlayerEyePosition(Player), CheckPath, TargetLocation, BALANCE_VAR(kGrenadeForce), ExplosionRadius, true);// UTIL_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), CheckPath, bPrecise);
 	}
 	else
 	{
 		return ZERO_VECTOR;
 	}
+}
+
+Vector UTIL_EstimateGrenadeRestingPoint(edict_t* GrenadeThrower, const float LaunchVelocity, const Vector LaunchPosition, const Vector TargetPosition)
+{
+	float CurrVelocity = LaunchVelocity;
+	Vector CurrPosition = LaunchPosition;
+	Vector CurrAngle = UTIL_GetVectorNormal(TargetPosition - LaunchPosition);
+
+	TraceResult Hit;
+
+	while (CurrVelocity > 0.0f)
+	{
+		Vector PrevPos = CurrPosition;
+		Vector TraceEnd = CurrPosition + (CurrAngle * CurrVelocity);
+		UTIL_TraceLine(CurrPosition, TraceEnd, dont_ignore_monsters, dont_ignore_glass, GrenadeThrower, &Hit);
+
+		if (Hit.flFraction >= 1.0f)
+		{
+			UTIL_TraceLine(TraceEnd, TraceEnd - Vector(0.0f, 0.0f, 1000.0f), dont_ignore_monsters, dont_ignore_glass, GrenadeThrower, &Hit);
+			Vector EndSpot = TraceEnd;
+
+			if (Hit.flFraction < 1.0f)
+			{
+				EndSpot = Hit.vecEndPos;
+			}
+
+			return EndSpot;
+		}
+		else
+		{
+			float MoveDist = vDist3D(CurrPosition, Hit.vecEndPos);
+			CurrVelocity -= (MoveDist * 0.5f);
+			CurrVelocity = CurrVelocity * 0.7f;
+			CurrPosition = Hit.vecEndPos;
+			CurrPosition = CurrPosition + Hit.vecPlaneNormal;
+
+			float ab = 1.0f - (CurrVelocity / LaunchVelocity);
+
+			float MinZAngle = 0.1f - ab;
+
+			CurrAngle.z = fminf(CurrAngle.z, MinZAngle);
+			CurrAngle = UTIL_GetVectorNormal(CurrAngle);
+
+			float SurfaceDot = clampf(UTIL_GetDotProduct(Hit.vecPlaneNormal, UP_VECTOR), 0.0f, 1.0f);
+			float BounceFactor = 1.23f - (0.23f * SurfaceDot);
+
+			CurrAngle = vReflect(CurrAngle, Hit.vecPlaneNormal, BounceFactor);
+		}
+	}
+
+	UTIL_TraceLine(CurrPosition, CurrPosition - Vector(0.0f, 0.0f, 1000.0f), dont_ignore_monsters, dont_ignore_glass, GrenadeThrower, &Hit);
+
+	if (Hit.flFraction < 1.0f)
+	{
+		CurrPosition = Hit.vecEndPos;
+	}
+
+	return CurrPosition;
+}
+
+Vector UTIL_GetBestGrenadePointOnPath(edict_t* GrenadeThrower, const Vector ViewerLocation, vector<bot_path_node>& path, const Vector GrenadeTargetLocation, float GrenadeVelocity, float BlastRadius, bool bPrecise)
+{
+	if (path.size() == 0) { return ZERO_VECTOR; }
+
+	float BlastRadiusSq = sqrf(BlastRadius);
+
+	bool bFoundFirst = false;
+
+	for (auto it = path.rbegin(); it != path.rend(); it++)
+	{
+		if (UTIL_QuickTrace(NULL, ViewerLocation, it->Location))
+		{
+			if (!bFoundFirst)
+			{
+				if (it != path.rbegin())
+				{
+					std::vector<bot_path_node>::reverse_iterator prevIt = prev(it);
+
+					Vector FromLoc = it->Location;
+					Vector ToLoc = prevIt->Location;
+
+					Vector Dir = UTIL_GetVectorNormal(ToLoc - FromLoc);
+
+					float Dist = vDist3D(FromLoc, ToLoc);
+					int Steps = (int)floorf(Dist / 25.0f);
+
+					Vector ThisView = FromLoc;
+
+					if (Steps > 0)
+					{
+						for (int i = 0; i < Steps; i++)
+						{
+							if (UTIL_QuickTrace(NULL, ViewerLocation, ThisView))
+							{
+								Vector GrenadeLanding = UTIL_EstimateGrenadeRestingPoint(GrenadeThrower, GrenadeVelocity, ViewerLocation, ThisView);
+
+								if (!vIsZero(GrenadeLanding) && vDist3DSq(GrenadeLanding, GrenadeTargetLocation) <= BlastRadiusSq && UTIL_QuickTrace(GrenadeThrower, GrenadeLanding + Vector(0.0f, 0.0f, 1.0f), GrenadeTargetLocation, false))
+								{
+									return ThisView;
+								}
+							}
+
+							ThisView = ThisView + (Dir * 25.0f);
+						}
+					}
+				}
+
+				bFoundFirst = true;
+			}
+
+			Vector FromLoc = it->Location;
+			Vector ToLoc = it->FromLocation;
+
+			Vector Dir = UTIL_GetVectorNormal(ToLoc - FromLoc);
+
+			float Dist = vDist3D(FromLoc, ToLoc);
+			int Steps = (int)floorf(Dist / 25.0f);
+
+			Vector ThisView = FromLoc;
+
+			if (Steps > 0)
+			{
+				for (int i = 0; i < Steps; i++)
+				{
+					if (UTIL_QuickTrace(NULL, ViewerLocation, ThisView))
+					{
+						Vector GrenadeLanding = UTIL_EstimateGrenadeRestingPoint(GrenadeThrower, GrenadeVelocity, ViewerLocation, ThisView);
+
+						if (!vIsZero(GrenadeLanding) && vDist3DSq(GrenadeLanding, GrenadeTargetLocation) <= BlastRadiusSq && UTIL_QuickTrace(GrenadeThrower, GrenadeLanding + Vector(0.0f, 0.0f, 1.0f), GrenadeTargetLocation, false))
+						{
+							return ThisView;
+						}
+					}
+
+					ThisView = ThisView + (Dir * 25.0f);
+				}
+			}
+		}
+	}
+
+	return ZERO_VECTOR;
 }
 
 AvHAIWeapon BotAlienChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target)

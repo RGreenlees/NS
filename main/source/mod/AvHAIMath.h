@@ -121,6 +121,9 @@ bool vBBOverlaps2D(const Vector MinBBA, const Vector MaxBBA, const Vector MinBBB
 // For the two lines provided, returns true if they cross each other on the X and Y axis
 bool vIntersects2D(const Vector LineAStart, const Vector LineAEnd, const Vector LineBStart, const Vector LineBEnd);
 
+// Returns the reflected ApproachAngle, given the struct SurfaceNormal
+Vector vReflect(const Vector ApproachAngle, const Vector SurfaceNormal, float BounceFactor = 2.0f);
+
 
 Vector vClosestPointOnBB(const Vector Point, const Vector MinBB, const Vector MaxBB);
 

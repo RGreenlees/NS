@@ -805,6 +805,8 @@ typedef struct AVH_AI_PLAYER
 
 	vector<AvHAIMarineBase> Bases;
 
+	AvHMessageID NextRandomCombatUpgrade = MESSAGE_NULL; // Next random upgrade to get after unlocking all the "important" ones
+
 } AvHAIPlayer;
 
 typedef struct _AVH_AI_SQUAD

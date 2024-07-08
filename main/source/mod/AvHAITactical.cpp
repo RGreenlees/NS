@@ -77,6 +77,9 @@ vector<AvHAISquad> ActiveSquads;
 vector<AvHAIMarineBase> ActiveTeamABases; // If Team A are marines, any active bases they have established around the map
 vector<AvHAIMarineBase> ActiveTeamBBases; // If Team B are marines, any active bases they have established around the map
 
+vector<AvHMessageID> AllAlienCombatUpgrades;
+vector<AvHMessageID> AllMarineCombatUpgrades;
+
 std::vector<AvHAIBuildableStructure> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter)
 {
 	std::vector<AvHAIBuildableStructure> Result;
@@ -6301,4 +6304,85 @@ bool AITAC_CanBuildOutGuardPost(const AvHAIMarineBase* Base)
 vector<AvHAIMarineBase>& AITAC_GetTeamBases(AvHTeamNumber Team)
 {
 	return (Team == AIMGR_GetTeamANumber()) ? ActiveTeamABases : ActiveTeamBBases;
+}
+
+void AITAC_PopulateCombatUpgrades()
+{
+	AllAlienCombatUpgrades.clear();
+
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_ONE);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_TWO);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_THREE);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_SEVEN);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_EIGHT);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_NINE);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_TEN);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_ELEVEN);
+	AllAlienCombatUpgrades.push_back(ALIEN_EVOLUTION_TWELVE);
+	AllAlienCombatUpgrades.push_back(ALIEN_HIVE_TWO_UNLOCK);
+	AllAlienCombatUpgrades.push_back(ALIEN_HIVE_THREE_UNLOCK);
+
+	AllMarineCombatUpgrades.clear();
+
+	AllMarineCombatUpgrades.push_back(RESEARCH_ARMOR_ONE);
+	AllMarineCombatUpgrades.push_back(RESEARCH_ARMOR_TWO);
+	AllMarineCombatUpgrades.push_back(RESEARCH_ARMOR_THREE);
+	AllMarineCombatUpgrades.push_back(RESEARCH_WEAPONS_ONE);
+	AllMarineCombatUpgrades.push_back(RESEARCH_WEAPONS_TWO);
+	AllMarineCombatUpgrades.push_back(RESEARCH_WEAPONS_THREE);
+	AllMarineCombatUpgrades.push_back(BUILD_RESUPPLY);
+	AllMarineCombatUpgrades.push_back(BUILD_CAT);
+	AllMarineCombatUpgrades.push_back(BUILD_WELDER);
+	AllMarineCombatUpgrades.push_back(BUILD_SCAN);
+	AllMarineCombatUpgrades.push_back(RESEARCH_MOTIONTRACK);
+	AllMarineCombatUpgrades.push_back(BUILD_SHOTGUN);
+	AllMarineCombatUpgrades.push_back(BUILD_HMG);
+	AllMarineCombatUpgrades.push_back(BUILD_HEAVY);
+	AllMarineCombatUpgrades.push_back(RESEARCH_GRENADES);
+	AllMarineCombatUpgrades.push_back(ALIEN_HIVE_THREE_UNLOCK);
+}
+
+AvHMessageID AITAC_GetRandomCombatUpgrade(AvHPlayer* Player)
+{
+	AvHTeamNumber PlayerTeam = Player->GetTeam();
+	AvHMessageID Result = MESSAGE_NULL;
+
+	float MaxResult = 0.0f;
+
+	if (AIMGR_GetTeamType(PlayerTeam) == AVH_CLASS_TYPE_MARINE)
+	{
+		for (auto it = AllMarineCombatUpgrades.begin(); it != AllMarineCombatUpgrades.end(); it++)
+		{
+			AvHMessageID ThisUpgrade = (*it);
+
+			if (!Player->GetHasCombatModeUpgrade(ThisUpgrade))
+			{
+				float ThisResult = frandrange(0.0f, 1.0f);
+
+				if (Result == MESSAGE_NULL || ThisResult > MaxResult)
+				{
+					Result = ThisUpgrade;
+				}
+			}
+		}
+	}
+	else
+	{
+		for (auto it = AllAlienCombatUpgrades.begin(); it != AllAlienCombatUpgrades.end(); it++)
+		{
+			AvHMessageID ThisUpgrade = (*it);
+
+			if (!Player->GetHasCombatModeUpgrade(ThisUpgrade))
+			{
+				float ThisResult = frandrange(0.0f, 1.0f);
+
+				if (Result == MESSAGE_NULL || ThisResult > MaxResult)
+				{
+					Result = ThisUpgrade;
+				}
+			}
+		}
+	}
+
+	return Result;
 }
