@@ -2962,112 +2962,11 @@ edict_t* UTIL_GetDoorBlockingPathPoint(AvHAIPlayer* pBot, bot_path_node* PathNod
 
 edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, bot_path_node* PathNode, edict_t* SearchBreakable)
 {
-	Vector FromLoc = PathNode->FromLocation;
-	Vector ToLoc = PathNode->Location;
+	Vector FromLocation = PathNode->FromLocation;
+	Vector ToLocation = PathNode->Location;
+	ToLocation.z = PathNode->requiredZ;
 
-	TraceResult breakableHit;
-
-	if (PathNode->flag == SAMPLE_POLYFLAGS_LADDER || PathNode->flag == SAMPLE_POLYFLAGS_WALLCLIMB)
-	{
-		Vector TargetLoc = Vector(FromLoc.x, FromLoc.y, PathNode->requiredZ);
-
-		UTIL_TraceLine(FromLoc, TargetLoc, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
-		if (!FNullEnt(SearchBreakable))
-		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
-		}
-		else
-		{
-			if (!FNullEnt(breakableHit.pHit))
-			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
-				{
-					return breakableHit.pHit;
-				}
-			}
-
-		}
-
-		Vector TargetLoc2 = Vector(ToLoc.x, ToLoc.y, PathNode->requiredZ);
-
-		UTIL_TraceLine(TargetLoc, TargetLoc2, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
-		if (!FNullEnt(SearchBreakable))
-		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
-		}
-		else
-		{
-			if (!FNullEnt(breakableHit.pHit))
-			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
-				{
-					return breakableHit.pHit;
-				}
-			}
-		}
-
-	}
-	else if (PathNode->flag == SAMPLE_POLYFLAGS_FALL)
-	{
-		Vector TargetLoc = Vector(ToLoc.x, ToLoc.y, FromLoc.z);
-
-		UTIL_TraceLine(FromLoc, TargetLoc, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
-		if (!FNullEnt(SearchBreakable))
-		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
-		}
-		else
-		{
-			if (!FNullEnt(breakableHit.pHit))
-			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
-				{
-					return breakableHit.pHit;
-				}
-			}
-		}
-
-		UTIL_TraceLine(TargetLoc, ToLoc + Vector(0.0f, 0.0f, 10.0f), dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
-		if (!FNullEnt(SearchBreakable))
-		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
-		}
-		else
-		{
-			if (!FNullEnt(breakableHit.pHit))
-			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
-				{
-					return breakableHit.pHit;
-				}
-			}
-		}
-	}
-
-	UTIL_TraceLine(FromLoc, ToLoc, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
-
-	if (!FNullEnt(SearchBreakable))
-	{
-		if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
-	}
-	else
-	{
-		if (!FNullEnt(breakableHit.pHit))
-		{
-			if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
-			{
-				return breakableHit.pHit;
-			}
-		}
-	}
-
-
-	return nullptr;
+	return UTIL_GetBreakableBlockingPathPoint(pBot, FromLocation, ToLocation, PathNode->flag, SearchBreakable);
 }
 
 edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, edict_t* SearchBreakable)
@@ -3075,45 +2974,50 @@ edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, const Vector From
 	Vector FromLoc = FromLocation;
 	Vector ToLoc = ToLocation;
 
-	TraceResult breakableHit;
+	TraceResult doorHit;
 
 	if (MovementFlag == SAMPLE_POLYFLAGS_LADDER || MovementFlag == SAMPLE_POLYFLAGS_WALLCLIMB)
 	{
-		Vector TargetLoc = Vector(FromLoc.x, FromLoc.y, ToLocation.z);
-
-		UTIL_TraceLine(FromLoc, TargetLoc, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
+		Vector TargetLoc = (ToLocation.z > FromLocation.z) ? Vector(FromLoc.x, FromLoc.y, ToLoc.z) : Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
 		if (!FNullEnt(SearchBreakable))
 		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, SearchBreakable->v.absmin - Vector(10.0f, 10.0f, 10.0f), SearchBreakable->v.absmax + Vector(10.0f, 10.0f, 10.0f)))
+			{
+				return SearchBreakable;
+			}
 		}
 		else
 		{
-			if (!FNullEnt(breakableHit.pHit))
+			CBaseEntity* currBreakable = NULL;
+
+			// Marine Structures
+			while (((currBreakable = UTIL_FindEntityByClassname(currBreakable, "func_breakable")) != NULL) && currBreakable)
 			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
+				if (vlineIntersectsAABB(FromLoc, TargetLoc, currBreakable->pev->absmin - Vector(10.0f, 10.0f, 10.0f), currBreakable->pev->absmax + Vector(10.0f, 10.0f, 10.0f)))
 				{
-					return breakableHit.pHit;
+					return currBreakable->edict();
 				}
 			}
-
 		}
-
-		Vector TargetLoc2 = Vector(ToLoc.x, ToLoc.y, ToLocation.z);
-
-		UTIL_TraceLine(TargetLoc, TargetLoc2, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
 
 		if (!FNullEnt(SearchBreakable))
 		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
+			if (vlineIntersectsAABB(TargetLoc, ToLoc, SearchBreakable->v.absmin - Vector(10.0f, 10.0f, 10.0f), SearchBreakable->v.absmax + Vector(10.0f, 10.0f, 10.0f)))
+			{
+				return SearchBreakable;
+			}
 		}
 		else
 		{
-			if (!FNullEnt(breakableHit.pHit))
+			CBaseEntity* currBreakable = NULL;
+
+			// Marine Structures
+			while (((currBreakable = UTIL_FindEntityByClassname(currBreakable, "func_breakable")) != NULL) && currBreakable)
 			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
+				if (vlineIntersectsAABB(TargetLoc, ToLoc, currBreakable->pev->absmin - Vector(10.0f, 10.0f, 10.0f), currBreakable->pev->absmax + Vector(10.0f, 10.0f, 10.0f)))
 				{
-					return breakableHit.pHit;
+					return currBreakable->edict();
 				}
 			}
 		}
@@ -3123,58 +3027,72 @@ edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, const Vector From
 	{
 		Vector TargetLoc = Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
-		UTIL_TraceLine(FromLoc, TargetLoc, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
 		if (!FNullEnt(SearchBreakable))
 		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, SearchBreakable->v.absmin - Vector(10.0f, 10.0f, 10.0f), SearchBreakable->v.absmax + Vector(10.0f, 10.0f, 10.0f)))
+			{
+				return SearchBreakable;
+			}
 		}
 		else
 		{
-			if (!FNullEnt(breakableHit.pHit))
+			CBaseEntity* currBreakable = NULL;
+
+			// Marine Structures
+			while (((currBreakable = UTIL_FindEntityByClassname(currBreakable, "func_breakable")) != NULL) && currBreakable)
 			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
+				if (vlineIntersectsAABB(FromLoc, TargetLoc, currBreakable->pev->absmin - Vector(10.0f, 10.0f, 10.0f), currBreakable->pev->absmax + Vector(10.0f, 10.0f, 10.0f)))
 				{
-					return breakableHit.pHit;
+					return currBreakable->edict();
 				}
 			}
 		}
 
-		UTIL_TraceLine(TargetLoc, ToLoc + Vector(0.0f, 0.0f, 10.0f), dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
-
 		if (!FNullEnt(SearchBreakable))
 		{
-			if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
+			if (vlineIntersectsAABB(TargetLoc, ToLoc, SearchBreakable->v.absmin - Vector(10.0f, 10.0f, 10.0f), SearchBreakable->v.absmax + Vector(10.0f, 10.0f, 10.0f)))
+			{
+				return SearchBreakable;
+			}
 		}
 		else
 		{
-			if (!FNullEnt(breakableHit.pHit))
+			CBaseEntity* currBreakable = NULL;
+
+			// Marine Structures
+			while (((currBreakable = UTIL_FindEntityByClassname(currBreakable, "func_breakable")) != NULL) && currBreakable)
 			{
-				if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
+				if (vlineIntersectsAABB(TargetLoc, ToLoc, currBreakable->pev->absmin - Vector(10.0f, 10.0f, 10.0f), currBreakable->pev->absmax + Vector(10.0f, 10.0f, 10.0f)))
 				{
-					return breakableHit.pHit;
+					return currBreakable->edict();
 				}
 			}
 		}
+
 	}
 
-	UTIL_TraceLine(FromLoc, ToLoc, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &breakableHit);
+	Vector TargetLoc = ToLoc + Vector(0.0f, 0.0f, 10.0f);
 
 	if (!FNullEnt(SearchBreakable))
 	{
-		if (breakableHit.pHit == SearchBreakable) { return breakableHit.pHit; }
+		if (vlineIntersectsAABB(FromLoc, TargetLoc, SearchBreakable->v.absmin - Vector(10.0f, 10.0f, 10.0f), SearchBreakable->v.absmax + Vector(10.0f, 10.0f, 10.0f)))
+		{
+			return SearchBreakable;
+		}
 	}
 	else
 	{
-		if (!FNullEnt(breakableHit.pHit))
+		CBaseEntity* currBreakable = NULL;
+
+		// Marine Structures
+		while (((currBreakable = UTIL_FindEntityByClassname(currBreakable, "func_breakable")) != NULL) && currBreakable)
 		{
-			if (strcmp(STRING(breakableHit.pHit->v.classname), "func_breakable") == 0)
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, currBreakable->pev->absmin - Vector(10.0f, 10.0f, 10.0f), currBreakable->pev->absmax + Vector(10.0f, 10.0f, 10.0f)))
 			{
-				return breakableHit.pHit;
+				return currBreakable->edict();
 			}
 		}
 	}
-
 
 	return nullptr;
 }
@@ -7126,41 +7044,18 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 
 Vector FindClosestPointBackOnPath(AvHAIPlayer* pBot, Vector Destination)
 {
-
-	Vector ValidNavmeshPoint = AdjustPointForPathfinding(pBot->CollisionHullBottomLocation, pBot->BotNavInfo.NavProfile);
-
-	if (vIsZero(ValidNavmeshPoint))
-	{
-		DeployableSearchFilter ResNodeFilter;
-		ResNodeFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
-
-		AvHAIResourceNode* NearestResNode = AITAC_FindNearestResourceNodeToLocation(pBot->Edict->v.origin, &ResNodeFilter);
-
-		Vector ValidNavmeshPoint = AITAC_GetTeamStartingLocation(pBot->Player->GetTeam());
-
-		if (NearestResNode && vDist2D(pBot->Edict->v.origin, NearestResNode->Location) < vDist2D(pBot->Edict->v.origin, ValidNavmeshPoint))
-		{
-			ValidNavmeshPoint = NearestResNode->Location;
-		}
-
-		ValidNavmeshPoint = UTIL_ProjectPointToNavmesh(ValidNavmeshPoint, pBot->BotNavInfo.NavProfile);
-
-		if (vIsZero(ValidNavmeshPoint))
-		{
-			return g_vecZero;
-		}
-	}
+	Vector AdjustedEndPoint = AdjustPointForPathfinding(Destination);
+	AdjustedEndPoint = UTIL_ProjectPointToNavmesh(Destination, pBot->BotNavInfo.NavProfile);
 
 	vector<bot_path_node> BackwardsPath;
 	BackwardsPath.clear();
 
 	// Now we find a path backwards from the valid nav mesh point to our location, trying to get as close as we can to it
 
-	dtStatus BackwardFindingStatus = FindPathClosestToPoint(pBot->BotNavInfo.NavProfile, ValidNavmeshPoint, pBot->CurrentFloorPosition, BackwardsPath, UTIL_MetresToGoldSrcUnits(50.0f));
+	dtStatus BackwardFindingStatus = FindPathClosestToPoint(pBot->BotNavInfo.NavProfile, AdjustedEndPoint, pBot->CurrentFloorPosition, BackwardsPath, UTIL_MetresToGoldSrcUnits(50.0f));
 
 	if (dtStatusSucceed(BackwardFindingStatus))
 	{
-
 		Vector NewMoveLocation = prev(BackwardsPath.end())->Location;
 		Vector NewMoveFromLocation = prev(BackwardsPath.end())->FromLocation;
 
@@ -7507,8 +7402,6 @@ void BotFollowFlightPath(AvHAIPlayer* pBot, bool bAllowSkip)
 		LiftMove(pBot, CurrentPathPoint->FromLocation, CurrentMoveDest);
 		return;
 	}
-
-	bool bShouldSkipAhead = (CurrentPathPoint->flag != SAMPLE_POLYFLAGS_WALLCLIMB);
 
 	if (bAllowSkip)
 	{
