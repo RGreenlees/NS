@@ -3,6 +3,7 @@
 
 #include "AvHConstants.h"
 #include "AvHAIPlayer.h"
+#include "AvHAIMapData.h"
 
 // The rate at which the bot will call RunPlayerMove in, default is 100hz. WARNING: Increasing the rate past 100hz causes bots to move and turn slowly due to GoldSrc limits!
 static const double BOT_SERVER_UPDATE_RATE = (1.0 / 100.0);
@@ -67,6 +68,8 @@ void AIDEBUG_SetDebugVector1(const Vector NewVector);
 void AIDEBUG_SetDebugVector2(const Vector NewVector);
 void AIDEBUG_TestPathFind();
 void AIDEBUG_TestFlightPathFind(Vector FromLoc, Vector ToLoc);
+DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject();
+void AIDEBUG_SetDebugDynamicMapObject(edict_t* NewObject);
 #endif
 
 int AIMGR_GetNumAIPlayersOnTeam(AvHTeamNumber Team);

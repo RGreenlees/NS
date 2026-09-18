@@ -2,7 +2,7 @@
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
 // bot_math.h
-// 
+//
 // Contains all useful math functions for bot stuff
 //
 
@@ -11,7 +11,7 @@
 #ifndef AVH_AI_MATH_H
 #define AVH_AI_MATH_H
 
-#include "../dlls/extdll.h"
+#include <dlls/extdll.h>
 
 static const Vector ZERO_VECTOR = Vector(0.0f, 0.0f, 0.0f);
 static const Vector UP_VECTOR = Vector(0.0f, 0.0f, 1.0f); // Normalized "up" direction

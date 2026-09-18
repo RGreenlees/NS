@@ -302,6 +302,13 @@ bool GetNearestMapLocationAtPoint(vec3_t SearchLocation, string& outLocation)
 	return theSuccess;
 }
 
+bool UTIL_IsPointInSwimArea(const Vector& TestPoint)
+{
+	return UTIL_PointContents(TestPoint) == CONTENTS_WATER
+		|| UTIL_PointContents(TestPoint) == CONTENTS_SLIME
+		|| UTIL_PointContents(TestPoint) == CONTENTS_LAVA;
+}
+
 void AIDEBUG_DrawBotPath(edict_t* OutputPlayer, AvHAIPlayer* pBot, float DrawTime)
 {
 	AIDEBUG_DrawPath(OutputPlayer, pBot->BotNavInfo.CurrentPath, DrawTime);
@@ -318,41 +325,40 @@ void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<bot_path_node>& path, float 
 
 		switch (it->flag)
 		{
-		case SAMPLE_POLYFLAGS_WELD:
-		case SAMPLE_POLYFLAGS_DOOR:
-			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 0, 0);
-			break;
-		case SAMPLE_POLYFLAGS_JUMP:
-		case SAMPLE_POLYFLAGS_DUCKJUMP:
-			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 255, 0);
-			break;
-		case SAMPLE_POLYFLAGS_LADDER:
-		case SAMPLE_POLYFLAGS_LIFT:
-			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 0, 0, 255);
-			break;
-		case SAMPLE_POLYFLAGS_WALLCLIMB:
-			UTIL_DrawLine(OutputPlayer, FromLoc, Vector(FromLoc.x, FromLoc.y, it->requiredZ), DrawTime, 0, 128, 0);
-			UTIL_DrawLine(OutputPlayer, Vector(FromLoc.x, FromLoc.y, it->requiredZ), ToLoc, DrawTime, 0, 128, 0);
-			break;
-		case SAMPLE_POLYFLAGS_BLOCKED:
-			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 128, 128, 128);
-			break;
-		case SAMPLE_POLYFLAGS_TEAM1PHASEGATE:
-		case SAMPLE_POLYFLAGS_TEAM2PHASEGATE:
-			UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 128, 128);
-			break;
-		default:
-		{
-			if (it->area == SAMPLE_POLYAREA_CROUCH)
+			case SAMPLE_POLYFLAGS_WELD:
+			case SAMPLE_POLYFLAGS_DOOR:
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 0, 0);
+				break;
+			case SAMPLE_POLYFLAGS_JUMP:
+			case SAMPLE_POLYFLAGS_DUCKJUMP:
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 255, 0);
+				break;
+			case SAMPLE_POLYFLAGS_LADDER:
+			case SAMPLE_POLYFLAGS_LIFT:
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 0, 0, 255);
+				break;
+			case SAMPLE_POLYFLAGS_WALLCLIMB:
+				UTIL_DrawLine(OutputPlayer, FromLoc, Vector(FromLoc.x, FromLoc.y, it->requiredZ), DrawTime, 0, 128, 0);
+				UTIL_DrawLine(OutputPlayer, Vector(FromLoc.x, FromLoc.y, it->requiredZ), ToLoc, DrawTime, 0, 128, 0);
+				break;
+			case SAMPLE_POLYFLAGS_BLOCKED:
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 128, 128, 128);
+				break;
+			case SAMPLE_POLYFLAGS_TEAM1PHASEGATE:
+			case SAMPLE_POLYFLAGS_TEAM2PHASEGATE:
+				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 128, 128);
+				break;
+			default:
 			{
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 150, 150);
+				if (it->area == SAMPLE_POLYAREA_CROUCH)
+				{
+					UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 150, 150);
+				}
+				else
+				{
+					UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime);
+				}
 			}
-			else
-			{
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime);
-			}
-		}
-			
 			break;
 		}
 	}
@@ -469,7 +475,7 @@ void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, float drawTimeSec
 
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, int r, int g, int b)
 {
-	if (FNullEnt(pEntity) || pEntity->free) 
+	if (FNullEnt(pEntity) || pEntity->free)
 	{
 		MESSAGE_BEGIN(MSG_BROADCAST, SVC_TEMPENTITY);
 	}
@@ -730,7 +736,7 @@ char* UTIL_TaskTypeToChar(const BotTaskType TaskType)
 	switch (TaskType)
 	{
 	case TASK_ATTACK:
-		
+
 		return "Attack";
 	case TASK_BUILD:
 		return "Build";

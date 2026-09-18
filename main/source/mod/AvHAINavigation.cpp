@@ -2,7 +2,7 @@
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
 // bot_navigation.cpp
-// 
+//
 // Handles all bot path finding and movement
 //
 
@@ -299,7 +299,7 @@ void AIDEBUG_DrawTemporaryObstacles(float DrawTime)
 
 			int r, g, b;
 
-			
+
 
 			if (ObstacleRef->type == ObstacleType::DT_OBSTACLE_BOX)
 			{
@@ -616,7 +616,7 @@ Vector UTIL_GetNearestPointOnNavWall(const nav_profile &NavProfile, const Vector
 unsigned int UTIL_AddTemporaryObstacle(unsigned int NavMeshIndex, const Vector Location, float Radius, float Height, int area)
 {
 	unsigned int ObstacleNum = 0;
-		
+
 	if (NavMeshes[NavMeshIndex].tileCache)
 	{
 		float Pos[3] = { Location.x, Location.z - (Height * 0.5f), -Location.y };
@@ -642,7 +642,7 @@ void UTIL_AddStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
 	if (bCollideWithPlayers)
 	{
 		unsigned int area = UTIL_GetAreaForObstruction(Structure->StructureType, Structure->edict);
-		
+
 		// We add an obstacle for the building nav mesh below
 		for (int i = 0; i < BUILDING_NAV_MESH; i++)
 		{
@@ -670,7 +670,7 @@ void UTIL_AddStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
 
 		Structure->Obstacles.push_back(NewObstacle);
 	}
-	
+
 }
 
 void UTIL_RemoveStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
@@ -784,6 +784,7 @@ void ReloadNavMeshes()
 
 		ClearBotMovement(ThisPlayer);
 	}
+
 	AITAC_ClearMapAIData(false);
 	UnloadNavMeshes();
 	bool bSuccess = LoadNavMesh(STRING(gpGlobals->mapname));
@@ -836,19 +837,6 @@ void UnloadNavMeshes()
 	NavmeshStatus = NAVMESH_STATUS_PENDING;
 }
 
-void UnloadNavigationData()
-{
-	UnloadNavMeshes();
-
-	UTIL_ClearDoorData();
-	UTIL_ClearWeldablesData();
-
-	memset(BaseNavProfiles, 0, sizeof(nav_profile));
-
-	AIMGR_ClearBotData();
-
-}
-
 bool LoadNavMesh(const char* mapname)
 {
 	memset(NavMeshes, 0, sizeof(NavMeshes));
@@ -861,13 +849,13 @@ bool LoadNavMesh(const char* mapname)
 
 	FILE* savedFile = fopen(filename, "rb");
 
-	if (!savedFile) 
-	{ 
+	if (!savedFile)
+	{
 		char ErrMsg[256];
 		sprintf(ErrMsg, "No nav file found for %s in the navmeshes folder\n", mapname);
 		g_engfuncs.pfnServerPrint(ErrMsg);
 		g_engfuncs.pfnServerPrint("You will need to create one using the Nav Editor tool in the navmeshes folder, or download one\n");
-		return false; 
+		return false;
 	}
 
 	LinearAllocator* m_talloc = new LinearAllocator(32000);
@@ -1171,7 +1159,7 @@ void UTIL_PopulateBaseNavProfiles()
 	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
 	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_FLY | SAMPLE_POLYFLAGS_WALLCLIMB | SAMPLE_POLYFLAGS_WELD);
 	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	
+
 
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].bFlyingProfile = false;
@@ -1189,7 +1177,7 @@ void UTIL_PopulateBaseNavProfiles()
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY);
 	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.addExcludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY);
-	
+
 
 
 	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
@@ -1282,15 +1270,10 @@ bool loadNavigationData(const char* mapname)
 	}
 
 	NavmeshStatus = NAVMESH_STATUS_SUCCESS;
-	
+
 	UTIL_PopulateBaseNavProfiles();
 
 	return true;
-}
-
-bool NavmeshLoaded()
-{
-	return NavMeshes[0].navMesh != nullptr;
 }
 
 AvHAINavMeshStatus NAV_GetNavMeshStatus()
@@ -1686,7 +1669,7 @@ dtStatus FindFlightPathToPoint(const nav_profile &NavProfile, Vector FromLocatio
 		// The path point output by Detour uses the OpenGL, right-handed coordinate system. Convert to Goldsrc coordinates
 		NextPathPoint.x = StraightPath[nIndex++];
 		NextPathPoint.z = StraightPath[nIndex++];
-		NextPathPoint.y = -StraightPath[nIndex++];		
+		NextPathPoint.y = -StraightPath[nIndex++];
 
 		m_navMesh->getPolyArea(StraightPolyPath[nVert], &ThisArea);
 		m_navMesh->getPolyFlags(StraightPolyPath[nVert], &ThisFlags);
@@ -1707,7 +1690,7 @@ dtStatus FindFlightPathToPoint(const nav_profile &NavProfile, Vector FromLocatio
 		bot_path_node NextPathNode;
 
 		NextPathNode.flag = CurrFlags;
-		
+
 		NextPathNode.area = CurrArea;
 		NextPathNode.poly = StraightPolyPath[nVert];
 
@@ -2001,7 +1984,7 @@ dtStatus FindPathClosestToPoint(const nav_profile& NavProfile, const Vector From
 		if (hit.flFraction < 1.0f)
 		{
 			NextPathNode.Location = hit.vecEndPos;
-			
+
 			if (CurrFlags != SAMPLE_POLYFLAGS_JUMP && CurrFlags != SAMPLE_POLYFLAGS_WALLCLIMB)
 			{
 				NextPathNode.Location.z += 20.0f;
@@ -2132,7 +2115,7 @@ dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle,
 		else
 		{
 			FromFloorLocation = CurrentPathNode.FromLocation;
-		}		
+		}
 	}
 	else
 	{
@@ -2160,7 +2143,7 @@ dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle,
 
 		if (!vIsZero(LiftEnd))
 		{
-			FromLocation = LiftEnd;			
+			FromLocation = LiftEnd;
 
 			AvHAIOffMeshConnection* LiftOffMesh = UTIL_GetOffMeshConnectionForLift(LiftReference);
 
@@ -2172,7 +2155,7 @@ dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle,
 			}
 		}
 	}
-	
+
 	Vector ToFloorLocation = AdjustPointForPathfinding(ToLocation);
 
 	float pStartPos[3] = { FromFloorLocation.x, FromFloorLocation.z, -FromFloorLocation.y };
@@ -2260,7 +2243,7 @@ dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle,
 		StartPathNode.Location = LiftEnd;
 		StartPathNode.flag = SAMPLE_POLYFLAGS_LIFT;
 		StartPathNode.area = SAMPLE_POLYAREA_LIFT;
-		
+
 		path.push_back(StartPathNode);
 
 		NodeFromLocation = LiftEnd;
@@ -2421,7 +2404,7 @@ bool HasBotReachedPathPoint(const AvHAIPlayer* pBot)
 	}
 
 	switch (CurrentNavFlag)
-	{		
+	{
 		case SAMPLE_POLYFLAGS_WALK:
 			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
 		case SAMPLE_POLYFLAGS_WELD:
@@ -2481,7 +2464,7 @@ bool HasBotCompletedLadderMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector
 		else
 		{
 			if (vDist2DSq(pBot->Edict->v.origin, MoveEnd) < sqrf(GetPlayerRadius(pBot->Edict)) && UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, NextMoveDestination, GetPlayerRadius(pBot->Edict))) { return true; }
-		}		
+		}
 
 	}
 
@@ -2573,7 +2556,7 @@ bool HasBotCompletedJumpMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector M
 				return true;
 			}
 		}
-	}	
+	}
 
 	return vPointOverlaps3D(MoveEnd, pBot->Edict->v.absmin, pBot->Edict->v.absmax);
 }
@@ -2595,7 +2578,7 @@ void CheckAndHandleDoorObstruction(AvHAIPlayer* pBot)
 	bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
 
 	edict_t* BlockingDoorEdict = UTIL_GetDoorBlockingPathPoint(pBot->Edict->v.origin, CurrentPathNode.Location, CurrentPathNode.flag, nullptr);
-	
+
 	if (FNullEnt(BlockingDoorEdict))
 	{
 		int NumIterations = 0;
@@ -2741,7 +2724,7 @@ void CheckAndHandleDoorObstruction(AvHAIPlayer* pBot)
 			return;
 		}
 	}
-	
+
 }
 
 edict_t* UTIL_GetDoorBlockingPathPoint(AvHAIPlayer* pBot, bot_path_node* PathNode, edict_t* SearchDoor)
@@ -3471,7 +3454,7 @@ void CheckAndHandleBreakableObstruction(AvHAIPlayer* pBot, const Vector MoveFrom
 			pBot->Button |= IN_ATTACK;
 		}
 	}
-	
+
 }
 
 void NewMove(AvHAIPlayer* pBot)
@@ -3921,7 +3904,7 @@ void MountLadderMove(AvHAIPlayer* pBot, edict_t* LadderToMount)
 	Vector NearestPointOnLadder = UTIL_GetClosestPointOnEntityToLocation(pBot->Edict->v.origin, LadderToMount);
 
 	Vector OrientationToLadder = UTIL_GetVectorNormal2D(pBot->Edict->v.origin - NearestPointOnLadder);
-	
+
 	if (UTIL_GetDotProduct2D(LadderNormal, OrientationToLadder) < 0.8f)
 	{
 		Vector MovePoint = NearestPointOnLadder + (LadderNormal * 32.0f);
@@ -3936,7 +3919,7 @@ void MountLadderMove(AvHAIPlayer* pBot, edict_t* LadderToMount)
 	}
 
 	Vector LookPoint = NearestPointOnLadder;
-	
+
 	BotLookAt(pBot, LookPoint, true);
 }
 
@@ -4013,7 +3996,7 @@ void SkulkLadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector En
 	{
 		Vector TraceBeginLocation = (bIsGoingUpLadder) ? pBot->CollisionHullTopLocation : pBot->CollisionHullBottomLocation;
 		Vector StartLeftTrace = TraceBeginLocation - (ClimbRightNormal * (GetPlayerRadius(pBot->Player) - 1.0f));
-		
+
 		Vector StartRightTrace = TraceBeginLocation + (ClimbRightNormal * (GetPlayerRadius(pBot->Player) - 1.0f));
 
 		Vector EndLeftTrace = (bIsGoingUpLadder) ? StartLeftTrace + Vector(0.0f, 0.0f, 4.0f) : StartLeftTrace - Vector(0.0f, 0.0f, 4.0f);
@@ -4080,9 +4063,9 @@ void SkulkLadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector En
 
 		pBot->Edict->v.velocity = pBot->desiredMovementDir * SpeedXY;
 		pBot->Edict->v.velocity.z = ZVelocity;
-		
+
 	}
-	
+
 }
 
 void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight, unsigned char NextArea)
@@ -4109,7 +4092,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 	{
 		// We're on the ladder and actively climbing
 		Vector CurrentLadderNormal;
-		
+
 		if (pBot->Edict->v.origin.z > UTIL_GetNearestLadderTopPoint(pEdict).z)
 		{
 			CurrentLadderNormal = UTIL_GetNearestLadderNormal(pBot->CollisionHullBottomLocation + Vector(0.0f, 0.0f, 5.0f));
@@ -4284,7 +4267,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 			}
 
 			// Crouch if we're hitting our head on a ceiling
-				
+
 
 			if (!IsPlayerGorge(pEdict) && !IsPlayerLerk(pEdict))
 			{
@@ -4473,7 +4456,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 
 		return;
 	}
-	
+
 
 	if (pBot->Edict->v.origin.z < nearestLadderTop.z)
 	{
@@ -4495,7 +4478,7 @@ void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoin
 		}
 		else
 		{
-			
+
 			Vector nearestLadderPoint = UTIL_GetNearestLadderCentrePoint(pEdict);
 			nearestLadderPoint.z = pEdict->v.origin.z;
 			pBot->desiredMovementDir = UTIL_GetVectorNormal2D(NearestPointOnLadder - pEdict->v.origin);
@@ -4542,7 +4525,7 @@ void NAV_ForceActivateTrigger(AvHAIPlayer* pBot, DoorTrigger* TriggerRef)
 {
 	if (!TriggerRef || !TriggerRef->Entity) { return; }
 
-	
+
 
 	switch (TriggerRef->TriggerType)
 	{
@@ -4657,7 +4640,7 @@ void LiftMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 
 		// We're on the lift, but it's not about to start moving.
 
-		
+
 		// We're trapped half-way. Some dick must have hit the button and stopped the lift part-way
 		// Activate force powers!
 		if (!bIsLiftAtOrNearStart)
@@ -4719,7 +4702,7 @@ void LiftMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 				MoveToWithoutNav(pBot, LiftPosition);
 			}
 
-			
+
 			return;
 		}
 
@@ -4755,7 +4738,7 @@ void LiftMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 
 			return;
 		}
-		
+
 		TriggerToActivate = UTIL_GetNearestDoorTrigger(pBot->Edict->v.origin, NearestLift, nullptr, false);
 
 		if (!TriggerToActivate)
@@ -4790,7 +4773,7 @@ void LiftMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 				NAV_SetBreakMovementTask(pBot, TriggerToActivate->Edict, TriggerToActivate);
 			}
 		}
-		
+
 		return;
 	}
 
@@ -4960,7 +4943,7 @@ bool IsBotOffWalkNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd,
 
 	// This shouldn't happen... but does occasionally. Walk moves should always be directly reachable from start to end
 	//if (!UTIL_PointIsDirectlyReachable(MoveStart, MoveEnd)) { return true; }
-	
+
 	if (UTIL_PointIsDirectlyReachable(MoveStart, MoveEnd) && !UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, MoveEnd)) { return true; }
 
 	Vector NearestPointOnLine = vClosestPointOnLine2D(MoveStart, MoveEnd, pBot->Edict->v.origin);
@@ -5032,7 +5015,7 @@ bool IsBotOffPhaseGateNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector Mov
 	bool StartPGExists = AITAC_DeployableExistsAtLocation(MoveStart, &PGFilter);
 
 	if (!StartPGExists) { return true; }
-	
+
 	bool EndPGExists = AITAC_DeployableExistsAtLocation(MoveEnd, &PGFilter);
 
 	if (!EndPGExists) { return true; }
@@ -5130,7 +5113,7 @@ void BlinkClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector End
 				BotMoveLookAt(pBot, EndPoint + Vector(0.0f, 0.0f, 100.0f));
 			}
 
-			
+
 			pBot->Button |= IN_ATTACK2;
 		}
 		else
@@ -5167,7 +5150,7 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 
 	Vector vForward = UTIL_GetVectorNormal2D(EndPoint - StartPoint);
 	Vector ClimbAngle = UTIL_GetVectorNormal(Vector(EndPoint.x, EndPoint.y, RequiredClimbHeight) - pBot->Edict->v.origin);
-	
+
 	TraceResult SurfaceCheck;
 
 	UTIL_TraceHull(pBot->Edict->v.origin - Vector(0.0f, 0.0f, 1.0f), pBot->Edict->v.origin + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, pBot->Edict->v.pContainingEntity, &SurfaceCheck);
@@ -5177,14 +5160,14 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 	bool bIsUnderClimbing = false;
 
 	bool bClimbingUnderway = ((pBot->CollisionHullBottomLocation.z - StartPoint.z) >= 32.0f) && IsPlayerClimbingWall(pBot->Edict);
-	
+
 	if (pEdict->v.origin.z < (RequiredClimbHeight - 10.0f) && !(pEdict->v.flags & FL_ONGROUND) && bClimbingUnderway)
 	{
 		bIsUnderClimbing = (SurfaceCheck.flFraction < 1.0f && UTIL_GetDotProduct(ClimbAngle, CeilNormal) < 0.0f);
-	}	
+	}
 
 	if (bIsUnderClimbing)
-	{		
+	{
 		pBot->Button |= IN_WALK;
 		vForward = (UTIL_GetDotProduct2D(vForward, CeilNormal) > 0.0f) ? vForward : -vForward;
 
@@ -5215,7 +5198,7 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 	float ZDiff = fabs(pEdict->v.origin.z - RequiredClimbHeight);
 	Vector AdjustedTargetLocation = EndPoint + (UTIL_GetVectorNormal2D(EndPoint - StartPoint) * 1000.0f);
 	Vector DirectAheadView = pBot->CurrentEyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - pBot->CurrentEyePosition) * 100.0f);
-	
+
 	Vector LookLocation = g_vecZero;
 
 	if (ZDiff < 1.0f)
@@ -5476,7 +5459,7 @@ void MoveDirectlyTo(AvHAIPlayer* pBot, const Vector Destination)
 				pBot->desiredMovementDir = pBot->desiredMovementDir - vRight;
 			}
 		}
-		
+
 	}
 
 	float DistFromDestination = vDist2DSq(pBot->Edict->v.origin, Destination);
@@ -5877,7 +5860,7 @@ void UTIL_TraceNavLine(const nav_profile &NavProfile, const Vector Start, const 
 		return;
 	}
 
-	
+
 
 	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_Filter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
 
@@ -6312,7 +6295,7 @@ bool AbortCurrentMove(AvHAIPlayer* pBot, const Vector NewDestination)
 			{
 				WallClimbMove(pBot, MoveFrom, MoveTo, CurrentPathNode.requiredZ);
 			}
-			
+
 		}
 	}
 
@@ -6445,7 +6428,7 @@ void UpdateBotStuck(AvHAIPlayer* pBot)
 			{
 				pBot->Button &= ~IN_DUCK;
 			}
-		}		
+		}
 	}
 }
 
@@ -6592,7 +6575,7 @@ void SkulkUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle)
 	pBot->BotNavInfo.MoveStyle = MoveStyle;
 	pBot->BotNavInfo.PreviousMoveStyle = MoveStyle;
 
-	pBot->BotNavInfo.bNavProfileChanged = true;	
+	pBot->BotNavInfo.bNavProfileChanged = true;
 
 	nav_profile* NavProfile = &pBot->BotNavInfo.NavProfile;
 
@@ -6770,7 +6753,7 @@ bool NAV_GenerateNewBasePath(AvHAIPlayer* pBot, const Vector NewDestination, con
 
 	vector<bot_path_node> PendingPath;
 	bool bIsFlyingProfile = BotNavInfo->NavProfile.bFlyingProfile;
-	
+
 
 	if (bIsFlyingProfile)
 	{
@@ -6867,7 +6850,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 		pBot->BotNavInfo.StuckInfo.bPathFollowFailed = false;
 		ClearBotMovement(pBot);
 
-		return true; 
+		return true;
 	}
 
 	if (!UTIL_IsTileCacheUpToDate()) { return true; }
@@ -6884,7 +6867,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 	bool bForceRecalculation = (pBot->BotNavInfo.NextForceRecalc > 0.0f && gpGlobals->time >= pBot->BotNavInfo.NextForceRecalc);
 	bool bIsPerformingMoveTask = (BotNavInfo->MovementTask.TaskType != MOVE_TASK_NONE && vEquals(Destination, BotNavInfo->MovementTask.TaskLocation, GetPlayerRadius(pBot->Player)));
 	bool bEndGoalChanged = (!vEquals(Destination, BotNavInfo->TargetDestination, GetPlayerRadius(pBot->Player)) && !bIsPerformingMoveTask);
-	
+
 	bool bShouldGenerateMainPath = (bEndGoalChanged || bNavProfileChanged || bForceRecalculation);
 	bool bShouldGenerateMoveTaskPath = (bIsPerformingMoveTask && !vEquals(BotNavInfo->PathDestination, BotNavInfo->MovementTask.TaskLocation, GetPlayerRadius(pBot->Player)));
 
@@ -6998,7 +6981,7 @@ bool MoveTo(AvHAIPlayer* pBot, const Vector Destination, const BotMoveStyle Move
 				}
 			}
 		}
-		
+
 	}
 
 	if (!bIsPerformingMoveTask && BotNavInfo->MovementTask.TaskType != MOVE_TASK_NONE)
@@ -7184,7 +7167,7 @@ void SkipAheadInFlightPath(AvHAIPlayer* pBot)
 			CurrentPathPoint->FromLocation = pBot->Edict->v.origin;
 			CurrentPathPoint->Location = it->FromLocation;
 
-			
+
 
 			return;
 		}
@@ -7403,7 +7386,7 @@ LerkFlightBehaviour BotFlightClimbMove(AvHAIPlayer* pBot, Vector FromLocation, V
 
 		return FLIGHT_FLAP;
 	}
-	
+
 	return FLIGHT_FLAP;
 
 }
@@ -7508,13 +7491,13 @@ void BotFollowFlightPath(AvHAIPlayer* pBot, bool bAllowSkip)
 			break;
 
 	}
-		
+
 	if (FlightBehaviour == FLIGHT_GLIDE)
 	{
 		pBot->Button |= IN_JUMP;
 	}
 	else if (FlightBehaviour == FLIGHT_FLAP)
-	{		
+	{
 		if (gpGlobals->time - BotNavInfo->LastFlapTime > 0.2f)
 		{
 			pBot->Button |= IN_JUMP;
@@ -7619,7 +7602,7 @@ void BotFollowSwimPath(AvHAIPlayer* pBot)
 		{
 			BotMoveLookAt(pBot, pBot->CurrentEyePosition + (MoveDir * 50.0f) + Vector(0.0f, 0.0f, 50.0f));
 		}
-		
+
 		return;
 	}
 
@@ -7691,7 +7674,7 @@ void BotFollowPath(AvHAIPlayer* pBot)
 	else if (IsPlayerStandingOnPlayer(pBot->Edict))
 	{
 		Vector ForwardDir = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
-		
+
 		bool bCanMoveBackwards = UTIL_QuickHullTrace(pBot->Edict, pBot->Edict->v.origin, pBot->Edict->v.origin - (ForwardDir * 50.0f));
 
 		if (bCanMoveBackwards)
@@ -7699,7 +7682,7 @@ void BotFollowPath(AvHAIPlayer* pBot)
 			pBot->desiredMovementDir = -ForwardDir;
 			return;
 		}
-		
+
 		bool bCanMoveForward = UTIL_QuickHullTrace(pBot->Edict, pBot->Edict->v.origin, pBot->Edict->v.origin + (ForwardDir * 50.0f));
 
 		if (bCanMoveForward)
@@ -7858,7 +7841,7 @@ Vector UTIL_ProjectPointToNavmesh(const Vector Location)
 		{
 			return g_vecZero;
 		}
-		
+
 	}
 }
 
@@ -8057,7 +8040,7 @@ void HandlePlayerAvoidance(AvHAIPlayer* pBot, const Vector MoveDestination)
 	if (pBot->Player->IsOnLadder() || IsPlayerClimbingWall(pBot->Edict) || !pBot->BotNavInfo.IsOnGround) { return; }
 
 	float MyRadius = GetPlayerRadius(pBot->Edict);
-		
+
 	const Vector BotLocation = pBot->Edict->v.origin;
 	const Vector MoveDir = UTIL_GetVectorNormal2D((MoveDestination - pBot->Edict->v.origin));
 
@@ -8515,7 +8498,7 @@ Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<bo
 				{
 					return FinalView;
 				}
-				
+
 			}
 		}
 	}
@@ -8526,7 +8509,7 @@ Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<bo
 Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, edict_t* ButtonEdict)
 {
 	Vector ClosestPoint = g_vecZero;
-		
+
 	if (ButtonEdict->v.size.x > 64.0f || ButtonEdict->v.size.y > 64.0f)
 	{
 		ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(UserLocation, ButtonEdict);
@@ -8559,7 +8542,7 @@ Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, edict_t* ButtonEdi
 	{
 		PlayerAccessLoc.z += 36.0f;
 	}
-	
+
 	if (fabsf(PlayerAccessLoc.z - ClosestPoint.z) <= max_player_use_reach)
 	{
 		return ButtonAccessPoint;
@@ -8601,7 +8584,7 @@ bool UTIL_IsTriggerLinkedToDoor(CBaseEntity* TriggerEntity, vector<CBaseEntity*>
 	if (FStrEq(STRING(TriggerEntity->pev->target), DoorName)) { return true; }
 
 	AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(TriggerEntity);
-	
+
 	if (WeldableRef)
 	{
 		string targetString = WeldableRef->GetTargetOnFinish();
@@ -8703,7 +8686,7 @@ bool UTIL_IsTriggerLinkedToDoor(CBaseEntity* TriggerEntity, vector<CBaseEntity*>
 
 		// Don't check this if it's targeting a trigger we've already checked
 		if (TargetEntity && std::find(CheckedTriggers.begin(), CheckedTriggers.end(), TargetEntity) == CheckedTriggers.end())
-		{ 
+		{
 			if (TargetEntity && UTIL_IsTriggerLinkedToDoor(TargetEntity, CheckedTriggers, Door)) { return true; }
 		}
 
@@ -8752,7 +8735,7 @@ void UTIL_PopulateAffectedConnectionsForDoor(nav_door* Door)
 				break;
 			}
 		}
-			
+
 	}
 }
 
@@ -8779,18 +8762,18 @@ void UTIL_PopulateTriggersForEntity(edict_t* Entity, vector<DoorTrigger>& Trigge
 			NewTrigger.TriggerType = NewTriggerType;
 			NewTrigger.bIsActivated = (!NewTrigger.ToggleEnt || !NewTrigger.ToggleEnt->IsLockedByMaster());
 
-			TriggerList.push_back(NewTrigger);			
+			TriggerList.push_back(NewTrigger);
 		}
 	}
 
 	TriggerRef = NULL;
-	
+
 
 	while ((TriggerRef = UTIL_FindEntityByClassname(TriggerRef, "avhweldable")) != NULL)
 	{
 		CheckedTriggerList.clear();
 		if (UTIL_IsTriggerLinkedToDoor(TriggerRef, CheckedTriggerList, DoorRef))
-		{			
+		{
 			DoorActivationType NewTriggerType = DOOR_WELD;
 
 			DoorTrigger NewTrigger;
@@ -8958,7 +8941,7 @@ void UTIL_UpdateDoors(bool bInitial)
 		const char* DoorName = STRING(NavDoor->DoorEdict->v.targetname);
 
 		UTIL_UpdateDoorTriggers(NavDoor);
-				
+
 		CBaseToggle* DoorRef = it->DoorEntity;
 
 		if (!DoorRef) { continue; }
@@ -9062,7 +9045,7 @@ void UTIL_UpdateDoors(bool bInitial)
 					UTIL_ApplyTempObstaclesToDoor(NavDoor, DT_TILECACHE_NULL_AREA);
 				}
 
-				
+
 			}
 			else if (it->ActivationType == DOOR_WELD)
 			{
@@ -9132,7 +9115,7 @@ void UTIL_UpdateDoors(bool bInitial)
 
 				float DoorHalfExtents[3] = { HalfExtents.x, HalfExtents.z, HalfExtents.y};
 				float DoorCentreFlt[3] = { DoorCentre.x, DoorCentre.z, -DoorCentre.y };
-				
+
 				Query->queryPolygons(DoorCentreFlt, DoorHalfExtents, &StructureProfile.Filters, Polys, &polyCount, 8);
 
 				if (polyCount > 0)
@@ -9160,7 +9143,7 @@ void UTIL_UpdateDoors(bool bInitial)
 				if (polyCount > 0)
 				{
 					UTIL_ApplyTempObstaclesToDoor(NavDoor, DT_TILECACHE_DOOR_AREA);
-				}				
+				}
 			}
 
 			it->CurrentState = DoorRef->m_toggle_state;
@@ -9296,7 +9279,7 @@ void UTIL_UpdateDoorTriggers(nav_door* Door)
 				continue;
 			}
 		}
-				
+
 		if (FStrEq(STRING(it->Edict->v.target), STRING(Door->DoorEdict->v.targetname)))
 		{
 			it->bIsActivated = (it->ToggleEnt) ? !it->ToggleEnt->IsLockedByMaster() : true;
@@ -9349,7 +9332,7 @@ void UTIL_UpdateDoorTriggers(nav_door* Door)
 		{
 			BaseTriggerDelay = it->ToggleEnt->m_flDelay;
 			BaseTriggerResetTime = (bButtonIsToggle) ? 1.0f : it->ToggleEnt->GetDelay();
-		}		
+		}
 
 		float DoorDelay = (FBitSet(Door->DoorEdict->v.spawnflags, SF_DOOR_NO_AUTO_RETURN)) ? 0.0f : Door->DoorEntity->GetDelay();
 		it->ActivationDelay = fmaxf(BaseTriggerDelay, BaseTriggerResetTime) + DoorDelay + 1.0f;
@@ -9548,7 +9531,7 @@ void UTIL_PopulateDoors()
 				NewDoor.StopPoints.push_back(UTIL_GetCentreOfEntity(NewDoor.DoorEdict) + ToggleRef->m_vecPosition2);
 			}
 		}
-		
+
 
 		NavDoors.push_back(NewDoor);
 	}
@@ -9716,7 +9699,7 @@ const dtOffMeshConnection* DEBUG_FindNearestOffMeshConnectionToPoint(const Vecto
 		float PointConverted[3] = { Point.x, Point.z, -Point.y };
 
 		float minDist = 0.0f;
-		
+
 
 		for (int i = 0; i < NavMeshes[REGULAR_NAV_MESH].tileCache->getOffMeshCount(); i++)
 		{
@@ -10163,7 +10146,7 @@ void RefineFlightPath(vector<bot_path_node>& InputPath, vector<bot_path_node>& R
 		}
 
 		Vector Dir = UTIL_GetVectorNormal(it->Location - PrevLoc);
-		
+
 		float Dist = vDist3D(PrevLoc, it->Location);
 		float StepSize = Dist * 0.1f;
 		int CurrStep = 0;

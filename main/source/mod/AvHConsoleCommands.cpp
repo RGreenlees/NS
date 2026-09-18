@@ -5,7 +5,7 @@
 // Charles G. Cleveland, or in accordance with the terms and conditions stipulated in
 // the agreement/contract under which the contents have been supplied.
 //
-// Purpose: 
+// Purpose:
 //
 // $Workfile: AvHConsoleCommands.cpp$
 // $Date: 2002/11/22 21:28:16 $
@@ -134,7 +134,7 @@ void player( entvars_t *pev )
 		string libName = string(getModDirectory()) + "\\dlls\\ns.dll";
 		h_Library = LoadLibrary(libName.c_str());
 	}
-	   
+
 	static LINK_ENTITY_FUNC otherClassName = NULL;
 	if (otherClassName == NULL)
 		otherClassName = (LINK_ENTITY_FUNC)GetProcAddress(h_Library, "player");
@@ -197,7 +197,7 @@ EntityInfoVectorType EntityInfoGetVector(void)
 			theClassName = STRING(theEdict->v.classname);
 			if(theClassName)
 			{
-				++theMap[string(theClassName)]; 
+				++theMap[string(theClassName)];
 			}
 		}
 	}
@@ -395,7 +395,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 				// Get other team
 				AvHTeamNumber theOtherTeamNumber = (thePlayerTeam == teamA) ? teamB : teamA;
-				
+
 				// Remember current position
 				Vector theCurrentPosition = theAvHPlayer->pev->origin;
 				Vector theCurrentAngles = theAvHPlayer->pev->angles;
@@ -464,7 +464,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 			char theCommand[128];
 			sprintf(theCommand, "%s %d\n", kvTournamentMode, !((int)avh_tournamentmode.value));
 			SERVER_COMMAND(theCommand);
-			
+
 			theSuccess = true;
 		}
 	}
@@ -507,7 +507,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				}
 			}
 		}
-		
+
 		theSuccess = true;
 	}
 	else if(FStrEq(pcmd, kcNSChangeLevel))
@@ -566,9 +566,9 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				int theCategory = 0;
 				sscanf(CMD_ARGV(1), "%d", &theCategory);
 				AvHAlienUpgradeCategory theUpgradeCategory = AvHAlienUpgradeCategory(theCategory);
-				
+
 				theTeam->AddTeamUpgrade(theUpgradeCategory);
-				
+
 				theSuccess = true;
 			}
 		}
@@ -583,7 +583,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				{
 					char theTooltipText[512];
 					sscanf(CMD_ARGV(1), "%s", theTooltipText);
-					
+
 					int theMode = 0;
 					sscanf(CMD_ARGV(2), "%d", &theMode);
 
@@ -601,7 +601,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 						theAvHPlayer->SendMessage(theTooltipText, (theIsToolTip)?TOOLTIP:NORMAL);
 					}
-					
+
 					theSuccess = true;
 				}
 			}
@@ -624,7 +624,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 					theTargetPlayer = theEntity;
 				}
 			END_FOR_ALL_ENTITIES(kAvHPlayerClassName)
-			
+
 			if(theTargetPlayer)
 			{
 				string theToolTip;
@@ -632,7 +632,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				theToolTip += ":";
 
 				int theNumArgs = CMD_ARGC();
-				
+
 				for(int i=0; i < theNumArgs - 2; i++)
 				{
 					theToolTip += string(" ");
@@ -646,7 +646,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 					//	theToolTip += string(" ");
 					//}
 				}
-				
+
 				theTargetPlayer->SendMessage(theToolTip.c_str(), TOOLTIP);
 				theSuccess = true;
 			}
@@ -672,9 +672,9 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 					int theCategory = 0;
 					sscanf(CMD_ARGV(1), "%d", &theCategory);
 					AvHAlienUpgradeCategory theUpgradeCategory = AvHAlienUpgradeCategory(theCategory);
-					
+
 					theTeam->RemoveAlienUpgradeCategory(theUpgradeCategory);
-					
+
 					theSuccess = true;
 				}
 			}
@@ -688,17 +688,17 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 			ReportPlayer(theAvHPlayer, pcmd);
 
 			string theCheat = kcEndGame1;
-			
+
 			int theTeam = 0;
 			sscanf(CMD_ARGV(1), "%d", &theTeam);
-			
+
 			if(theTeam == 2)
 			{
 				theCheat = kcEndGame2;
 			}
-			
+
 			this->SetCheatEnabled(theCheat);
-			
+
 			//this->mVictoryTeam = theTeamNumber;
 			//this->mVictoryTime = gpGlobals->time;
 			////this->mVictoryDraw = true;
@@ -715,12 +715,12 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				{
 					AvHTeam* team = GetGameRules()->GetTeam((AvHTeamNumber)counter);
 					if( team && team->GetTeamType() == AVH_CLASS_TYPE_MARINE )
-					{ 
+					{
 						this->AttemptToJoinTeam( theAvHPlayer, (AvHTeamNumber)counter );
 					}
 				}
 			}
-			
+
 			// Find position of command station
 			FOR_ALL_ENTITIES(kwsTeamCommand, AvHCommandStation*)
 				if( theEntity->GetTeamNumber() == theAvHPlayer->pev->team )
@@ -729,7 +729,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 					theCommandStationOrigin.x = (theEntity->pev->absmax.x + theEntity->pev->absmin.x)/2.0f;
 					theCommandStationOrigin.y = (theEntity->pev->absmax.y + theEntity->pev->absmin.y)/2.0f;
 					theCommandStationOrigin.z = (theEntity->pev->absmax.z + theEntity->pev->absmin.z)/2.0f;
-			
+
 					// Circle the station, trying points around it to see if there's room
 					for(int i = 0; i < 8; i++)
 					{
@@ -739,9 +739,9 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 						theOffset.x = cos(theAngle)*kDistance;
 						theOffset.y = sin(theAngle)*kDistance;
 						theOffset.z = 20;
-						
+
 						Vector thePosition = theCommandStationOrigin + theOffset;
-						
+
 						if(AvHSUGetIsEnoughRoomForHull(thePosition, AvHMUGetHull(false, theAvHPlayer->pev->iuser3), NULL))
 						{
 							// Teleport to this place
@@ -789,10 +789,10 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		if(theAvHPlayer && theAvHPlayer->GetIsInTopDownMode())
 		{
 			theAvHPlayer->SetUser3(AVH_USER3_MARINE_PLAYER);
-			
+
 			// Cheesy way to make sure player class change is sent to everyone
 			theAvHPlayer->EffectivePlayerClassChanged();
-			
+
 			theSuccess = true;
 		}
 		else
@@ -867,7 +867,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		if(this->GetCheatsEnabled())
 		{
 			int theNumSpawns = this->mSpawnList.size();
-			
+
 			char theNumSpawnsString[128];
 			sprintf(theNumSpawnsString, "Num spawns: %d\n", theNumSpawns);
 			UTIL_SayText(theNumSpawnsString, theAvHPlayer);
@@ -882,7 +882,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 			ALERT(at_console, "------------------------------------------------------\n");
 			ALERT(at_logged, "------------------------------------------------------\nEntityInfo Report:\n------------------------------------------------------\n");
-			
+
 			char theEntityMessage[1024];
 			EntityInfoVectorType::iterator end = theEntityInfo.end();
 			for(EntityInfoVectorType::iterator current = theEntityInfo.begin(); current != end; ++current)
@@ -938,7 +938,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		if(this->GetCheatsEnabled() && theAvHPlayer)
 		{
 			int theNumTemplates = gParticleTemplateList.GetNumberTemplates();
-			
+
 			for(int i = 0; i < theNumTemplates; i++)
 			{
 				string theTemplateName("<system not found>");
@@ -994,7 +994,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
                     ClientPrint(theAvHPlayer->pev, HUD_PRINTNOTIFY, theIter->c_str());
                 }
             }
-            
+
             theSuccess = true;
         }
     }
@@ -1027,13 +1027,13 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		char theDisplayTime = -1;
 		bool theNeedMore = false;
 		char* theString = NULL;
-		
+
 		char theMenuText[1024];
 		if(sscanf(CMD_ARGV(1), "%s", theMenuText) == 1)
 		{
 			NetMsg_ShowMenu( theAvHPlayer->pev, theSlots, theDisplayTime, theNeedMore ? 1 : 0, string(theMenuText) );
 		}
-		
+
 		theSuccess = true;
 	}
     else if(FStrEq(pcmd, "calcxp"))
@@ -1042,7 +1042,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
         {
             char theString[512];
 			sprintf(theString, "Experience for levels:\n");
-            
+
             for(int i=1; i <= 10; i++)
             {
                 float theExperienceForLevel = AvHPlayerUpgrade::GetExperienceForLevel(i);
@@ -1076,14 +1076,14 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	else if(FStrEq(pcmd, "testscores"))
 	{
 		PlayerListType thePlayerList;
-		
+
 		FOR_ALL_ENTITIES(kAvHPlayerClassName, AvHPlayer*)
 			if(UTIL_IsValidEntity(theEntity->edict()))
 			{
 				thePlayerList.push_back(theEntity);
 			}
 		END_FOR_ALL_ENTITIES(kAvHPlayerClassName);
-			
+
 		// Find random player
 		if(thePlayerList.size() > 0)
 		{
@@ -1132,10 +1132,10 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 			{
 				int theAmount = 0;
 				sscanf(CMD_ARGV(1), "%d", &theAmount);
-				
+
 				theAvHPlayer->AddPoints(theAmount, TRUE);
 				theAvHPlayer->EffectivePlayerClassChanged();
-				
+
 				theSuccess = true;
 			}
 		}
@@ -1273,30 +1273,30 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 			{
 				vec3_t theMinPosition = theBuildable->pev->origin + theBuildable->pev->mins;
 				vec3_t theMaxPosition = theBuildable->pev->origin + theBuildable->pev->maxs;
-				
+
 				MESSAGE_BEGIN( MSG_BROADCAST, SVC_TEMPENTITY );
-				
+
 				WRITE_BYTE(TE_BOX);
-				
+
 				WRITE_COORD(theMinPosition.x);
 				WRITE_COORD(theMinPosition.y);
 				WRITE_COORD(theMinPosition.x);
-				
+
 				WRITE_COORD(theMaxPosition.x);
 				WRITE_COORD(theMaxPosition.y);
 				WRITE_COORD(theMaxPosition.z);
-				
+
 				WRITE_SHORT(100);
-				
+
 				WRITE_BYTE(0);
 				WRITE_BYTE(255);
 				WRITE_BYTE(0);
-				
+
 				MESSAGE_END();
 			}
-			
+
 			END_FOR_ALL_BASEENTITIES();
-			
+
 			theSuccess = true;
 		}
 	}
@@ -1326,7 +1326,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		if(this->GetCheatsEnabled())
 		{
 			const char* theWeaponName = CMD_ARGV(1);
-			
+
 			NetMsg_DeathMsg( theAvHPlayer->entindex(), theAvHPlayer->entindex(), string(theWeaponName) );
 		}
 	}
@@ -1338,7 +1338,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 			if(sscanf(CMD_ARGV(1), "%d", &theSkin) == 1)
 			{
 				theAvHPlayer->SetSkin(theSkin);
-				
+
 				theSuccess = true;
 			}
 		}
@@ -1361,11 +1361,11 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				MESSAGE_BEGIN( MSG_ONE, SVC_ROOMTYPE, NULL, theAvHPlayer->pev);
 				WRITE_SHORT( (short)theRoomType );
 				MESSAGE_END();
-				
+
 				char theString[128];
 				sprintf(theString, "Set room type to %d.\n", theRoomType);
 				UTIL_SayText(theString, theAvHPlayer);
-				
+
 				theSuccess = true;
 			}
 		}
@@ -1402,17 +1402,17 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
         if(this->GetCheatsEnabled())
         {
             ReportPlayer(theAvHPlayer, pcmd);
-            
+
             int theUpgrade = 0;
             sscanf(CMD_ARGV(1), "%d", &theUpgrade);
             AvHMessageID theNewUpgrade = AvHMessageID(theUpgrade);
-            
+
             AvHTeam* theVisibleTeam = theAvHPlayer->GetTeamPointer(true);
             if(theVisibleTeam)
             {
                 theVisibleTeam->GetTechNodes().SetResearchDone(theNewUpgrade);
                 this->ProcessTeamUpgrade(theNewUpgrade, theAvHPlayer->GetTeam(true), 0, true);
-            }	
+            }
             theSuccess = true;
         }
     }
@@ -1553,24 +1553,54 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		theSuccess = true;
 	}
+	else if (FStrEq(pcmd, "bot_debugobject"))
+	{
+		edict_t* ListenEdict = INDEXENT(1);
+
+		Vector StartTrace = GetPlayerEyePosition(ListenEdict);
+		Vector EndTrace = StartTrace + UTIL_GetForwardVector(ListenEdict->v.v_angle) * 1000.0f;
+
+		TraceResult Result;
+		UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, ListenEdict->v.pContainingEntity, &Result);
+
+		edict_t* HitEdict = Result.pHit;
+
+		DynamicMapObject* BlockingObject = nullptr;
+
+		if (!FNullEnt(HitEdict))
+		{
+			BlockingObject = AIMAP_GetDynamicObjectByEdict(HitEdict);
+		}
+
+		if (BlockingObject)
+		{
+			AIDEBUG_SetDebugDynamicMapObject(BlockingObject->Edict);
+		}
+		else
+		{
+			AIDEBUG_SetDebugDynamicMapObject(nullptr);
+		}
+
+		theSuccess = true;
+	}
     else if( FStrEq( pcmd, kcRemoveUpgrade) )
     {
         // Allow even with cheats off right now, put this back in for first beta
         if(this->GetCheatsEnabled())
         {
             ReportPlayer(theAvHPlayer, pcmd);
-            
+
             int theUpgrade = 0;
             sscanf(CMD_ARGV(1), "%d", &theUpgrade);
             AvHMessageID theNewUpgrade = AvHMessageID(theUpgrade);
-            
+
             AvHTeam* theVisibleTeam = theAvHPlayer->GetTeamPointer(true);
             if(theVisibleTeam)
             {
                 theVisibleTeam->GetTechNodes().SetResearchDone(theNewUpgrade, false);
                 this->ProcessTeamUpgrade(theNewUpgrade, theAvHPlayer->GetTeam(true), 0, false);
             }
-            
+
             theSuccess = true;
         }
     }
@@ -1583,7 +1613,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 				AvHNexus::handleUnauthorizedJoinTeamAttempt(theAvHPlayer->edict(),TEAM_SPECT);
 			}*/
 // : 0001073
-#ifdef USE_OLDAUTH			 
+#ifdef USE_OLDAUTH
 			if(allow_spectators.value && GetGameRules()->PerformHardAuthorization(theAvHPlayer))
 #else
 			else if(allow_spectators.value)
@@ -1656,7 +1686,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 					{ break; }
 				}
 			}
-			
+
 			if(theHiveTeam)
 			{
 				ReportPlayer(theAvHPlayer, pcmd);
@@ -1701,12 +1731,12 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 					else
 					{
 						int theRandomEntity = RANDOM_LONG(1, 500);
-						
+
 						AvHAlertType theRandomAlert = AvHAlertType(RANDOM_LONG(0, ALERT_MAX_ALERTS-1));
 						GetGameRules()->TriggerAlert(theTeam->GetTeamNumber(), theRandomAlert, theRandomEntity);
 					}
 				}
-				
+
 				theSuccess = true;
 			}
 		}
@@ -1718,7 +1748,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 			FOR_ALL_ENTITIES(kAvHPlayerClassName, AvHPlayer*)
 				theEntity->TakeDamage(theAvHPlayer->pev, theAvHPlayer->pev, 2000, DMG_GENERIC | DMG_ALWAYSGIB);
 			END_FOR_ALL_ENTITIES(kAvHPlayerClassName);
-			
+
 			theSuccess = true;
 		}
 	}
@@ -1739,7 +1769,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		{
 			UTIL_SayText("Authentication OFF\n", theAvHPlayer);
 		}
-		
+
 		theSuccess = true;
 	}
     #endif

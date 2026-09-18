@@ -251,8 +251,10 @@
     <ClCompile Include="..\mod\AvHAICommander.cpp" />
     <ClCompile Include="..\mod\AvHAIConfig.cpp" />
     <ClCompile Include="..\mod\AvHAIHelper.cpp" />
+    <ClCompile Include="..\mod\AvHAIMapData.cpp" />
     <ClCompile Include="..\mod\AvHAIMath.cpp" />
     <ClCompile Include="..\mod\AvHAINavigation.cpp" />
+    <ClCompile Include="..\mod\AvHAINavMesh.cpp" />
     <ClCompile Include="..\mod\AvHAIPlayer.cpp" />
     <ClCompile Include="..\mod\AvHAIPlayerManager.cpp" />
     <ClCompile Include="..\mod\AvHAIPlayerUtil.cpp" />
@@ -1386,8 +1388,11 @@
     <ClInclude Include="..\mod\AvHAIConfig.h" />
     <ClInclude Include="..\mod\AvHAIConstants.h" />
     <ClInclude Include="..\mod\AvHAIHelper.h" />
+    <ClInclude Include="..\mod\AvHAIMapData.h" />
     <ClInclude Include="..\mod\AvHAIMath.h" />
+    <ClInclude Include="..\mod\AvHAINavConstants.h" />
     <ClInclude Include="..\mod\AvHAINavigation.h" />
+    <ClInclude Include="..\mod\AvHAINavMesh.h" />
     <ClInclude Include="..\mod\AvHAIPlayer.h" />
     <ClInclude Include="..\mod\AvHAIPlayerManager.h" />
     <ClInclude Include="..\mod\AvHAIPlayerUtil.h" />

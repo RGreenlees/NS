@@ -14,7 +14,6 @@ static const float commander_action_cooldown = 1.0f;
 static const float min_request_spam_time = 10.0f;
 
 constexpr auto MAX_AI_PATH_SIZE = 512; // Maximum number of points allowed in a path (this should be enough for any sized map)
-static const int MAX_NAV_MESHES = 8; // Max number of nav meshes allowed. Currently 3 are used (one for building placement, one for the onos, and a regular one for everyone else)
 
 // NS weapon types. Each number refers to the GoldSrc weapon index
 typedef enum
@@ -223,16 +222,6 @@ typedef enum _AVHAINAVMESHSTATUS
 	NAVMESH_STATUS_SUCCESS		// Successfully loaded the navmesh
 } AvHAINavMeshStatus;
 
-typedef struct _OFF_MESH_CONN
-{
-	unsigned int ConnectionRefs[2];
-	unsigned int ConnectionFlags = 0;
-	unsigned int DefaultConnectionFlags = 0;
-	Vector FromLocation = g_vecZero;
-	Vector ToLocation = g_vecZero;
-	edict_t* TargetObject = nullptr;
-	bool bBiDirectional = false;
-} AvHAIOffMeshConnection;
 
 typedef struct _STRUCTURE_OBSTACLE
 {
@@ -285,20 +274,6 @@ typedef struct _NAV_PROFILE
 	bool bFlyingProfile = false;
 	AvHAIReachabilityStatus ReachabilityFlag = AI_REACHABILITY_NONE;
 } nav_profile;
-
-typedef struct _LOAD_NAV_HINT
-{
-	unsigned int id = 0;
-	unsigned int hintType = 0;
-	float position[3] = { 0.0f, 0.0f, 0.0f };
-} LoadNavHint;
-
-typedef struct _NAV_HINT
-{
-	unsigned int hintType = 0;
-	Vector Position = g_vecZero;
-	edict_t* OccupyingBuilding = nullptr;
-} NavHint;
 
 typedef struct _DEPLOYABLE_SEARCH_FILTER
 {
@@ -379,15 +354,6 @@ typedef struct _DROPPED_MARINE_ITEM
 	bool IsValid() { return !FNullEnt(edict) && !edict->free && !(edict->v.flags & EF_NODRAW) && edict->v.deadflag == DEAD_NO; }
 } AvHAIDroppedItem;
 
-// How far a bot can be from a useable object when trying to interact with it. Used also for melee attacks. We make it slightly less than actual to avoid edge cases
-static const float max_ai_use_reach = 55.0f;
-
-// Minimum time a bot can wait between attempts to use something in seconds (when not holding the use key down)
-static const float min_ai_use_interval = 0.5f;
-
-// Minimum time a bot can wait between attempts to use something in seconds (when not holding the use key down)
-static const float max_ai_jump_height = 62.0f;
-
 // Affects the bot's pathfinding choices
 enum BotMoveStyle
 {
@@ -424,7 +390,7 @@ typedef enum
 }
 BotTaskType;
 
-// 
+//
 typedef enum
 {
 	ATTACK_SUCCESS,
@@ -453,26 +419,6 @@ typedef enum
 	MOVE_TASK_PICKUP,
 	MOVE_TASK_WELD
 } BotMovementTaskType;
-
-// Door type. Not currently used, future feature so bots know how to open a door
-enum DoorActivationType
-{
-	DOOR_NONE,   // No type, cannot be activated (permanently open/shut)
-	DOOR_USE,    // Door activated by using it directly
-	DOOR_TRIGGER,// Door activated by touching a trigger_once or trigger_multiple
-	DOOR_BUTTON, // Door activated by pressing a button
-	DOOR_WELD,   // Door activated by welding something
-	DOOR_SHOOT,  // Door activated by being shot
-	DOOR_BREAK	 // Door activated by breaking something
-};
-
-// Door type. Not currently used, future feature so bots know how to open a door
-enum NavDoorType
-{
-	DOORTYPE_DOOR,   // No type, cannot be activated (permanently open/shut)
-	DOORTYPE_PLAT,    // Door activated by using it directly
-	DOORTYPE_TRAIN	// Door activated by touching a trigger_once or trigger_multiple
-};
 
 // The type of base a marine outpost could be. Used to help the AI establish and expand outposts across the map
 enum MarineBaseType
@@ -757,7 +703,7 @@ typedef struct AVH_AI_PLAYER
 
 	vector<ai_commander_request> ActiveRequests;
 	vector<ai_commander_order> ActiveOrders;
-	
+
 	float next_commander_action_time = 0.0f;
 
 	bot_msg ChatMessages[5]; // Bot can have up to 5 chat messages pending

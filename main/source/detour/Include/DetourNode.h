@@ -25,7 +25,7 @@ enum dtNodeFlags
 {
 	DT_NODE_OPEN = 0x01,
 	DT_NODE_CLOSED = 0x02,
-	DT_NODE_PARENT_DETACHED = 0x04, // parent of the node is not adjacent. Found using raycast.
+	DT_NODE_PARENT_DETACHED = 0x04 // parent of the node is not adjacent. Found using raycast.
 };
 
 typedef unsigned short dtNodeIndex;
@@ -35,13 +35,13 @@ static const int DT_NODE_PARENT_BITS = 24;
 static const int DT_NODE_STATE_BITS = 2;
 struct dtNode
 {
-	float pos[3] = { 0.0f };								///< Position of the node.
-	float cost = 0.0f;									///< Cost from previous node to current node.
-	float total = 0.0f;								///< Cost up to the node.
+	float pos[3];								///< Position of the node.
+	float cost;									///< Cost from previous node to current node.
+	float total;								///< Cost up to the node.
 	unsigned int pidx : DT_NODE_PARENT_BITS;	///< Index to parent node.
 	unsigned int state : DT_NODE_STATE_BITS;	///< extra state information. A polyRef can have multiple nodes with different extra info. see DT_MAX_STATES_PER_NODE
 	unsigned int flags : 3;						///< Node flags. A combination of dtNodeFlags.
-	dtPolyRef id = 0;								///< Polygon ref the node corresponds to.
+	dtPolyRef id;								///< Polygon ref the node corresponds to.
 };
 
 static const int DT_MAX_STATES_PER_NODE = 1 << DT_NODE_STATE_BITS;	// number of extra states per node. See dtNode::state
@@ -97,12 +97,12 @@ private:
 	dtNodePool(const dtNodePool&);
 	dtNodePool& operator=(const dtNodePool&);
 	
-	dtNode* m_nodes = nullptr;
-	dtNodeIndex* m_first = nullptr;
-	dtNodeIndex* m_next = nullptr;
-	const int m_maxNodes = 0;
-	const int m_hashSize = 0;
-	int m_nodeCount = 0;
+	dtNode* m_nodes;
+	dtNodeIndex* m_first;
+	dtNodeIndex* m_next;
+	const int m_maxNodes;
+	const int m_hashSize;
+	int m_nodeCount;
 };
 
 class dtNodeQueue
@@ -159,9 +159,9 @@ private:
 	void bubbleUp(int i, dtNode* node);
 	void trickleDown(int i, dtNode* node);
 	
-	dtNode** m_heap = nullptr;
-	const int m_capacity = 0;
-	int m_size = 0;
+	dtNode** m_heap;
+	const int m_capacity;
+	int m_size;
 };		
 
 

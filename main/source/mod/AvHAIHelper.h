@@ -64,4 +64,6 @@ char* UTIL_StructTypeToChar(const AvHAIDeployableStructureType StructureType);
 
 char* UTIL_BotRoleToChar(const AvHAIBotRole Role);
 
+bool UTIL_IsPointInSwimArea(const Vector& TestPoint);
+
 #endif

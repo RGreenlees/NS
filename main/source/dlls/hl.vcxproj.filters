@@ -548,6 +548,12 @@
     <ClCompile Include="..\mod\AvHAISoundQueue.cpp">
       <Filter>mod\bots</Filter>
     </ClCompile>
+    <ClCompile Include="..\mod\AvHAIMapData.cpp">
+      <Filter>mod\bots</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mod\AvHAINavMesh.cpp">
+      <Filter>mod\bots</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="activity.h">
@@ -971,6 +977,15 @@
       <Filter>mod\bots</Filter>
     </ClInclude>
     <ClInclude Include="..\mod\AvHAISoundQueue.h">
+      <Filter>mod\bots</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mod\AvHAIMapData.h">
+      <Filter>mod\bots</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mod\AvHAINavMesh.h">
+      <Filter>mod\bots</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mod\AvHAINavConstants.h">
       <Filter>mod\bots</Filter>
     </ClInclude>
   </ItemGroup>

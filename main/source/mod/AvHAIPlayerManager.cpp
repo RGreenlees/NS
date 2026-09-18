@@ -10,6 +10,7 @@
 #include "AvHAIPlayerUtil.h"
 #include "AvHAISoundQueue.h"
 #include "AvHGamerules.h"
+#include "AvHAIMapData.h"
 #include "../dlls/client.h"
 #include <time.h>
 
@@ -51,6 +52,7 @@ float CurrentFrameDelta = 0.01f;
 #ifdef BOTDEBUG
 AvHAIPlayer* DebugAIPlayer = nullptr;
 edict_t* DebugBots[MAX_PLAYERS];
+DynamicMapObject* DebugDynamicMapObject;
 Vector DebugVector1 = ZERO_VECTOR;
 Vector DebugVector2 = ZERO_VECTOR;
 vector<bot_path_node> DebugPath;
@@ -79,7 +81,6 @@ float AIMGR_GetCommanderAllowedTime(AvHTeamNumber Team)
 
 void AIMGR_UpdateAIPlayerCounts()
 {
-
 	for (auto BotIt = ActiveAIPlayers.begin(); BotIt != ActiveAIPlayers.end();)
 	{
 		// If bot has been kicked from the server then remove from active AI player list
@@ -94,7 +95,7 @@ void AIMGR_UpdateAIPlayerCounts()
 	}
 
 	// Don't add or remove bots too quickly, otherwise it can cause lag or even overflows
-	if (gpGlobals->time - LastAIPlayerCountUpdate < 0.2f) { return; }
+	if (gpGlobals->time - LastAIPlayerCountUpdate < 0.5f) { return; }
 
 	LastAIPlayerCountUpdate = gpGlobals->time;
 
@@ -228,7 +229,7 @@ void AIMGR_UpdateFillTeams()
 
 	bool bCanAddToTeamA = (GetGameRules()->GetCheatsEnabled() || TeamSizeA < TeamSizeB || TeamSizeA - TeamSizeB < avh_limitteams.value);
 	bool bCanAddToTeamB = (GetGameRules()->GetCheatsEnabled() || TeamSizeB < TeamSizeA || TeamSizeB - TeamSizeA < avh_limitteams.value);
-	
+
 	if (TeamSizeA < NumDesiredTeamA && bCanAddToTeamA)
 	{
 		// Don't add a bot if we have any stuck in the ready room, wait for teams to resolve themselves
@@ -328,7 +329,7 @@ void AIMGR_RemoveAIPlayerFromTeam(int Team)
 		float BotValue = theAIPlayer->GetResources();
 
 		AvHPlayerClass theAIPlayerClass = (AvHPlayerClass)theAIPlayer->GetEffectivePlayerClass();
-		
+
 		switch (theAIPlayerClass)
 		{
 			case PLAYERCLASS_COMMANDER:
@@ -373,7 +374,7 @@ void AIMGR_RemoveAIPlayerFromTeam(int Team)
 		}
 	}
 
-	
+
 	if (ItemToRemove != ActiveAIPlayers.end())
 	{
 		ItemToRemove->Player->Kick();
@@ -511,7 +512,7 @@ byte BotThrottledMsec(AvHAIPlayer* inAIPlayer, float CurrentTime)
 {
 	// Thanks to The Storm (ePODBot) for this one, finally fixed the bot running speed!
 	int newmsec = (int)roundf((CurrentTime - inAIPlayer->LastServerUpdateTime) * 1000.0f);
-	
+
 	if (newmsec > 255)
 	{
 		newmsec = 255;
@@ -553,6 +554,16 @@ void AIDEBUG_TestFlightPathFind(Vector FromLoc, Vector ToLoc)
 	if (vIsZero(FromLoc) || vIsZero(ToLoc)) { return; }
 
 	FindFlightPathToPoint(GetBaseNavProfile(SKULK_BASE_NAV_PROFILE), FromLoc, ToLoc, DebugPath, 60.0f);
+}
+
+DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject()
+{
+	return DebugDynamicMapObject;
+}
+
+void AIDEBUG_SetDebugDynamicMapObject(edict_t* NewObject)
+{
+	DebugDynamicMapObject = AIMAP_GetDynamicObjectByEdict(NewObject);
 }
 #endif
 
@@ -615,7 +626,7 @@ void AIMGR_UpdateAIPlayers()
 		AIMGR_ProcessPendingSounds();
 		AITAC_UpdateSquads();
 	}
-	
+
 	int NumCommanders = AIMGR_GetNumAICommanders();
 	int NumRegularBots = AIMGR_GetNumAIPlayers() - NumCommanders;
 
@@ -624,7 +635,7 @@ void AIMGR_UpdateAIPlayers()
 	int BotsPerFrame = max(1, (int)round(BOT_THINK_RATE_HZ * NumRegularBots * FrameDelta));
 
 	int BotIndex = 0;
-		
+
 	for (auto BotIt = ActiveAIPlayers.begin(); BotIt != ActiveAIPlayers.end();)
 	{
 		// If bot has been kicked from the server then remove from active AI player list
@@ -662,7 +673,7 @@ void AIMGR_UpdateAIPlayers()
 				if (UpdateIndex > -1 && BotIndex >= UpdateIndex && NumBotsThinkThisFrame < BotsPerFrame)
 				{
 					AIPlayerThink(bot);
-					
+
 					NumBotsThinkThisFrame++;
 				}
 				BotIndex++;
@@ -672,7 +683,7 @@ void AIMGR_UpdateAIPlayers()
 		UpdateBotChat(bot);
 
 		// Needed to correctly handle client prediction and physics calculations
-		byte adjustedmsec = BotThrottledMsec(bot, CurrTime);			
+		byte adjustedmsec = BotThrottledMsec(bot, CurrTime);
 
 		// Simulate PM_PlayerMove so client prediction and stuff can be executed correctly.
 		RUN_AI_MOVE(bot->Edict, bot->Edict->v.v_angle, bot->ForwardMove,
@@ -683,14 +694,14 @@ void AIMGR_UpdateAIPlayers()
 		BotIt++;
 	}
 
-	if (UpdateIndex < 0) 
-	{ 
-		UpdateIndex = 0; 
+	if (UpdateIndex < 0)
+	{
+		UpdateIndex = 0;
 	}
 	else
 	{
 		UpdateIndex += NumBotsThinkThisFrame;
-	}	
+	}
 
 	if (UpdateIndex >= NumRegularBots)
 	{
@@ -924,6 +935,7 @@ void AIMGR_ResetRound()
 
 	LastAIPlayerCountUpdate = 0.0f;
 
+	AIMAP_BuildMapData();
 	UTIL_PopulateDoors();
 	UTIL_PopulateWeldableObstacles();
 
@@ -1046,7 +1058,7 @@ void AIMGR_NewMap()
 
 	AIStartedTime = gpGlobals->time;
 	LastAIPlayerCountUpdate = 0.0f;
-	
+
 	bHasRoundStarted = false;
 
 	bPlayerSpawned = false;
@@ -1177,7 +1189,7 @@ vector<AvHPlayer*> AIMGR_GetAllActivePlayers()
 			if (PlayerRef)
 			{
 				Result.push_back(PlayerRef);
-			}			
+			}
 		}
 	}
 
@@ -1349,7 +1361,7 @@ void AIDEBUG_DisplayTeamGoals()
 			sprintf(interbuf, "%s: %s\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType));
 		}
 
-		
+
 		strcat(buf, interbuf);
 	}
 
@@ -1433,8 +1445,9 @@ void AIMGR_OnBotEnabled()
 	AIStartedTime = gpGlobals->time;
 	LastAIPlayerCountUpdate = 0.0f;
 
-	if (AIMGR_GetNavMeshStatus() != NAVMESH_STATUS_FAILED) 
+	if (AIMGR_GetNavMeshStatus() != NAVMESH_STATUS_FAILED)
 	{
+		AIMAP_BuildMapData();
 		UTIL_PopulateDoors();
 		UTIL_PopulateWeldableObstacles();
 
@@ -1454,7 +1467,7 @@ void AIMGR_OnBotEnabled()
 	bMapDataInitialised = true;
 
 	CountdownStartedTime = (bHasRoundStarted || GetGameRules()->GetCountdownStarted()) ? gpGlobals->time : 0.0f;
-	
+
 }
 
 void AIMGR_OnBotDisabled()
@@ -1508,6 +1521,11 @@ void AIMGR_UpdateAISystem()
 		if (DebugPath.size() > 0)
 		{
 			AIDEBUG_DrawPath(INDEXENT(1), DebugPath);
+		}
+
+		if (DebugDynamicMapObject)
+		{
+			DEBUG_PrintObjectInfo(DebugDynamicMapObject);
 		}
 #endif
 
@@ -1614,7 +1632,7 @@ void AIMGR_ProcessPendingSounds()
 			default:
 				MaxDist = UTIL_MetresToGoldSrcUnits(20.0f);
 				//SoundType = "Other";
-				break;			
+				break;
 		}
 
 		MaxDist = sqrf(MaxDist);

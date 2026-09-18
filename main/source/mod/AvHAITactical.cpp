@@ -2,7 +2,7 @@
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
 // bot_gorge.cpp
-// 
+//
 // Contains gorge-related functions. Needs refactoring into helper function file
 //
 
@@ -19,6 +19,7 @@
 #include "AvHAIPlayerManager.h"
 #include "AvHAIConfig.h"
 #include "AvHAICommander.h"
+#include "AvHAIMapData.h"
 
 #include "AvHGamerules.h"
 #include "AvHServerUtil.h"
@@ -83,7 +84,7 @@ std::vector<AvHAIBuildableStructure> AITAC_FindAllDeployables(const Vector& Loca
 
 	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
 	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
-	
+
 	float CurrMinDist = 0.0f;
 
 	float MinDistSq = sqrf(Filter->MinSearchRadius);
@@ -424,7 +425,7 @@ AvHAIBuildableStructure* AITAC_FindClosestDeployableToLocationByRef(const Vector
 
 			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
 			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }	
+			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
 			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
 
 			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
@@ -456,7 +457,7 @@ AvHAIBuildableStructure* AITAC_FindClosestDeployableToLocationByRef(const Vector
 			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
 			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
 			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-			
+
 			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
 
 			if (Filter->ReachabilityTeam != TEAM_IND)
@@ -1276,7 +1277,7 @@ Vector AITAC_GetTeamStartingLocation(AvHTeamNumber Team)
 				IFFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
 				IFFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 				IFFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
-				
+
 				AvHAIBuildableStructure InfantryPortal = AITAC_FindClosestDeployableToLocation(ZERO_VECTOR, &IFFilter);
 
 				if (InfantryPortal.IsValid())
@@ -1367,7 +1368,7 @@ void AITAC_OnTeamStartsModified()
 	bool bTeamBIsMarine = (AIMGR_GetTeamType(TeamBNum) == AVH_CLASS_TYPE_MARINE);
 
 	if (!bTeamAIsMarine && !bTeamBIsMarine) { return; }
-		
+
 	AvHAIResourceNode* TeamAMarineNode = nullptr;
 	AvHAIResourceNode* TeamBMarineNode = nullptr;
 
@@ -1810,7 +1811,7 @@ void AITAC_RefreshResourceNodes()
 		AvHFuncResource* ResourceEntity = it->ResourceEntity;
 
 		it->bIsOccupied = ResourceEntity->GetIsOccupied();
-		
+
 		if (it->bIsOccupied)
 		{
 			DeployableSearchFilter TowerFilter;
@@ -1843,7 +1844,7 @@ void AITAC_RefreshResourceNodes()
 				{
 					AITAC_RefreshReachabilityForResNode(&(*it));
 				}
-			}			
+			}
 		}
 	}
 }
@@ -1865,7 +1866,7 @@ AvHAIResourceNode* AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, cons
 			}
 
 			if (!(StructureReachabilityFlags & ReachabilityFlags)) { continue; }
-		} 
+		}
 
 		float ThisScore = frandrange(0.0f, 1.0f);
 
@@ -1884,9 +1885,11 @@ void AITAC_UpdateMapAIData()
 
 	AITAC_RefreshHiveData();
 
+	AIMAP_UpdateDynamicMapObjects();
+
 	UTIL_UpdateDoors(false);
 	UTIL_UpdateWeldableObstacles();
-	
+
 
 	if (gpGlobals->time - last_structure_refresh_time >= structure_inventory_refresh_rate)
 	{
@@ -1924,7 +1927,7 @@ void AITAC_UpdateMapAIData()
 		LastSeenLerkTeamA = LastTeamALerk;
 	}
 
-	
+
 
 	vector<AvHPlayer*> AllTeamBPlayers = AITAC_GetAllPlayersOnTeamOfClass(GetGameRules()->GetTeamBNumber(), AVH_USER3_ALIEN_PLAYER3, nullptr);
 	edict_t* LastTeamBLerk = LastSeenLerkTeamB;
@@ -1951,7 +1954,7 @@ void AITAC_UpdateMapAIData()
 
 
 
-	
+
 
 }
 
@@ -2280,7 +2283,7 @@ void AITAC_UpdateMarineItem(CBaseEntity* Item, AvHAIDeployableItemType ItemType)
 
 		if (ItemEdict->v.effects & EF_NODRAW) { return; }
 	}
-	
+
 	int EntIndex = ENTINDEX(ItemEdict);
 	if (EntIndex < 0) { return; }
 
@@ -2307,7 +2310,7 @@ void AITAC_OnItemDropped(const AvHAIDroppedItem* NewItem)
 	AvHTeamNumber TeamANumber = GetGameRules()->GetTeamANumber();
 	AvHTeamNumber TeamBNumber = GetGameRules()->GetTeamBNumber();
 
-	
+
 	AvHAIPlayer* TeamACommander = AIMGR_GetAICommander(TeamANumber);
 	AvHAIPlayer* TeamBCommander = AIMGR_GetAICommander(TeamBNumber);
 
@@ -2509,9 +2512,9 @@ AvHAIBuildableStructure* AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 
 	AvHBaseBuildable* BaseBuildable = dynamic_cast<AvHBaseBuildable*>(Structure);
 
-	if (!BaseBuildable) 
+	if (!BaseBuildable)
 	{
-		return nullptr; 
+		return nullptr;
 	}
 
 	StructureRef->StructureType = StructureType;
@@ -2715,7 +2718,7 @@ void AITAC_OnStructureCreated(AvHAIBuildableStructure* NewStructure)
 	}
 
 	if (StructureTeam == TEAM_IND) { return; }
-	
+
 	AvHTeam* Team = GetGameRules()->GetTeam(StructureTeam);
 
 	if (!Team) { return; }
@@ -2786,7 +2789,7 @@ void AITAC_RemovePhaseGateConnections(AvHAIBuildableStructure* SourceGate, AvHAI
 {
 	if (!SourceGate || !TargetGate) { return; }
 
-	for (auto it = SourceGate->OffMeshConnections.begin(); it != SourceGate->OffMeshConnections.end();) 
+	for (auto it = SourceGate->OffMeshConnections.begin(); it != SourceGate->OffMeshConnections.end();)
 	{
 		if (it->TargetObject == TargetGate->edict)
 		{
@@ -2835,7 +2838,7 @@ void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 
 		// Get all other completed phase gates for this team and remove any connections going to this structure
 		std::vector<AvHAIBuildableStructure*> OtherPhaseGates = AITAC_FindAllDeployablesByRef(DestroyedStructure->Location, &Filter);
-		
+
 		for (auto it = OtherPhaseGates.begin(); it != OtherPhaseGates.end(); it++)
 		{
 			// Don't check for off-mesh connections from ourselves!
@@ -2891,7 +2894,7 @@ void AITAC_LinkStructureToPlayer(AvHAIBuildableStructure* NewStructure)
 				Player->PrimaryBotTask.ActiveBuildInfo.BuildStatus = BUILD_ATTEMPT_SUCCESS;
 				Player->PrimaryBotTask.ActiveBuildInfo.LinkedStructure = NewStructure;
 			}
-			
+
 		}
 
 		if (Player->SecondaryBotTask.ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING && Player->SecondaryBotTask.ActiveBuildInfo.AttemptedStructureType == NewStructure->StructureType)
@@ -2984,7 +2987,7 @@ void AITAC_ClearHiveInfo()
 			UTIL_RemoveTemporaryObstacles(it->ObstacleRefs);
 		}
 	}
-	
+
 	Hives.clear();
 }
 
@@ -3242,7 +3245,7 @@ AvHAIWeapon UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict)
 	if (Index < 0) { return WEAPON_INVALID; }
 
 	AvHAIDeployableItemType ItemType = MarineDroppedItemMap[Index].ItemType;
-		
+
 	switch (ItemType)
 	{
 	case DEPLOYABLE_ITEM_WELDER:
@@ -3285,7 +3288,7 @@ bool UTIL_StructureIsResearching(edict_t* Structure)
 	if (!Structure) { return false; }
 
 	AvHBaseBuildable* StructureRef = dynamic_cast<AvHBaseBuildable*>(CBaseEntity::Instance(Structure));
-	
+
 	return (StructureRef && StructureRef->GetIsResearching());
 }
 
@@ -3601,9 +3604,9 @@ AvHAIResourceNode* AITAC_FindNearestResourceNodeToLocation(const Vector Location
 			if (!(CheckReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
 		}
 
-		
+
 		if (it->OwningTeam != Filter->DeployableTeam) { continue; }
-		
+
 		float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it->Location, Location)) : vDist2DSq(it->Location, Location);
 
 		if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (!Result || DistSq < CurrMinDist))
@@ -3626,7 +3629,7 @@ int AITAC_GetNumActivePlayersOnTeam(const AvHTeamNumber Team)
 
 		if (!FNullEnt(PlayerEdict) && !PlayerEdict->free && IsPlayerActiveInGame(PlayerEdict)) { Result++; }
 
-		
+
 	}
 
 	return Result;
@@ -3936,7 +3939,7 @@ Vector UTIL_GetNextMinePosition2(edict_t* StructureToMine)
 	if (FNullEnt(StructureToMine)) { return ZERO_VECTOR; }
 
 	AvHTeamNumber StructureTeam = (AvHTeamNumber)StructureToMine->v.team;
-	
+
 	nav_profile MineCheckProfile = GetBaseNavProfile(MARINE_BASE_NAV_PROFILE);
 	MineCheckProfile.Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_BLOCKED);
 	MineCheckProfile.Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1STRUCTURE);
@@ -4267,7 +4270,7 @@ AvHMessageID UTIL_ItemTypeToImpulseCommand(const AvHAIDeployableItemType ItemTyp
 {
 	switch (ItemType)
 	{
-							
+
 		case DEPLOYABLE_ITEM_HEAVYARMOUR:
 			return BUILD_HEAVY;
 		case DEPLOYABLE_ITEM_JETPACK:
@@ -4685,13 +4688,13 @@ const vector<AvHAIResourceNode*> AITAC_GetAllReachableResourceNodes(AvHTeamNumbe
 	vector<AvHAIResourceNode*> Results;
 
 	for (auto it = ResourceNodes.begin(); it != ResourceNodes.end(); it++)
-	{		
+	{
 		unsigned int CheckReachabilityFlags = (Team == GetGameRules()->GetTeamANumber()) ? it->TeamAReachabilityFlags : it->TeamBReachabilityFlags;
 
 		if (CheckReachabilityFlags != AI_REACHABILITY_UNREACHABLE && CheckReachabilityFlags != AI_REACHABILITY_NONE)
 		{
 			Results.push_back(&(*it));
-		}			
+		}
 	}
 
 	return Results;
@@ -4800,7 +4803,7 @@ bool AITAC_IsAlienHarasserNeeded(AvHAIPlayer* pBot)
 		int NumTeamHives = AITAC_GetNumTeamHives(BotTeam, false);
 
 		if (NumFades == 0 || (NumOnos == 0 && NumTeamHives > 1)) { return false; }
-	}	
+	}
 
 	int NumTeamPlayers = AIMGR_GetNumPlayersOnTeam(BotTeam);
 	int DesiredLerks = (int)ceilf((float)NumTeamPlayers * 0.1f);
@@ -4883,7 +4886,7 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 			// Aliens can only build one hive at a time, so if we have one already under construction then automatic no
 			if (ThisHive->OwningTeam == BotTeam)
 			{
-				return false; 
+				return false;
 			}
 			else
 			{
@@ -4910,7 +4913,7 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 
 		// Must be an empty hive
 		DeployableSearchFilter EnemyFortificationsFilter;
-		EnemyFortificationsFilter.DeployableTeam = EnemyTeam;		
+		EnemyFortificationsFilter.DeployableTeam = EnemyTeam;
 
 		if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_MARINE)
 		{
@@ -5003,7 +5006,7 @@ bool AITAC_IsAlienCapperNeeded(AvHAIPlayer* pBot)
 	int NumCurrentCappers = AIMGR_GetNumAIPlayersWithRoleOnTeam(BotTeam, BOT_ROLE_FIND_RESOURCES, pBot);
 
 	float DesiredCapperPercent = MaxCapperPercent * (1.0f - OurNodeOwnership);
-	
+
 	int DesiredCappers = imini(NumNodesLeft, (int)roundf(DesiredCapperPercent * (float)NumTeamPlayers));
 
 	if (NumCurrentCappers >= DesiredCappers) { return false; }
@@ -5176,7 +5179,7 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 				continue;
 			}
 		}
-			
+
 		bool bEnemyIsMarines = (AIMGR_GetEnemyTeamType(BotTeam) == AVH_CLASS_TYPE_MARINE);
 
 		DeployableSearchFilter EnemyStructures;
@@ -5210,7 +5213,7 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 		ExistingReinforcementFilter.DeployableTypes = SEARCH_ALL_ALIEN_STRUCTURES;
 
 		vector<AvHAIBuildableStructure> AllReinforcingStructures = AITAC_FindAllDeployables(ThisHive->FloorLocation, &ExistingReinforcementFilter);
-			
+
 		int NumOCs = 0;
 		int NumDCs = 0;
 		int NumMCs = 0;
@@ -5249,7 +5252,7 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 				return NumCurrentBuilders < DesiredBuilders;
 			}
 		}
-		
+
 	}
 
 	// We have hives to fortify and upgrades to enable. Ignore resource nodes for now. We will get a bot assigned to those once we've done everything else
@@ -5257,7 +5260,7 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 	{
 		return NumCurrentBuilders < DesiredBuilders;
 	}
-	
+
 	DeployableSearchFilter ResNodeFilter;
 	ResNodeFilter.DeployableTeam = BotTeam;
 	ResNodeFilter.ReachabilityTeam = BotTeam;
@@ -5407,7 +5410,7 @@ edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLo
 		ThisDist -= BALANCE_VAR(kHiveHealRadius) * 0.75f;
 
 		if (AITAC_AnyPlayerOnTeamHasLOSToLocation(EnemyTeam, (*it)->Location, UTIL_MetresToGoldSrcUnits(30.0f), nullptr)) { continue; }
-		
+
 		// We're already in healing distance of a hive, that's our healing source
 		if (ThisDist <= 0.0f) { return (*it)->HiveEdict; }
 
@@ -5524,7 +5527,7 @@ int AITAC_GetNumWeaponsInPlay(AvHTeamNumber Team, AvHAIWeapon WeaponType)
 			ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 			ArmouryFilter.DeployableTeam = Team;
 			ArmouryFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
-			
+
 			if (AITAC_DeployableExistsAtLocation(it->second.Location, &ArmouryFilter))
 			{
 				Result++;
@@ -5598,8 +5601,8 @@ Vector AITAC_GetRandomBuildHintInLocation(const unsigned int StructureType, cons
 bool AITAC_IsBotPursuingSquadObjective(AvHAIPlayer* pBot, AvHAISquad* Squad)
 {
 	// Bot is dead, no longer playing, or otherwise incapacitated
-	if (!IsPlayerActiveInGame(pBot->Edict) || pBot->Player->GetTeam() != Squad->SquadTeam) { return false; } 
-	
+	if (!IsPlayerActiveInGame(pBot->Edict) || pBot->Player->GetTeam() != Squad->SquadTeam) { return false; }
+
 	// Bot no longer has this squad's objective as its primary task
 	if (pBot->PrimaryBotTask.TaskType != Squad->SquadObjective || (!FNullEnt(Squad->SquadTarget) && pBot->PrimaryBotTask.TaskTarget != Squad->SquadTarget) || (FNullEnt(Squad->SquadTarget) && !vEquals(pBot->PrimaryBotTask.TaskLocation, Squad->ObjectiveLocation))) { return false; }
 
@@ -5741,7 +5744,7 @@ AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, edict_t* TaskTarget, B
 	if (JoinSquad)
 	{
 		JoinSquad->SquadMembers.push_back(pBot);
-		return JoinSquad; 
+		return JoinSquad;
 	}
 
 	AvHAISquad NewSquad;
@@ -6018,7 +6021,7 @@ void AITAC_ManageActiveMarineBases()
 		for (auto structIt = it->PlacedStructures.begin(); structIt != it->PlacedStructures.end();)
 		{
 			AvHAIBuildableStructure StructureRef = TeamAStructureMap[*structIt];
-			
+
 			if (!StructureRef.IsValid() || (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_RECYCLING))
 			{
 				structIt = it->PlacedStructures.erase(structIt);
