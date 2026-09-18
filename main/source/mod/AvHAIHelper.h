@@ -6,7 +6,6 @@
 #include "AvHPlayer.h"
 #include "AvHAIConstants.h"
 
-bool UTIL_CommanderTrace(const edict_t* pEdict, const Vector& start, const Vector& end);
 bool UTIL_QuickTrace(const edict_t* pEdict, const Vector& start, const Vector& end, bool bAllowStartSolid = false);
 bool UTIL_QuickHullTrace(const edict_t* pEdict, const Vector& start, const Vector& end, bool bAllowStartSolid = false);
 bool UTIL_QuickHullTrace(const edict_t* pEdict, const Vector& start, const Vector& end, int hullNum, bool bAllowStartSolid = false);

@@ -8145,7 +8145,6 @@ void ClearBotMovement(AvHAIPlayer* pBot)
 	ClearBotStuckMovement(pBot);
 
 	pBot->LastPosition = pBot->Edict->v.origin;
-	pBot->TimeSinceLastMovement = 0.0f;
 }
 
 void ClearBotStuck(AvHAIPlayer* pBot)

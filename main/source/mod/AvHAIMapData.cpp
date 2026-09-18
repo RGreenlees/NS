@@ -995,9 +995,17 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 
 void AIMAP_LinkDynamicMapObjectsToOffmeshConnections()
 {
-	/*for (int i = 0; i < NUM_NAV_MESHES; i++)
+	const int InvalidIndex = static_cast<int>(NAV_MESH_INVALID);
+
+	for (int i = 0; i < InvalidIndex; i++)
 	{
-		for (auto it = NavMeshes[i].MeshConnections.begin(); it != NavMeshes[i].MeshConnections.end(); it++)
+		const NavMeshIndex MeshIndex = static_cast<NavMeshIndex>(i);
+
+		NavMesh* FoundNavMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+		if (!FoundNavMesh) { continue; }
+
+		for (auto it = FoundNavMesh->MeshConnections.begin(); it != FoundNavMesh->MeshConnections.end(); it++)
 		{
 			if (it->DefaultConnectionFlags & NAV_FLAG_PLATFORM)
 			{
@@ -1009,7 +1017,7 @@ void AIMAP_LinkDynamicMapObjectsToOffmeshConnections()
 				}
 			}
 		}
-	}*/
+	}
 }
 
 void AIMAP_SetTrainStartPoints()

@@ -9,6 +9,7 @@
 #include "AvHHive.h"
 #include "AvHEntities.h"
 #include "AvHAIMath.h"
+#include "AvHAINavConstants.h"
 
 static const float commander_action_cooldown = 1.0f;
 static const float min_request_spam_time = 10.0f;
@@ -215,20 +216,6 @@ typedef enum _AVHAICOMBATSTRATEGY
 	COMBAT_STRATEGY_ATTACK		// Attack the enemy
 } AvHAICombatStrategy;
 
-typedef enum _AVHAINAVMESHSTATUS
-{
-	NAVMESH_STATUS_PENDING = 0,	// Waiting to try loading the navmesh
-	NAVMESH_STATUS_FAILED,		// Failed to load the navmesh
-	NAVMESH_STATUS_SUCCESS		// Successfully loaded the navmesh
-} AvHAINavMeshStatus;
-
-
-typedef struct _STRUCTURE_OBSTACLE
-{
-	unsigned int NavMeshIndex = 0;
-	unsigned int ObstacleRef = 0;
-} AvHAITempObstacle;
-
 // Data structure used to track resource nodes in the map
 typedef struct _RESOURCE_NODE
 {
@@ -258,22 +245,13 @@ typedef struct _HIVE_DEFINITION_T
 	bool bIsUnderAttack = false;					// Is the hive currently under attack? Becomes false if not taken damage for more than 10 seconds
 	float HealthPercent = 0.0f;						// If the hive is built and active, what its health currently is
 	AvHAIResourceNode* HiveResNodeRef = nullptr;	// Which resource node (indexes into ResourceNodes array) belongs to this hive?
-	unsigned int ObstacleRefs[MAX_NAV_MESHES];		// When in progress or built, will place an obstacle so bots don't try to walk through it
+	std::vector<NavTempObstacle*> ObstacleRefs;		// When in progress or built, will place an obstacle so bots don't try to walk through it
 	float NextFloorLocationCheck = 0.0f;			// When should the closest navigable point to the hive be calculated? Used to delay the check after a hive is built
 	AvHTeamNumber OwningTeam = TEAM_IND;			// Which team owns this hive currently (TEAM_IND if empty)
 	unsigned int TeamAReachabilityFlags = AI_REACHABILITY_NONE;		// Who on team A can reach this node?
 	unsigned int TeamBReachabilityFlags = AI_REACHABILITY_NONE;		// Who on team B can reach this node?
 	char HiveName[64] = {'\0'};
 } AvHAIHiveDefinition;
-
-// A nav profile combines a nav mesh reference (indexed into NavMeshes) and filters to determine how a bot should find paths
-typedef struct _NAV_PROFILE
-{
-	int NavMeshIndex = -1;
-	dtQueryFilter Filters;
-	bool bFlyingProfile = false;
-	AvHAIReachabilityStatus ReachabilityFlag = AI_REACHABILITY_NONE;
-} nav_profile;
 
 typedef struct _DEPLOYABLE_SEARCH_FILTER
 {
@@ -309,7 +287,6 @@ typedef struct _AVH_AI_GUARD_INFO
 	float ThisGuardLookTime = 0.0f; // How long should we watch this area for?
 	float ThisGuardStandTime = 0.0f; // How long should we watch this area for?
 	float GuardStartStandTime = 0.0f; // How long should we watch this area for?
-
 } AvHAIGuardInfo;
 
 // Data structure to hold information on any kind of buildable structure (hive, resource tower, chamber, marine building etc)
@@ -326,8 +303,8 @@ typedef struct _AVH_AI_BUILDABLE_STRUCTURE
 	unsigned int TeamAReachabilityFlags = AI_REACHABILITY_NONE;
 	unsigned int TeamBReachabilityFlags = AI_REACHABILITY_NONE;
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the building has been removed from play
-	vector< AvHAITempObstacle> Obstacles;
-	vector<AvHAIOffMeshConnection> OffMeshConnections; // References to any off-mesh connections this structure is associated with
+	std::vector<NavTempObstacle*> TempObstacles;
+	vector<NavOffMeshConnection*> OffMeshConnections; // References to any off-mesh connections this structure is associated with
 	Vector LastSuccessfulCommanderLocation = g_vecZero; // Tracks the last commander view location where it successfully placed or selected the building
 	Vector LastSuccessfulCommanderAngle = g_vecZero; // Tracks the last commander input angle ("click" location) used to successfully place or select building
 	StructurePurpose Purpose = STRUCTURE_PURPOSE_NONE;
@@ -429,7 +406,7 @@ enum MarineBaseType
 	MARINE_BASE_GUARDPOST	// A cut-down version of an outpost with just sentry turrets and an observatory
 };
 
-typedef struct _AI_MARINE_BASE
+typedef struct _AVH_AI_MARINE_BASE
 {
 	AvHTeamNumber BaseTeam = TEAM_IND;
 	MarineBaseType BaseType = MARINE_BASE_OUTPOST; // The purpose of the base. Determines what structures the commander will place
@@ -446,18 +423,19 @@ typedef struct _AI_MARINE_BASE
 } AvHAIMarineBase;
 
 // Bot path node. A path will be several of these strung together to lead the bot to its destination
-typedef struct _BOT_PATH_NODE
+typedef struct _AVH_AI_PATH_NODE
 {
-	Vector FromLocation = g_vecZero; // Location to move from
-	Vector Location = g_vecZero; // Location to move to
+	Vector FromLocation = ZERO_VECTOR; // Location to move from
+	Vector Location = ZERO_VECTOR; // Location to move to
 	float requiredZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
-	unsigned int flag = 0; // Is this a ladder movement, wall climb, walk etc
-	unsigned char area = 0; // Is this a crouch area, normal walking area etc
+	unsigned int flag = NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
+	unsigned char area = NAV_AREA_UNWALKABLE; // Is this a crouch area, normal walking area etc
 	unsigned int poly = 0; // The nav mesh poly this point resides on
-} bot_path_node;
+	edict_t* Platform = nullptr;
+} AvHAIPathNode;
 
 // Represents a bot's current understanding of an enemy player's status
-typedef struct _ENEMY_STATUS
+typedef struct _AVH_AI_ENEMY_STATUS
 {
 	AvHPlayer* PlayerRef = nullptr; // Reference to the enemy AvHPlayer
 	edict_t* PlayerEdict = nullptr; // Reference to the enemy player edict
@@ -478,10 +456,10 @@ typedef struct _ENEMY_STATUS
 	Vector LastLOSPosition = g_vecZero;
 	Vector LastCoverPosition = g_vecZero;
 
-} enemy_status;
+} AvHAIEnemyStatus;
 
 // Tracks what orders have been given to which players
-typedef struct _BOT_SKILL
+typedef struct _AVH_AI_SKILL_LEVEL
 {
 	float marine_bot_reaction_time = 0.2f; // How quickly the bot will react to seeing an enemy
 	float marine_bot_aim_skill = 0.5f; // How quickly the bot can lock on to an enemy
@@ -492,7 +470,7 @@ typedef struct _BOT_SKILL
 	float alien_bot_motion_tracking_skill = 0.5f; // How well the bot can follow an enemy target's motion
 	float alien_bot_view_speed = 0.5f; // How fast a bot can spin its view to aim in a given direction
 
-} bot_skill;
+} AvHAISkillLevel;
 
 typedef struct _AVH_AI_BUILD_ATTEMPT
 {
@@ -524,29 +502,14 @@ typedef struct _AVH_AI_PLAYER_TASK
 	AvHAIBuildAttempt ActiveBuildInfo; // If gorge, the current status of any recent attempt to place a structure
 } AvHAIPlayerTask;
 
-typedef struct _DOOR_TRIGGER
-{
-	CBaseEntity* Entity = nullptr;
-	CBaseToggle* ToggleEnt = nullptr;
-	edict_t* Edict = nullptr;
-	DoorActivationType TriggerType = DOOR_NONE;
-	bool bIsActivated = false;
-	CBaseEntity* TriggerChangeTargetRef = nullptr;
-	float ActivationDelay = 0.0f;
-	float LastActivatedTime = 0.0f;
-	TOGGLE_STATE LastToggleState = TS_AT_BOTTOM;
-	float LastNextThink = 0.0f;
-	float NextActivationTime = 0.0f;
-} DoorTrigger;
-
-typedef struct _AVH_AI_PLAYER_MOVE_TASK
+typedef struct _AVH_AI_MOVE_TASK
 {
 	BotMovementTaskType TaskType = MOVE_TASK_NONE;
-	Vector TaskLocation = g_vecZero;
+	Vector TaskLocation = ZERO_VECTOR;
 	edict_t* TaskTarget = nullptr;
-	DoorTrigger* TriggerToActivate = nullptr;
+	edict_t* TriggerToActivate = nullptr;
 	bool bPathGenerated = false;
-} AvHAIPlayerMoveTask;
+} AvHAIMoveTask;
 
 typedef struct _AVH_AI_STUCK_TRACKER
 {
@@ -555,21 +518,21 @@ typedef struct _AVH_AI_STUCK_TRACKER
 	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
 	bool bPathFollowFailed = false;
 
-} AvHAIPlayerStuckTracker;
+} AvHAIStuckTracker;
 
 // Contains the bot's current navigation info, such as current path
-typedef struct _NAV_STATUS
+typedef struct _AVH_AI_NAV_STATUS
 {
-	vector<bot_path_node> CurrentPath; // Bot's path nodes
+	std::vector<AvHAIPathNode> CurrentPath; // Bot's path nodes
 	unsigned int CurrentPathPoint = 0;
 
-	Vector TargetDestination = g_vecZero; // Desired destination
-	Vector ActualMoveDestination = g_vecZero; // Actual destination on nav mesh
-	Vector PathDestination = g_vecZero; // Where the path is currently headed to
+	Vector TargetDestination = ZERO_VECTOR; // Desired destination
+	Vector ActualMoveDestination = ZERO_VECTOR; // Actual destination on nav mesh
+	Vector PathDestination = ZERO_VECTOR; // Where the path is currently headed to
 
-	Vector LastNavMeshCheckPosition = g_vecZero;
-	Vector LastNavMeshPosition = g_vecZero; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
-	Vector LastOpenLocation = g_vecZero; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
+	Vector LastNavMeshCheckPosition = ZERO_VECTOR;
+	Vector LastNavMeshPosition = ZERO_VECTOR; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
+	Vector LastOpenLocation = ZERO_VECTOR; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
 
 	int CurrentMoveType = MOVETYPE_NONE; // Tracks the edict's current movement type
 
@@ -579,8 +542,8 @@ typedef struct _NAV_STATUS
 	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
 	float LastDistanceFromDestination = 0.0f; // How far from its destination was it last stuck check
 
-	Vector StuckCheckMoveLocation = g_vecZero; // Where is the bot trying to go that we're checking if they're stuck?
-	Vector UnstuckMoveLocation = g_vecZero; // If the bot is unable to find a path, blindly move here to try and fix the problem
+	Vector StuckCheckMoveLocation = ZERO_VECTOR; // Where is the bot trying to go that we're checking if they're stuck?
+	Vector UnstuckMoveLocation = ZERO_VECTOR; // If the bot is unable to find a path, blindly move here to try and fix the problem
 
 	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
 	float AirStartedTime = 0.0f; // When the bot left the ground if in the air
@@ -598,18 +561,16 @@ typedef struct _NAV_STATUS
 
 	float NextForceRecalc = 0.0f; // If set, then the bot will force-recalc its current path
 
-	bool bZig; // Is the bot zigging (moving RIGHT), or zagging (moving LEFT)?
-	float NextZigTime; // Controls how frequently they zig or zag
-
-	nav_profile NavProfile;
+	NavAgentProfile NavProfile;
 	bool bNavProfileChanged = false;
 
-	AvHAIPlayerStuckTracker StuckInfo;
+	AvHAIStuckTracker StuckInfo;
 
-	unsigned int SpecialMovementFlags = 0; // Any special movement flags required for this path (e.g. needs a welder, needs a jetpack etc.)
+	unsigned int SpecialMovementFlags = 0; // Any special movement flags required for the current path (e.g. needs to pick up an item)
 
-	AvHAIPlayerMoveTask MovementTask;
-} nav_status;
+	std::vector<AvHAIMoveTask> MovementTasks;
+	AvHAIMoveTask UnstuckTask;
+} AvHAINavStatus;
 
 typedef enum
 {
@@ -623,7 +584,7 @@ typedef enum
 	ORDERPURPOSE_BUILD_GUARDPOST
 } AvHAIOrderPurpose;
 
-typedef struct _AI_COMMANDER_ORDER
+typedef struct _AVH_AI_COMMANDER_ORDER
 {
 	edict_t* Assignee = nullptr;
 	AvHAIOrderPurpose OrderPurpose = ORDERPURPOSE_NONE;
@@ -631,9 +592,9 @@ typedef struct _AI_COMMANDER_ORDER
 	Vector OrderLocation = g_vecZero;
 	float LastReminderTime = 0.0f;
 	float LastPlayerDistance = 0.0f;
-} ai_commander_order;
+} AvHAICommanderOrder;
 
-typedef struct _AI_COMMANDER_REQUEST
+typedef struct _AVH_AI_COMMANDER_REQUEST
 {
 	bool bNewRequest = false; // Is this a new request just come in?
 	edict_t* Requestor = nullptr; // Who sent the request?
@@ -643,9 +604,9 @@ typedef struct _AI_COMMANDER_REQUEST
 	float RequestTime = 0.0f; // When the request came in
 	int ResponseAttempts = 0; // How many times have we tried to respond to this request?
 	Vector RequestLocation = g_vecZero; // Where was the request raised? Ideal drop location for stuff
-} ai_commander_request;
+} AvHAICommanderRequest;
 
-typedef struct AVH_AI_PLAYER
+typedef struct _AVH_AI_PLAYER
 {
 	AvHPlayer* Player = nullptr;
 	edict_t* Edict = nullptr;
@@ -662,24 +623,20 @@ typedef struct AVH_AI_PLAYER
 
 	float LastUseTime = 0.0f;
 
-	float f_previous_command_time = 0.0f;
-
-	Vector desiredMovementDir = g_vecZero;
-	Vector CurrentLadderNormal = g_vecZero;
+	Vector SpawnLocation = g_vecZero;
+	Vector DesiredMovementDir = g_vecZero;
 	Vector CurrentEyePosition = g_vecZero;
 	Vector CurrentFloorPosition = g_vecZero;
-	Vector LastPosition = g_vecZero;
 
 	Vector CollisionHullBottomLocation = g_vecZero;
 	Vector CollisionHullTopLocation = g_vecZero;
-
-	float TimeSinceLastMovement = 0.0f;
 
 	AvHAIWeapon DesiredMoveWeapon = WEAPON_INVALID;
 	AvHAIWeapon DesiredCombatWeapon = WEAPON_INVALID;
 
 	frustum_plane_t viewFrustum[6]; // Bot's view frustum. Essentially, their "screen" for determining visibility of stuff
-	enemy_status TrackedEnemies[32];
+
+	AvHAIEnemyStatus TrackedEnemies[32];
 	int CurrentEnemy = -1;
 	AvHAICombatStrategy CurrentCombatStrategy = COMBAT_STRATEGY_ATTACK;
 	edict_t* CurrentEnemyRef = nullptr;
@@ -694,15 +651,15 @@ typedef struct AVH_AI_PLAYER
 
 	float BotNextTaskEvaluationTime = 0.0f;
 
-	bot_skill BotSkillSettings;
+	AvHAISkillLevel BotSkillSettings;
 
 	char PathStatus[128]; // Debug used to help figure out what's going on with a bot's path finding
 	char MoveStatus[128]; // Debug used to help figure out what's going on with a bot's steering
 
-	nav_status BotNavInfo; // Bot's movement information, their current path, where in the path they are etc.
+	AvHAINavStatus BotNavInfo; // Bot's movement information, their current path, where in the path they are etc.
 
-	vector<ai_commander_request> ActiveRequests;
-	vector<ai_commander_order> ActiveOrders;
+	vector<AvHAICommanderRequest> ActiveRequests;
+	vector<AvHAICommanderOrder> ActiveOrders;
 
 	float next_commander_action_time = 0.0f;
 

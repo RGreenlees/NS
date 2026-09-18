@@ -13,14 +13,6 @@ int m_spriteTexture;
 
 std::unordered_map<const char*, std::string> LocalizedLocationsMap;
 
-bool UTIL_CommanderTrace(const edict_t* pEdict, const Vector& start, const Vector& end)
-{
-	TraceResult hit;
-	edict_t* IgnoreEdict = (!FNullEnt(pEdict)) ? pEdict->v.pContainingEntity : NULL;
-	UTIL_TraceLine(start, end, ignore_monsters, ignore_glass, IgnoreEdict, &hit);
-	return (hit.flFraction >= 1.0f);
-}
-
 bool UTIL_QuickTrace(const edict_t* pEdict, const Vector& start, const Vector& end, bool bAllowStartSolid)
 {
 	TraceResult hit;
