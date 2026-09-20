@@ -17,7 +17,7 @@
 #include "AvHAINavMesh.h"
 
 // Dynamic map object type
-typedef enum
+enum class EAIDynamicMapObjectType
 {
 	MAPOBJECT_STATIC = 0,   // Cannot be moved, permanent obstacle
 	MAPOBJECT_DOOR,			// Object type that moves between two points (e.g. a door) and can block off routes
@@ -28,56 +28,39 @@ typedef enum
 	TRIGGER_SHOOT,			// Trigger activated by shooting it (damage to activate)
 	TRIGGER_BREAK,			// Trigger activated by breaking it (permanently destroy)
 	TRIGGER_WELD			// Trigger activated by welding it (permanently destroy)
-} DynamicMapObjectType;
+};
 
 // Dynamic map object type
-typedef enum
+enum class EAIDynamicMapObjectState
 {
 	OBJECTSTATE_START = 0,  // The object has just been registered and does not yet know its state
 	OBJECTSTATE_IDLE = 1,   // Object is idling and not going to move until triggered
 	OBJECTSTATE_PREPARING,	// Object has been triggered and is getting ready to move
 	OBJECTSTATE_MOVING,		// Object is on the move
 	OBJECTSTATE_OPEN		// For buttons which don't move, this marks a button which has been pressed and is waiting to release for another use
-} DynamicMapObjectState;
+};
 
-typedef struct _DYNAMIC_MAP_PROTOTYPE
-{
-	int EdictIndex = -1;
-	edict_t* Edict = nullptr;
-	std::string ObjectName = "";
-	std::string Master = "";
-	float Lip = 0.0f;
-	float Height = 0.0f;
-	float Wait = 0.0f; // How long the object will remain triggered before resetting (-1 means never)
-	float Delay = 0.0f; // How long the object, once triggered, will wait before doing its thing
-	float Health = 0.0f; // Does this object need to be damaged to activate?
-	std::string GlobalState = "";
-	int TriggerState = 0;
-	int TriggerMode = 1;
-	std::vector<std::string> Targets; // All targets this object triggers when activated
-} DynamicMapPrototype;
-
-typedef struct _DYNAMIC_OBJECT_STOPPOINT
+struct DynamicMapObjectStop
 {
 	edict_t* CornerEdict = nullptr;
 	Vector StopLocation = ZERO_VECTOR;
 	bool bWaitForRetrigger = true;
 	float WaitTime = 0.0f;
 	std::vector<NavOffMeshConnection*> AffectedConnections;
-} DynamicMapObjectStop;
+};
 
-typedef struct _DYNAMIC_MAP_OBJECT
+struct DynamicMapObject
 {
 	int EdictIndex = -1;
 	edict_t* Edict = nullptr;
 	const char* ObjectName = nullptr;
-	DynamicMapObjectType Type = MAPOBJECT_STATIC;
+	EAIDynamicMapObjectType Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
 	std::vector<NavTempObstacle> TempObstacles; // Dynamic obstacle ref. Used to add/remove the obstacle as the door is opened/closed
 	std::vector<edict_t*> Triggers; // Reference to the trigger edicts (e.g. func_trigger, func_button etc.)
 	std::vector<DynamicMapObjectStop> StopPoints; // Where the object stops when triggered. Doors will always have two stop points (open and shut positions), trains could have many
 	int NextStopIndex = 0;
 	std::vector<edict_t*> Targets;
-	DynamicMapObjectState State = OBJECTSTATE_IDLE; // What is the object currently doing
+	EAIDynamicMapObjectState State = EAIDynamicMapObjectState::OBJECTSTATE_IDLE; // What is the object currently doing
 	edict_t* Master = nullptr; // The entity which has locked this object and must be triggered first
 	std::string GlobalState = ""; // The global state this object relies upon to be active
 	float Wait = 0.0f; // Once finished its trigger action (e.g. opening), how long it waits before resetting
@@ -92,13 +75,13 @@ typedef struct _DYNAMIC_MAP_OBJECT
 		EdictIndex = -1;
 		Edict = nullptr;
 		ObjectName = nullptr;
-		Type = MAPOBJECT_STATIC;
+		Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
 		TempObstacles.clear();
 		Triggers.clear();
 		StopPoints.clear();
 		NextStopIndex = 0;
 		Targets.clear();
-		State = OBJECTSTATE_IDLE;
+		State = EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
 		Master = nullptr;
 		GlobalState = "";
 		Wait = 0.0f;
@@ -108,7 +91,7 @@ typedef struct _DYNAMIC_MAP_OBJECT
 		bIsActive = true;
 		NumTimesActivated = 0;
 	}
-} DynamicMapObject;
+};
 
 bool AIMAP_BuildMapData();
 bool AIMAP_PopulateDynamicMapObjects();
@@ -121,7 +104,7 @@ bool AIMAP_PopulateDynamicTriggerObject(edict_t* TriggerObject);
 bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject);
 bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject);
 
-void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, DynamicMapObjectState NewState);
+void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, EAIDynamicMapObjectState NewState);
 
 void AIMAP_OnDynamicMapObjectStopIdle(DynamicMapObject* Object);
 void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object);
@@ -154,7 +137,6 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile& NavProfile, const Vec
 
 bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject);
 
-DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(bot_path_node* PathNode, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject);
 DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject);
 
 // Removes all temporary obstacles from the map

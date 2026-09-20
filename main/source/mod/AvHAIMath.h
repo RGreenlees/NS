@@ -24,12 +24,12 @@ static const float DEGREES_RADIANS_CONV = (MATH_PI / 180.0f);
 static const float GOLDSRC_GRAVITY = 400.0f; // Default speed of gravity in GoldSrc units per second squared
 
 // Defines a frustum plane
-typedef struct _FRUSTUM_PLANE_T
+struct AvHBotViewFrustumPlane
 {
 	Vector normal;
 	Vector point;
 	float d;
-} frustum_plane_t;
+};
 
 
 // GENERAL MATH

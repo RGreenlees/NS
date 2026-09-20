@@ -21,7 +21,7 @@
 #include "DetourAlloc.h"
 #include <dlls/util.h>
 
-NavMeshStatus CurrentNavMeshStatus = NAVMESH_STATUS_UNLOADED;
+EAINavMeshStatus CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_UNLOADED;
 
 std::vector<NavMesh> NavMeshList;
 
@@ -111,21 +111,7 @@ struct MeshProcess : public dtTileCacheMeshProcess
 	}
 };
 
-void UTIL_VecGoldSrcToDetour(const Vector& GoldSrcVector, float* OutDetour)
-{
-	if (!OutDetour) { return; }
-
-	OutDetour[0] = GoldSrcVector.x;
-	OutDetour[1] = GoldSrcVector.z;
-	OutDetour[2] = -GoldSrcVector.y;
-}
-
-Vector UTIL_VecDetourToGoldSrc(const float* DetourVector)
-{
-	return Vector(DetourVector[0], -DetourVector[2], DetourVector[1]);
-}
-
-NavMeshStatus AIMESH_GetNavMeshStatus()
+EAINavMeshStatus AIMESH_GetNavMeshStatus()
 {
 	return CurrentNavMeshStatus;
 }
@@ -139,12 +125,12 @@ void AIMESH_UnloadNavMesh()
 
 	NavMeshList.clear();
 
-	CurrentNavMeshStatus = NAVMESH_STATUS_UNLOADED;
+	CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_UNLOADED;
 }
 
 bool AIMESH_IsNavMeshLoaded()
 {
-	if (CurrentNavMeshStatus != NAVMESH_STATUS_SUCCESS) { return false; }
+	if (CurrentNavMeshStatus != EAINavMeshStatus::NAVMESH_STATUS_SUCCESS) { return false; }
 
 	if (NavMeshList.size() < 1) { return false; }
 
@@ -169,7 +155,7 @@ NavMesh* AIMESH_GetNavMeshAtIndex(NavMeshIndex DesiredIndex)
 
 	NavMesh* NavRef = &NavMeshList[static_cast<int>(DesiredIndex)];
 
-	if (NavRef && NavRef->tileCache)
+	if (NavRef && NavRef->IsValid())
 	{
 		return NavRef;
 	}
@@ -198,7 +184,27 @@ std::vector<NavMesh*> AIMESH_GetAllNavMeshes()
 	return Result;
 }
 
-NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
+bool AIMESH_UpdateTileCache(NavMeshIndex MeshIndex)
+{
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!FoundMesh) { return true; }
+
+	FoundMesh->tileCache->update(0.0f, FoundMesh->navMesh, &FoundMesh->bIsMeshUpToDate);
+
+	return FoundMesh->IsUpToDate();
+}
+
+bool AIMESH_IsNavMeshUpToDate(NavMeshIndex MeshIndex)
+{
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!FoundMesh) { return true; }
+
+	return FoundMesh->IsUpToDate();
+}
+
+EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 {
 	// Clear out any existing nav mesh data first before we crack on.
 	AIMESH_UnloadNavMesh();
@@ -211,7 +217,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 
 	if (!OpenedNavFile)
 	{
-		return NAVMESH_LOAD_NOTFOUND;
+		return EAINavMeshLoadResult::NAVMESH_LOAD_NOTFOUND;
 	}
 
 	LinearAllocator* m_talloc = new LinearAllocator(32000);
@@ -227,7 +233,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 	{
 		AIMESH_UnloadNavMesh();
 		fclose(OpenedNavFile);
-		return NAVMESH_LOAD_INVALID;
+		return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 	}
 
 	// Incompatible version of the nav data
@@ -235,7 +241,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 	{
 		AIMESH_UnloadNavMesh();
 		fclose(OpenedNavFile);
-		return NAVMESH_LOAD_WRONGVERSION;
+		return EAINavMeshLoadResult::NAVMESH_LOAD_WRONGVERSION;
 	}
 
 	// Incompatible version of the nav data
@@ -243,7 +249,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 	{
 		AIMESH_UnloadNavMesh();
 		fclose(OpenedNavFile);
-		return NAVMESH_LOAD_WRONGVERSION;
+		return EAINavMeshLoadResult::NAVMESH_LOAD_WRONGVERSION;
 	}
 
 	fseek(OpenedNavFile, fileHeader.tileCacheDataOffset, SEEK_SET);
@@ -261,7 +267,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_LOAD_INVALID;
+			return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 		}
 
 		TileCacheSetHeader tcHeader;
@@ -274,7 +280,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_LOAD_INVALID;
+			return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 		}
 
 		NewNavMesh.navMesh = dtAllocNavMesh();
@@ -285,7 +291,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_STATUS_ALLOCFAIL;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
 		NewNavMesh.tileCache = dtAllocTileCache();
@@ -296,7 +302,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_STATUS_ALLOCFAIL;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
 		NewNavMesh.navQuery = dtAllocNavMeshQuery();
@@ -307,7 +313,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_STATUS_ALLOCFAIL;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
 		dtStatus MeshInitStatus = NewNavMesh.navMesh->init(&tcHeader.meshParams);
@@ -318,7 +324,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_STATUS_MESHINITFAIL;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_MESHINITFAIL;
 		}
 
 		dtStatus TileCacheInitStatus = NewNavMesh.tileCache->init(&tcHeader.cacheParams, m_talloc, m_tcomp, m_tmproc);
@@ -329,7 +335,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_STATUS_CACHEINITFAIL;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_CACHEINITFAIL;
 		}
 
 		// Read tiles.
@@ -354,7 +360,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 				NewNavMesh.Clear();
 				AIMESH_UnloadNavMesh();
 				fclose(OpenedNavFile);
-				return NAVMESH_LOAD_INVALID;
+				return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 			}
 
 			dtCompressedTileRef tile = 0;
@@ -367,7 +373,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 				NewNavMesh.Clear();
 				AIMESH_UnloadNavMesh();
 				fclose(OpenedNavFile);
-				return NAVMESH_LOAD_INVALID;
+				return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 			}
 
 			if (tile)
@@ -381,7 +387,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
-			return NAVMESH_STATUS_QUERYINITFAIL;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_QUERYINITFAIL;
 		}
 
 		NavMeshList.push_back(NewNavMesh);
@@ -417,7 +423,7 @@ NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 
 	fclose(OpenedNavFile);
 
-	return NAVMESH_LOAD_SUCCESS;
+	return EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS;
 }
 
 NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags)
@@ -620,6 +626,132 @@ Vector AIMESH_ProjectPointToNavmesh(NavMeshIndex TargetNavMesh, const Vector Loc
 		{
 			return ZERO_VECTOR;
 		}
+	}
+
+	return ZERO_VECTOR;
+}
+
+Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const Vector& SearchPoint, bool bIgnoreReachability)
+{
+	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile.MeshIndex);
+
+	if (!QueriedMesh) { return g_vecZero; }
+
+	const dtNavMeshQuery* m_navQuery = QueriedMesh->navQuery;
+	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
+
+	if (!m_navQuery) { return g_vecZero; }
+
+	float DetourResult[3];
+	memset(DetourResult, 0, sizeof(DetourResult));
+
+	dtStatus FindStatus;
+
+	if (bIgnoreReachability)
+	{
+		dtPolyRef RefPoly = 0;
+
+		FindStatus = m_navQuery->findRandomPoint(m_navFilter, frand, &RefPoly, DetourResult);
+	}
+	else
+	{
+		dtPolyRef RefPoly = 0;
+		float SearchOrigin[3];
+		float NavNearest[3];
+
+		UTIL_VecGoldSrcToDetour(SearchPoint, SearchOrigin);
+
+		dtStatus FoundPolyResult = m_navQuery->findNearestPoly(SearchOrigin, pExtents, m_navFilter, &RefPoly, NavNearest);
+
+		if (dtStatusFailed(FoundPolyResult))
+		{
+			return g_vecZero;
+		}
+
+		dtPolyRef RandomPoly;
+		float RandomPoint[3];
+		const float DefaultSearchRadius = 8192.0f;
+
+		dtStatus FindStatus = m_navQuery->findRandomPointAroundCircle(RefPoly, NavNearest, DefaultSearchRadius, m_navFilter, frand, &RandomPoly, RandomPoint);
+	}
+
+	if (dtStatusFailed(FindStatus))
+	{
+		return g_vecZero;
+	}
+
+	const Vector ReturnValue = UTIL_VecDetourToGoldSrc(DetourResult);
+
+	return ReturnValue;
+}
+
+Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter)
+{
+	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile.MeshIndex);
+
+	if (!QueriedMesh) { return g_vecZero; }
+
+	const NavAgentProfile SearchProfile = (FlagFilter != NAV_FLAG_NONE)
+		? NavAgentProfile(NavProfile.MeshIndex, FlagFilter, NavProfile.bFlyingProfile)
+		: NavProfile;
+
+	const dtNavMeshQuery* m_navQuery = QueriedMesh->navQuery;
+	const dtQueryFilter* m_navFilter = &SearchProfile.Filters;
+
+	if (!m_navQuery) { return g_vecZero; }
+
+	float DetourSearchOrigin[3];
+
+	UTIL_VecGoldSrcToDetour(SearchOrigin, DetourSearchOrigin);
+
+	dtPolyRef FoundPoly;
+	float NavNearest[3];
+
+	dtStatus foundPolyResult = m_navQuery->findNearestPoly(DetourSearchOrigin, pExtents, m_navFilter, &FoundPoly, NavNearest);
+
+	if (dtStatusFailed(foundPolyResult))
+	{
+		return g_vecZero;
+	}
+
+	dtPolyRef RandomPoly;
+	float RandomPoint[3];
+	dtStatus FoundRandomPointResult;
+
+	if (bIgnoreReachability)
+	{
+		FoundRandomPointResult = m_navQuery->findRandomPointAroundCircleIgnoreReachability(FoundPoly, NavNearest, MaxRadius, m_navFilter, frand, &RandomPoly, RandomPoint);
+	}
+	else
+	{
+		FoundRandomPointResult = m_navQuery->findRandomPointAroundCircle(FoundPoly, NavNearest, MaxRadius, m_navFilter, frand, &RandomPoly, RandomPoint);
+	}
+
+	if (dtStatusFailed(FoundRandomPointResult))
+	{
+		return g_vecZero;
+	}
+
+	const Vector Result = UTIL_VecDetourToGoldSrc(RandomPoint);
+
+	return Result;
+}
+
+Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter = NAV_FLAG_NONE)
+{
+	int maxIterations = 0;
+	float MinRadiusSq = sqrf(MinRadius);
+
+	while (maxIterations < 100)
+	{
+		Vector StartPoint = AIMESH_GetRandomPointOnNavmeshInRadius(NavProfile, origin, MaxRadius, bIgnoreReachability, FlagFilter);
+
+		if (vDist2DSq(StartPoint, origin) > MinRadiusSq)
+		{
+			return StartPoint;
+		}
+
+		maxIterations++;
 	}
 
 	return ZERO_VECTOR;

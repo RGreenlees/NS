@@ -33,15 +33,15 @@ constexpr float pExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in 
 constexpr float pReachableExtents[3] = { max_ai_use_reach, max_ai_use_reach, max_ai_use_reach }; // Extents (in GoldSrc units) to determine if something is on the nav mesh
 
 // The current state of the nav mesh.
-typedef enum _NAVMESHSTATUS
+enum class EAINavMeshStatus
 {
 	NAVMESH_STATUS_UNLOADED = 0, // Waiting to try loading the navmesh
 	NAVMESH_STATUS_FAILED,		 // Failed to load the navmesh
 	NAVMESH_STATUS_SUCCESS		 // Successfully loaded the navmesh
-} NavMeshStatus;
+};
 
 // The result of trying to load a navmesh.
-typedef enum _NAVMESHLOADRESULT
+enum class EAINavMeshLoadResult
 {
 	NAVMESH_LOAD_SUCCESS = 0, // Successfully loaded the navmesh
 	NAVMESH_LOAD_NOTFOUND,		 // The requested .nav file does not exist
@@ -52,9 +52,9 @@ typedef enum _NAVMESHLOADRESULT
 	NAVMESH_STATUS_CACHEINITFAIL,		 // Failed to initialize the tile cache, possibly due to bad data
 	NAVMESH_STATUS_QUERYINITFAIL,		 // Failed to initialize the nav query, possibly due to bad data
 	NAVMESH_STATUS_MISSINGTILE		 // Initialized the navmesh, but one or more tiles could not be loaded
-} NavMeshLoadResult;
+};
 
-typedef struct _NAV_OFF_MESH_CONN
+struct NavOffMeshConnection
 {
 	NavMeshIndex NavMeshIndex = NavMeshIndex::NAV_MESH_INVALID;
 	Vector FromLocation = ZERO_VECTOR; // The start point of the connection
@@ -68,21 +68,21 @@ typedef struct _NAV_OFF_MESH_CONN
 	{
 		return ConnectionRef > 0 && IsValidNavMeshIndex(NavMeshIndex) && !vEquals(FromLocation, ToLocation);
 	}
-} NavOffMeshConnection;
+};
 
 // Hints are locations placed on the nav mesh to influence and guide the bot. For example, "good ambush point".
 // See the nav constants header for all nav hint types.
-typedef struct _NAV_HINT
+struct NavHint
 {
 	unsigned int NavMeshIndex = 0;
 	unsigned int HintTypes = 0;
 	Vector Position;
-} NavHint;
+};
 
 // A temporary obstacle is a shape placed on the map during play which affects the area it covers, changing the movement flags on it.
 // For example, a temporary obstacle with an area type of NULL would cut a hole in the nav mesh, e.g. a door is permanently welded shut.
 // Can also be later removed to undo the change, hence "temporary" obstacle.
-typedef struct _NAV_TEMPORARY_OBSTACLE
+struct NavTempObstacle
 {
 	NavMeshIndex NavMeshIndex = NAV_MESH_INVALID; // Which nav mesh this obstacle belongs to
 	Vector Location = ZERO_VECTOR; // The location of the obstacle. This will be at the BASE of the cylinder
@@ -95,18 +95,18 @@ typedef struct _NAV_TEMPORARY_OBSTACLE
 	{
 		return IsValidNavMeshIndex(NavMeshIndex) && ObstacleRef > 0;
 	}
-} NavTempObstacle;
+};
 
 // Works like a TraceResult, but specifically for running traces on the nav mesh
-typedef struct _NAV_HITRESULT
+struct NavHitResult
 {
 	float flFraction = 0.0f;
 	bool bStartOffMesh = false;
 	Vector TraceEndPoint = ZERO_VECTOR;
-} NavHitResult;
+};
 
 // Links together a tile cache, nav query and the nav mesh into one handy structure for all your querying needs
-typedef struct _NAV_MESH
+struct NavMesh
 {
 	NavMeshIndex MeshIndex = NAV_MESH_INVALID;
 	class dtTileCache* tileCache = nullptr;
@@ -115,6 +115,7 @@ typedef struct _NAV_MESH
 	std::vector<NavOffMeshConnection> MeshConnections;
 	std::vector<NavHint> MeshHints;
 	std::vector<NavTempObstacle> TempObstacles;
+	bool bIsMeshUpToDate = true;
 
 	void Clear()
 	{
@@ -128,9 +129,19 @@ typedef struct _NAV_MESH
 		TempObstacles.clear();
 	}
 
+	bool IsValid()
+	{
+		return MeshIndex < NAV_MESH_INVALID
+			&& tileCache != nullptr
+			&& navQuery != nullptr
+			&& navMesh != nullptr;
+	}
+
+	bool IsUpToDate() { return bIsMeshUpToDate; }
+
 	void RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionToRemove);
 	void RemoveTempObstacleFromList(NavTempObstacle* ObstacleToRemove);
-} NavMesh;
+};
 
 struct NavMeshSetHeader
 {
@@ -200,16 +211,17 @@ struct OffMeshConnectionDef
 
 // Looks for a .nav file in the appropriate directory for the corresponding map name.
 // Returns true if the load was successful. Will back out and clean up if the load is not fully completed.
-NavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname);
+EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname);
+
+// Will pick up any pending off-mesh obstacles or off-mesh connections waiting to be added/removed/modified
+// on the desired navmesh, and will apply the changes. Returns true if the mesh was fully up to date at the end.
+bool AIMESH_UpdateTileCache(NavMeshIndex MeshIndex);
+
+// Returns true if the requested navmesh is fully up to date and has no pending changes to be applied.
+bool AIMESH_IsNavMeshUpToDate(NavMeshIndex MeshIndex);
 
 // Returns the current state of the nav mesh, whether it is loaded or not.
-NavMeshStatus AIMESH_GetNavMeshStatus();
-
-// Converts the input GoldSrc Vector to Detour coordinates and outputs the result in the float[3] OutDetour.
-void UTIL_VecGoldSrcToDetour(const Vector& GoldSrcVector, float* OutDetour);
-
-// Returns a GoldSrc Vector from the supplied Detour float[3] coordinates.
-Vector UTIL_VecDetourToGoldSrc(const float* DetourVector);
+EAINavMeshStatus AIMESH_GetNavMeshStatus();
 
 // Will unload all nav mesh data if any is present.
 void AIMESH_UnloadNavMesh();
@@ -245,7 +257,6 @@ bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove);
 // Add a hint to the requested nav mesh
 NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags);
 
-
 /*
 	Project point to navmesh:
 	Takes the supplied location in the game world, and returns the nearest point on the nav mesh within the supplied extents.
@@ -254,5 +265,21 @@ NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, un
 */
 Vector AIMESH_ProjectPointToNavmesh(NavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile = GetBaseAgentProfile(NAV_PROFILE_DEFAULT), const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
 
+// Finds any random point on the navmesh that is relevant for the bot. Returns ZERO_VECTOR if none found
+Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const Vector& SearchPoint = ZERO_VECTOR, bool bIgnoreReachability = true);
+
+/*	Finds any random point on the navmesh that is relevant for the bot within a given radius of the origin point,
+	taking reachability into account(will not return impossible to reach location).
+
+	Returns ZERO_VECTOR if none found
+*/
+Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter = NAV_FLAG_NONE);
+
+/*	Finds any random point on the navmesh of the area type (e.g. crouch area) that is relevant for the bot within the min and max radius of the origin point,
+	taking reachability into account(will not return impossible to reach location).
+
+	Returns ZERO_VECTOR if none found
+*/
+Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter = NAV_FLAG_NONE);
 
 #endif // AVH_AI_NAVMESH_H

@@ -2,7 +2,7 @@
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
 // bot_navigation.h
-// 
+//
 // Handles all bot path finding and movement
 //
 
@@ -15,63 +15,8 @@
 #include "DetourTileCache.h"
 #include "AvHAIPlayer.h"
 
-/*	Navigation profiles determine which nav mesh (regular, onos, building) is used for queries, and what
-	types of movement are allowed and their costs. For example, marine nav profile uses regular nav mesh,
-	cannot wall climb, and has a higher cost for crouch movement since it's slower.
-*/
-
 constexpr auto MIN_PATH_RECALC_TIME = 0.33f; // How frequently can a bot recalculate its path? Default to max 3 times per second
 constexpr auto MAX_BOT_STUCK_TIME = 30.0f; // How long a bot can be stuck, unable to move, before giving up and suiciding
-
-constexpr auto MARINE_BASE_NAV_PROFILE = 0;
-constexpr auto SKULK_BASE_NAV_PROFILE = 1;
-constexpr auto GORGE_BASE_NAV_PROFILE = 2;
-constexpr auto LERK_BASE_NAV_PROFILE = 3;
-constexpr auto FADE_BASE_NAV_PROFILE = 4;
-constexpr auto ONOS_BASE_NAV_PROFILE = 5;
-constexpr auto STRUCTURE_BASE_NAV_PROFILE = 6;
-constexpr auto ALL_NAV_PROFILE = 7;
-
-constexpr auto MAX_PATH_POLY = 512; // Max nav mesh polys that can be traversed in a path. This should be sufficient for any sized map.
-
-// Possible area types. Water, Road, Door and Grass are not used (left-over from Detour library)
-enum SamplePolyAreas
-{
-	SAMPLE_POLYAREA_GROUND			= 0,	// Regular ground movement
-	SAMPLE_POLYAREA_CROUCH			= 1,	// Requires crouched movement
-	SAMPLE_POLYAREA_BLOCKED			= 2,	// Requires a jump to get over
-	SAMPLE_POLYAREA_FALLDAMAGE		= 3,	// Requires taking fall damage (if not immune to it)
-	SAMPLE_POLYAREA_WALLCLIMB		= 4,	// Requires the ability to wall-stick, fly or blink
-	SAMPLE_POLYAREA_OBSTRUCTION		= 5,	// There is a door or weldable object in the way
-	SAMPLE_POLYAREA_STRUCTUREBLOCK	= 6,	// An enemy structure is blocking the way that must be destroyed
-	SAMPLE_POLYAREA_PHASEGATE		= 7,		// Phase gate area, for area cost calculation
-	SAMPLE_POLYAREA_LADDER			= 8,		// Phase gate area, for area cost calculation
-	SAMPLE_POLYAREA_LIFT			= 9,		// Phase gate area, for area cost calculation
-};
-
-// Possible movement types. Swim and door are not used
-enum SamplePolyFlags
-{
-	SAMPLE_POLYFLAGS_WALK			= 1 << 0,	// Simple walk to traverse
-	SAMPLE_POLYFLAGS_FALL			= 1 << 1,	// Required dropping down
-	SAMPLE_POLYFLAGS_BLOCKED		= 1 << 2,	// Blocked by an obstruction, but can be jumped over
-	SAMPLE_POLYFLAGS_WALLCLIMB		= 1 << 3,	// Requires climbing a wall to traverse
-	SAMPLE_POLYFLAGS_LADDER			= 1 << 4,	// Requires climbing a ladder to traverse
-	SAMPLE_POLYFLAGS_JUMP			= 1 << 5,	// Requires a regular jump to traverse
-	SAMPLE_POLYFLAGS_DUCKJUMP		= 1 << 6,	// Requires a duck-jump to traverse
-	SAMPLE_POLYFLAGS_FLY			= 1 << 7,	// Requires lerk or jetpack to traverse
-	SAMPLE_POLYFLAGS_NOONOS			= 1 << 8,	// This movement is not allowed by onos
-	SAMPLE_POLYFLAGS_TEAM1PHASEGATE	= 1 << 9,	// Requires using a phase gate to traverse (team 1 only)
-	SAMPLE_POLYFLAGS_TEAM2PHASEGATE = 1 << 10,	// Requires using a phase gate to traverse (team 2 only)
-	SAMPLE_POLYFLAGS_TEAM1STRUCTURE = 1 << 11,	// A team 1 structure is in the way that cannot be jumped over. Impassable to team 1 players (assume cannot teamkill own structures)
-	SAMPLE_POLYFLAGS_TEAM2STRUCTURE = 1 << 12,	// A team 2 structure is in the way that cannot be jumped over. Impassable to team 2 players (assume cannot teamkill own structures)
-	SAMPLE_POLYFLAGS_WELD			= 1 << 13,	// Requires a welder to get through here
-	SAMPLE_POLYFLAGS_DOOR			= 1 << 14,	// Requires a welder to get through here
-	SAMPLE_POLYFLAGS_LIFT			= 1 << 15,	// Requires using a lift or moving platform
-
-	SAMPLE_POLYFLAGS_DISABLED		= 1 << 16,	// Disabled, not usable by anyone
-	SAMPLE_POLYFLAGS_ALL			= -1	// All abilities.
-};
 
 // What should the lerk do for this movement?
 enum LerkFlightBehaviour
@@ -80,87 +25,6 @@ enum LerkFlightBehaviour
 	FLIGHT_GLIDE, // Hold jump to glide
 	FLIGHT_FLAP // Rapidly tap jump to flap and speed up
 };
-
-// Door reference. Not used, but is a future feature to allow bots to track if a door is open or not, and how to open it etc.
-typedef struct _NAV_DOOR
-{
-	CBaseToggle* DoorEntity = nullptr;
-	edict_t* DoorEdict = nullptr; // Reference to the func_door
-	unsigned int ObstacleRefs[32][MAX_NAV_MESHES] = {}; // Dynamic obstacle ref. Used to add/remove the obstacle as the door is opened/closed
-	int NumObstacles = 0;
-	vector<DoorTrigger> TriggerEnts; // Reference to the trigger edicts (e.g. func_trigger, func_button etc.)
-	DoorActivationType ActivationType = DOOR_NONE; // How the door should be opened
-	TOGGLE_STATE CurrentState = TS_AT_BOTTOM;
-	float OpenDelay = 0.0f; // How long the door takes to start opening after activation
-	vector<Vector> StopPoints; // Where does this door/platform stop when triggered?
-	NavDoorType DoorType = DOORTYPE_DOOR;
-	vector<AvHAIOffMeshConnection*> AffectedConnections;
-	const char* DoorName;
-} nav_door;
-
-typedef struct _NAV_WELDABLE
-{
-	edict_t* WeldableEdict = nullptr;
-	unsigned int ObstacleRefs[32][MAX_NAV_MESHES];
-	int NumObstacles = 0;
-} nav_weldable;
-
-// Door reference. Not used, but is a future feature to allow bots to track if a door is open or not, and how to open it etc.
-typedef struct _NAV_HITRESULT
-{
-	float flFraction = 0.0f;
-	bool bStartOffMesh = false;
-	Vector TraceEndPoint = g_vecZero;
-} nav_hitresult;
-
-// Links together a tile cache, nav query and the nav mesh into one handy structure for all your querying needs
-typedef struct _NAV_MESH
-{
-	class dtTileCache* tileCache = nullptr;
-	class dtNavMeshQuery* navQuery = nullptr;
-	class dtNavMesh* navMesh = nullptr;
-} nav_mesh;
-
-
-static const int NAVMESHSET_MAGIC = 'M' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'MSET', used to confirm the nav mesh we're loading is compatible;
-static const int NAVMESHSET_VERSION = 1;
-
-static const int TILECACHESET_MAGIC = 'T' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'TSET', used to confirm the tile cache we're loading is compatible;
-static const int TILECACHESET_VERSION = 2;
-
-static const float pExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
-static const float pReachableExtents[3] = { max_ai_use_reach, max_ai_use_reach, max_ai_use_reach }; // Extents (in GoldSrc units) to determine if something is on the nav mesh
-
-static const int MAX_NAV_PROFILES = 16; // Max number of possible nav profiles. Currently 9 are used (see top of this header file)
-
-static const int REGULAR_NAV_MESH = 0;	// Nav mesh used by all players except Onos and the AI commander
-static const int ONOS_NAV_MESH = 1;		// Nav mesh used by Onos (due to larger hitbox)
-static const int BUILDING_NAV_MESH = 2; // Nav mesh used by commander for building placement. Must be the last nav mesh index (see UTIL_AddStructureTemporaryObstacles)
-
-static const int DT_AREA_NULL = 0; // Represents a null area on the nav mesh. Not traversable and considered not on the nav mesh
-static const int DT_AREA_BLOCKED = 3; // Area occupied by an obstruction (e.g. building). Not traversable, but considered to be on the nav mesh
-
-static const int MAX_OFFMESH_CONNS = 1024; // Max number of dynamic connections that can be placed. Not currently used (connections are baked into the nav mesh using the external tool)
-
-static const int DOOR_USE_ONLY = 256; // Flag used by GoldSrc to determine if a door entity can only be used to open (i.e. can't be triggered)
-static const int DOOR_START_OPEN = 1;
-
-static const float CHECK_STUCK_INTERVAL = 0.1f; // How frequently should the bot check if it's stuck?
-
-// Returns true if a valid nav mesh has been loaded into memory
-bool NavmeshLoaded();
-// Unloads all data, including loaded nav meshes, nav profiles, all the map data such as buildable structure maps and hive locations.
-void UnloadNavigationData();
-// Unloads only the nav meshes, but not map data such as doors, hives and locations
-void UnloadNavMeshes();
-// Searches for the corresponding .nav file for the input map name, and loads/initiatialises the nav meshes and nav profiles.
-bool loadNavigationData(const char* mapname);
-// Loads the nav mesh only. Map data such as hive locations, doors etc are not loaded
-bool LoadNavMesh(const char* mapname);
-// Unloads the nav meshes (UnloadNavMeshes()) and then reloads them (LoadNavMesh). Map data such as doors, hives, locations are not touched.
-void ReloadNavMeshes();
-
-AvHAINavMeshStatus NAV_GetNavMeshStatus();
 
 void SetBaseNavProfile(AvHAIPlayer* pBot);
 void UpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
@@ -171,43 +35,7 @@ void LerkUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
 void FadeUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
 void OnosUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
 
-// Finds any random point on the navmesh that is relevant for the bot. Returns ZERO_VECTOR if none found
-Vector UTIL_GetRandomPointOnNavmesh(const AvHAIPlayer* pBot);
 
-/*	Finds any random point on the navmesh that is relevant for the bot within a given radius of the origin point,
-	taking reachability into account(will not return impossible to reach location).
-
-	Returns ZERO_VECTOR if none found
-*/
-Vector UTIL_GetRandomPointOnNavmeshInRadius(const nav_profile& NavProfile, const Vector origin, const float MaxRadius);
-
-/*	Finds any random point on the navmesh that is relevant for the bot within a given radius of the origin point,
-	ignores reachability (could return a location that isn't actually reachable for the bot).
-
-	Returns ZERO_VECTOR if none found
-*/
-Vector UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(const nav_profile& NavProfile, const Vector origin, const float MaxRadius);
-
-/*	Finds any random point on the navmesh of the area type (e.g. crouch area) that is relevant for the bot within a given radius of the origin point,
-	taking reachability into account(will not return impossible to reach location).
-
-	Returns ZERO_VECTOR if none found
-*/
-Vector UTIL_GetRandomPointOnNavmeshInRadiusOfAreaType(SamplePolyFlags Flag, const Vector origin, const float MaxRadius);
-
-/*	Finds any random point on the navmesh of the area type (e.g. crouch area) that is relevant for the bot within the min and max radius of the origin point,
-	taking reachability into account(will not return impossible to reach location).
-
-	Returns ZERO_VECTOR if none found
-*/
-Vector UTIL_GetRandomPointOnNavmeshInDonut(const nav_profile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius);
-
-/*	Finds any random point on the navmesh of the area type (e.g. crouch area) that is relevant for the bot within the min and max radius of the origin point,
-	ignores reachability (could return a location that isn't actually reachable for the bot).
-
-	Returns ZERO_VECTOR if none found
-*/
-Vector UTIL_GetRandomPointOnNavmeshInDonutIgnoreReachability(const nav_profile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius);
 
 // Roughly estimates the movement cost to move between FromLocation and ToLocation. Uses simple formula of distance between points x cost modifier for that movement
 float UTIL_GetPathCostBetweenLocations(const nav_profile &NavProfile, const Vector FromLocation, const Vector ToLocation);
@@ -521,6 +349,7 @@ vector<NavHint*> NAV_GetHintsOfType(unsigned int HintType, bool bUnoccupiedOnly 
 vector<NavHint*> NAV_GetHintsOfTypeInRadius(unsigned int HintType, Vector SearchLocation, float Radius, bool bUnoccupiedOnly = false);
 
 void RefineFlightPath(vector<bot_path_node>& InputPath, vector<bot_path_node>& RefinedPath);
+
 
 #endif // BOT_NAVIGATION_H
 

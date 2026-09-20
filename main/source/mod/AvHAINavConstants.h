@@ -16,17 +16,21 @@
 #include "DetourNavMeshQuery.h"
 
 // How far a bot can be from a useable object when trying to interact with it. Used also for melee attacks. We make it slightly less than actual to avoid edge cases
-static const float max_ai_use_reach = 55.0f;
+constexpr float max_ai_use_reach = 55.0f;
 
 // Minimum time a bot can wait between attempts to use something in seconds (when not holding the use key down)
-static const float min_ai_use_interval = 0.5f;
+constexpr float min_ai_use_interval = 0.5f;
 
 // Minimum time a bot can wait between attempts to use something in seconds (when not holding the use key down)
-static const float max_ai_jump_height = 62.0f;
+constexpr float max_ai_jump_height = 62.0f;
+
+// Max nav mesh polys that can be traversed in a path. This should be sufficient for any sized map.
+constexpr auto MAX_PATH_POLY = 512;
 
 // Possible movement types. Defines the actions the bot needs to take to traverse this node
 enum NavMovementFlag
 {
+	NAV_FLAG_NONE = 0,
 	NAV_FLAG_DISABLED = 1 << 31,		// Disabled
 	NAV_FLAG_WALK = 1 << 0,		// Walk
 	NAV_FLAG_CROUCH = 1 << 1,		// Crouch
@@ -106,24 +110,33 @@ enum NavMeshIndex
 };
 
 // Agent profile definition. Holds all information an agent needs when querying the nav mesh
-typedef struct _NAV_AGENT_PROFILE
+struct NavAgentProfile
 {
 	NavMeshIndex MeshIndex = NAV_MESH_INVALID;
 	class dtQueryFilter Filters;
 	bool bFlyingProfile = false;
-} NavAgentProfile;
 
-// Declared in DTNavigation.cpp
-// List of base agent profiles
-extern std::vector<NavAgentProfile> BaseAgentProfiles;
+	NavAgentProfile() = default;
+
+	NavAgentProfile(NavMeshIndex InMeshIndex, NavMovementFlag InFlags, bool bInFlyingProfile)
+		: MeshIndex(InMeshIndex)
+		, bFlyingProfile(bInFlyingProfile)
+	{
+		Filters.setExcludeFlags(0);
+		Filters.setIncludeFlags(InFlags);
+	}
+};
 
 // Agent profile definition. Holds all information an agent needs when querying the nav mesh
-typedef struct _NAV_HINT
+struct NavHint
 {
 	unsigned int NavMeshIndex = 0;
 	unsigned int HintTypes = 0;
 	Vector Position;
-} NavHint;
+};
+
+// List of base agent profiles
+std::vector<NavAgentProfile> BaseAgentProfiles;
 
 inline bool IsValidNavMeshIndex(int CheckIndex)
 {
@@ -601,6 +614,30 @@ inline void PopulateBaseAgentProfiles()
 	DefaultProfile.Filters.setAreaCost(9, 1.0);
 	DefaultProfile.Filters.setAreaCost(10, 1.0);
 	BaseAgentProfiles.push_back(DefaultProfile);
+}
+
+// Used by Detour for the FindRandomPointInCircle type functions
+inline float frand()
+{
+	return (float)rand() / (float)RAND_MAX;
+}
+
+// Converts the input GoldSrc Vector to Detour coordinates and outputs the result in the float[3] OutDetour.
+inline void UTIL_VecGoldSrcToDetour(const Vector& GoldSrcVector, float* OutDetour)
+{
+	if (!OutDetour) { return; }
+
+	OutDetour[0] = GoldSrcVector.x;
+	OutDetour[1] = GoldSrcVector.z;
+	OutDetour[2] = -GoldSrcVector.y;
+}
+
+// Returns a GoldSrc Vector from the supplied Detour float[3] coordinates.
+inline Vector UTIL_VecDetourToGoldSrc(const float* DetourVector)
+{
+	if (!DetourVector) { return ZERO_VECTOR; }
+
+	return Vector(DetourVector[0], -DetourVector[2], DetourVector[1]);
 }
 
 // Return the appropriate base nav profile information

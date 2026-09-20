@@ -110,7 +110,7 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 	NewObject.Triggers.clear();
 	NewObject.Wait = DoorRef->m_flWait;
 	NewObject.Delay = DoorRef->m_flDelay;
-	NewObject.Type = MAPOBJECT_DOOR;
+	NewObject.Type = EAIDynamicMapObjectType::MAPOBJECT_DOOR;
 
 	Vector DoorCentre = UTIL_GetCentreOfEntity(NewObject.Edict);
 
@@ -142,7 +142,7 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 		}
 	}
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	if (CBaseEntity* Target = DoorRef->GetNextTarget())
 	{
@@ -178,7 +178,7 @@ bool AIMAP_PopulateDynamicTrainObject(edict_t* TrainObject)
 	NewObject.Triggers.clear();
 	NewObject.Wait = TrainRef->m_flWait;
 	NewObject.Delay = TrainRef->m_flDelay;
-	NewObject.Type = MAPOBJECT_TRAIN;
+	NewObject.Type = EAIDynamicMapObjectType::MAPOBJECT_TRAIN;
 
 	AIMAP_PopulateTrainStopPoints(TrainObject, &NewObject);
 
@@ -194,7 +194,7 @@ bool AIMAP_PopulateDynamicTrainObject(edict_t* TrainObject)
 		}
 	}
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	if (CBaseEntity* Target = TrainRef->GetNextTarget())
 	{
@@ -306,7 +306,7 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 	NewObject.Triggers.clear();
 	NewObject.Wait = PlatRef->m_flWait;
 	NewObject.Delay = PlatRef->m_flDelay;
-	NewObject.Type = MAPOBJECT_PLATFORM;
+	NewObject.Type = EAIDynamicMapObjectType::MAPOBJECT_PLATFORM;
 
 	DynamicMapObjectStop FirstStop;
 	FirstStop.StopLocation = PlatRef->m_vecPosition1;
@@ -332,7 +332,7 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 		}
 	}
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	NewObject.StopPoints.push_back(SecondStop);
 
@@ -373,11 +373,11 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject)
 
 	if (NewObject.Edict->v.health > 0.0f)
 	{
-		NewObject.Type = TRIGGER_SHOOT;
+		NewObject.Type = EAIDynamicMapObjectType::TRIGGER_SHOOT;
 	}
 	else
 	{
-		NewObject.Type = TRIGGER_USE;
+		NewObject.Type = EAIDynamicMapObjectType::TRIGGER_USE;
 	}
 
 	DynamicMapObjectStop FirstStop;
@@ -396,7 +396,7 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject)
 
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	if (CBaseEntity* Target = ButtonRef->GetNextTarget())
 	{
@@ -425,9 +425,9 @@ bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject)
 	NewObject.Wait = 0.0f;
 	NewObject.Delay = WeldableRef->GetDelay();
 
-	NewObject.Type = TRIGGER_WELD;
+	NewObject.Type = EAIDynamicMapObjectType::TRIGGER_WELD;
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	if (CBaseEntity* Target = WeldableRef->GetNextTarget())
 	{
@@ -466,9 +466,9 @@ bool AIMAP_PopulateDynamicTriggerObject(edict_t* TriggerObject)
 	NewObject.Wait = TriggerRef->m_flWait;
 	NewObject.Delay = TriggerRef->m_flDelay;
 
-	NewObject.Type = TRIGGER_TOUCH;
+	NewObject.Type = EAIDynamicMapObjectType::TRIGGER_TOUCH;
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	if (CBaseEntity* Target = TriggerRef->GetNextTarget())
 	{
@@ -497,9 +497,9 @@ bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject)
 	NewObject.ObjectName = STRING(NewObject.Edict->v.targetname);
 	NewObject.Triggers.clear();
 	NewObject.Delay = BreakableRef->m_flDelay;
-	NewObject.Type = TRIGGER_BREAK;
+	NewObject.Type = EAIDynamicMapObjectType::TRIGGER_BREAK;
 
-	NewObject.State = OBJECTSTATE_START;
+	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
 	if (CBaseEntity* Target = BreakableRef->GetNextTarget())
 	{
@@ -546,29 +546,29 @@ void AIMAP_UpdateDynamicMapObjects()
 
 		switch (ThisObject->Type)
 		{
-			case DynamicMapObjectType::MAPOBJECT_DOOR:
+			case EAIDynamicMapObjectType::MAPOBJECT_DOOR:
 				AIMAP_UpdateDynamicDoorObject(ThisObject);
 				break;
-			case DynamicMapObjectType::TRIGGER_BREAK:
+			case EAIDynamicMapObjectType::TRIGGER_BREAK:
 				AIMAP_UpdateDynamicBreakableObject(ThisObject);
 				break;
-			case DynamicMapObjectType::TRIGGER_TOUCH:
+			case EAIDynamicMapObjectType::TRIGGER_TOUCH:
 				AIMAP_UpdateDynamicTouchTriggerObject(ThisObject);
 				break;
-			case DynamicMapObjectType::TRIGGER_WELD:
+			case EAIDynamicMapObjectType::TRIGGER_WELD:
 				AIMAP_UpdateDynamicWeldableObject(ThisObject);
 				break;
-			case DynamicMapObjectType::MAPOBJECT_PLATFORM:
+			case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
 				AIMAP_UpdateDynamicPlatformObject(ThisObject);
 				break;
-			case DynamicMapObjectType::MAPOBJECT_TRAIN:
+			case EAIDynamicMapObjectType::MAPOBJECT_TRAIN:
 				AIMAP_UpdateDynamicTrainObject(ThisObject);
 				break;
-			case DynamicMapObjectType::TRIGGER_SHOOT:
-			case DynamicMapObjectType::TRIGGER_USE:
+			case EAIDynamicMapObjectType::TRIGGER_SHOOT:
+			case EAIDynamicMapObjectType::TRIGGER_USE:
 				AIMAP_UpdateDynamicButtonObject(ThisObject);
 				break;
-			case DynamicMapObjectType::MAPOBJECT_STATIC:
+			case EAIDynamicMapObjectType::MAPOBJECT_STATIC:
 				AIMAP_UpdateDynamicInactiveObject(ThisObject);
 				break;
 			default:
@@ -585,11 +585,11 @@ void AIMAP_UpdateDynamicInactiveObject(DynamicMapObject* InactiveObject)
 
 	if (InactiveObject->Edict->v.velocity.Length() > 0.0f)
 	{
-		AIMAP_SetDynamicObjectStatus(InactiveObject, OBJECTSTATE_MOVING);
+		AIMAP_SetDynamicObjectStatus(InactiveObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 		return;
 	}
 
-	AIMAP_SetDynamicObjectStatus(InactiveObject, OBJECTSTATE_IDLE);
+	AIMAP_SetDynamicObjectStatus(InactiveObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 }
 
 void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject)
@@ -604,31 +604,31 @@ void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject)
 
 	if (ButtonCurrentState == TS_GOING_UP)
 	{
-		if (ButtonObject->State == OBJECTSTATE_IDLE)
+		if (ButtonObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 		{
 			AIMAP_OnTriggerActivated(ButtonObject);
 		}
 
-		AIMAP_SetDynamicObjectStatus(ButtonObject, DynamicMapObjectState::OBJECTSTATE_MOVING);
+		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 		return;
 	}
 
 	if (ButtonCurrentState == TS_GOING_DOWN)
 	{
-		AIMAP_SetDynamicObjectStatus(ButtonObject, DynamicMapObjectState::OBJECTSTATE_PREPARING);
+		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_PREPARING);
 		return;
 	}
 
 	if (ButtonCurrentState == TS_AT_BOTTOM)
 	{
-		AIMAP_SetDynamicObjectStatus(ButtonObject, DynamicMapObjectState::OBJECTSTATE_IDLE);
+		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 		return;
 	}
 
 	if (ButtonCurrentState == TS_AT_TOP)
 	{
 		// Button doesn't move so it will go direct from TS_AT_BOTTOM to TS_AT_TOP
-		if (ButtonObject->State == OBJECTSTATE_IDLE)
+		if (ButtonObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 		{
 			AIMAP_OnTriggerActivated(ButtonObject);
 		}
@@ -643,7 +643,7 @@ void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject)
 			}
 		}
 
-		AIMAP_SetDynamicObjectStatus(ButtonObject, DynamicMapObjectState::OBJECTSTATE_PREPARING);
+		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_PREPARING);
 		return;
 	}
 }
@@ -660,20 +660,20 @@ void AIMAP_UpdateDynamicPlatformObject(DynamicMapObject* PlatformObject)
 
 	if (PlatCurrentState == TS_GOING_UP || PlatCurrentState == TS_GOING_DOWN)
 	{
-		AIMAP_SetDynamicObjectStatus(PlatformObject, OBJECTSTATE_MOVING);
+		AIMAP_SetDynamicObjectStatus(PlatformObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 		return;
 	}
 
 	if (PlatCurrentState == TS_AT_TOP)
 	{
-		const DynamicMapObjectState NewState = (PlatRef->pev->spawnflags & SF_PLAT_TOGGLE) ? OBJECTSTATE_IDLE : OBJECTSTATE_PREPARING;
+		const EAIDynamicMapObjectState NewState = (PlatRef->pev->spawnflags & SF_PLAT_TOGGLE) ? EAIDynamicMapObjectState::OBJECTSTATE_IDLE : EAIDynamicMapObjectState::OBJECTSTATE_PREPARING;
 		AIMAP_SetDynamicObjectStatus(PlatformObject, NewState);
 		return;
 	}
 
 	if (PlatCurrentState == TS_AT_BOTTOM)
 	{
-		AIMAP_SetDynamicObjectStatus(PlatformObject, OBJECTSTATE_IDLE);
+		AIMAP_SetDynamicObjectStatus(PlatformObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 		return;
 	}
 }
@@ -689,12 +689,12 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 	// We have no way of activating this door. It's now a permanent blockage once it finishes moving
 	if (TrainObject->Triggers.size() == 0)
 	{
-		TrainObject->Type = MAPOBJECT_STATIC;
+		TrainObject->Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
 	}
 
 	if (TrainObject->Edict->v.velocity.Length() > 0.0f)
 	{
-		AIMAP_SetDynamicObjectStatus(TrainObject, OBJECTSTATE_MOVING);
+		AIMAP_SetDynamicObjectStatus(TrainObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 
 		CBaseEntity* NextStopRef = TrainRef->GetNextTarget();
 
@@ -713,7 +713,7 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 	}
 
 	// Train was moving last tick, but is now stationary
-	if (TrainObject->State == OBJECTSTATE_MOVING)
+	if (TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
 	{
 		CBaseEntity* NextStopRef = TrainRef->GetNextTarget();
 
@@ -728,9 +728,9 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 			}
 		}
 
-		const DynamicMapObjectState NewState = (TrainObject->Edict->v.nextthink > 0.0)
-			? DynamicMapObjectState::OBJECTSTATE_PREPARING
-			: DynamicMapObjectState::OBJECTSTATE_IDLE;
+		const EAIDynamicMapObjectState NewState = (TrainObject->Edict->v.nextthink > 0.0)
+			? EAIDynamicMapObjectState::OBJECTSTATE_PREPARING
+			: EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
 
 		AIMAP_SetDynamicObjectStatus(TrainObject, NewState);
 	}
@@ -747,20 +747,20 @@ void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
 	// We have no way of activating this door. It's now a permanent blockage once it finishes moving
 	if (DoorObject->Triggers.size() == 0 || (!DoorObject->bToggleActive && DoorObject->Wait < 0.0f))
 	{
-		DoorObject->Type = MAPOBJECT_STATIC;
+		DoorObject->Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
 	}
 
 	const TOGGLE_STATE DoorCurrentState = static_cast<TOGGLE_STATE>(DoorRef->GetToggleState());
 
 	if (DoorCurrentState == TS_GOING_UP || DoorCurrentState == TS_GOING_DOWN)
 	{
-		AIMAP_SetDynamicObjectStatus(DoorObject, OBJECTSTATE_MOVING);
+		AIMAP_SetDynamicObjectStatus(DoorObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 		return;
 	}
 
 	if (DoorCurrentState == TS_AT_BOTTOM)
 	{
-		AIMAP_SetDynamicObjectStatus(DoorObject, OBJECTSTATE_IDLE);
+		AIMAP_SetDynamicObjectStatus(DoorObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 		return;
 	}
 
@@ -768,11 +768,11 @@ void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
 	{
 		if (DoorObject->bToggleActive)
 		{
-			AIMAP_SetDynamicObjectStatus(DoorObject, OBJECTSTATE_IDLE);
+			AIMAP_SetDynamicObjectStatus(DoorObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 		}
 		else
 		{
-			AIMAP_SetDynamicObjectStatus(DoorObject, OBJECTSTATE_PREPARING);
+			AIMAP_SetDynamicObjectStatus(DoorObject, EAIDynamicMapObjectState::OBJECTSTATE_PREPARING);
 		}
 
 		return;
@@ -783,16 +783,16 @@ void AIMAP_UpdateDynamicTouchTriggerObject(DynamicMapObject* TriggerObject)
 {
 	if (!TriggerObject || FNullEnt(TriggerObject->Edict)) { return; }
 
-	if (TriggerObject->State == OBJECTSTATE_START)
+	if (TriggerObject->State == EAIDynamicMapObjectState::OBJECTSTATE_START)
 	{
-		AIMAP_SetDynamicObjectStatus(TriggerObject, OBJECTSTATE_IDLE);
+		AIMAP_SetDynamicObjectStatus(TriggerObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 	}
 
-	if (TriggerObject->State == OBJECTSTATE_IDLE && TriggerObject->Edict->v.nextthink > 0.0f)
+	if (TriggerObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE && TriggerObject->Edict->v.nextthink > 0.0f)
 	{
 		AIMAP_OnTriggerActivated(TriggerObject);
 
-		AIMAP_SetDynamicObjectStatus(TriggerObject, OBJECTSTATE_PREPARING);
+		AIMAP_SetDynamicObjectStatus(TriggerObject, EAIDynamicMapObjectState::OBJECTSTATE_PREPARING);
 
 		// This is a trigger once, so it now needs to remove itself from the object list
 		if (TriggerObject->Wait < 0.0f)
@@ -802,9 +802,9 @@ void AIMAP_UpdateDynamicTouchTriggerObject(DynamicMapObject* TriggerObject)
 		}
 	}
 
-	if (TriggerObject->State == OBJECTSTATE_PREPARING && TriggerObject->Edict->v.nextthink <= 0.0f)
+	if (TriggerObject->State == EAIDynamicMapObjectState::OBJECTSTATE_PREPARING && TriggerObject->Edict->v.nextthink <= 0.0f)
 	{
-		AIMAP_SetDynamicObjectStatus(TriggerObject, OBJECTSTATE_IDLE);
+		AIMAP_SetDynamicObjectStatus(TriggerObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 	}
 }
 
@@ -812,7 +812,7 @@ void AIMAP_UpdateDynamicBreakableObject(DynamicMapObject* BreakableObject)
 {
 	if (!BreakableObject || FNullEnt(BreakableObject->Edict)) { return; }
 
-	AIMAP_SetDynamicObjectStatus(BreakableObject, DynamicMapObjectState::OBJECTSTATE_IDLE);
+	AIMAP_SetDynamicObjectStatus(BreakableObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 
 	if (BreakableObject->Edict->v.health <= 0.0f)
 	{
@@ -826,7 +826,7 @@ void AIMAP_UpdateDynamicWeldableObject(DynamicMapObject* WeldableObject)
 {
 	if (!WeldableObject || FNullEnt(WeldableObject->Edict)) { return; }
 
-	AIMAP_SetDynamicObjectStatus(WeldableObject, DynamicMapObjectState::OBJECTSTATE_IDLE);
+	AIMAP_SetDynamicObjectStatus(WeldableObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 
 	AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(CBaseEntity::Instance(WeldableObject->Edict));
 
@@ -846,7 +846,7 @@ void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject)
 
 	UsedObject->LastActivatedTime = gpGlobals->time;
 
-	UsedObject->State = OBJECTSTATE_PREPARING;
+	UsedObject->State = EAIDynamicMapObjectState::OBJECTSTATE_PREPARING;
 
 	for (auto it = UsedObject->Targets.begin(); it != UsedObject->Targets.end(); it++)
 	{
@@ -859,18 +859,18 @@ void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject)
 	}
 }
 
-void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, DynamicMapObjectState NewState)
+void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, EAIDynamicMapObjectState NewState)
 {
 	if (NewState == Object->State) { return; }
 
 	Object->State = NewState;
 
-	if (NewState == OBJECTSTATE_MOVING)
+	if (NewState == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
 	{
 		AIMAP_OnDynamicMapObjectStopIdle(Object);
 	}
 
-	if (NewState == OBJECTSTATE_IDLE)
+	if (NewState == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 	{
 		AIMAP_OnDynamicMapObjectBecomeIdle(Object);
 	}
@@ -879,7 +879,7 @@ void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, DynamicMapObjectStat
 void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 {
 	// Object will not move again, so block off all connections permanently, and place null obstacles to block nav mesh
-	if (Object->Type == MAPOBJECT_STATIC)
+	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_STATIC)
 	{
 		AIMAP_ApplyTempObstaclesToObject(Object, DT_AREA_NULL);
 
@@ -945,50 +945,57 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 	{
 		DynamicMapObject* ThisObject = &(*objectIt);
 
-		if (ThisObject->Type == MAPOBJECT_DOOR)
+		if (!ThisObject) { continue; }
+
+		switch (ThisObject->Type)
 		{
-			// Gotta use this door to open it, so add the door itself as its own trigger
-			if (ThisObject->Edict->v.spawnflags & DOOR_USE_ONLY)
+			case EAIDynamicMapObjectType::MAPOBJECT_DOOR:
 			{
-				ThisObject->Triggers.push_back(ThisObject->Edict);
-			}
-			// Must be one o' them fancy touch-activamated doors. Technically the bot will still try to use the door, but they will touch it in the process so no big deal
-			else if (ThisObject->ObjectName == NULL || ThisObject->ObjectName[0] == '\0')
-			{
-				ThisObject->Triggers.push_back(ThisObject->Edict);
-			}
-
-			continue;
-		}
-
-		if (ThisObject->Type == MAPOBJECT_PLATFORM)
-		{
-			if (FClassnameIs(ThisObject->Edict, "func_plat"))
-			{
-				ThisObject->Triggers.push_back(ThisObject->Edict);
-			}
-
-			continue;
-		}
-
-		if (ThisObject->Type == TRIGGER_USE
-			|| ThisObject->Type == TRIGGER_TOUCH
-			|| ThisObject->Type == TRIGGER_SHOOT
-			|| ThisObject->Type == TRIGGER_BREAK
-			|| ThisObject->Type == TRIGGER_WELD)
-		{
-			for (auto targetsIt = DynamicMapObjects.begin(); targetsIt != DynamicMapObjects.end(); targetsIt++)
-			{
-				DynamicMapObject* OtherObject = &(*targetsIt);
-
-				if (OtherObject == ThisObject) { continue; }
-
-				vector<edict_t*> CheckedObjects;
-				if (AIMAP_IsDynamicMapTriggerLinkedToObject(ThisObject->Edict, OtherObject->Edict, CheckedObjects))
+				// Gotta use this door to open it, so add the door itself as its own trigger
+				if (ThisObject->Edict->v.spawnflags & DOOR_USE_ONLY)
 				{
-					OtherObject->Triggers.push_back(ThisObject->Edict);
+					ThisObject->Triggers.push_back(ThisObject->Edict);
+				}
+				// Must be one o' them fancy touch-activamated doors. Technically the bot will still try to use the door, but they will touch it in the process so no big deal
+				else if (!ThisObject->ObjectName || ThisObject->ObjectName[0] == '\0')
+				{
+					ThisObject->Triggers.push_back(ThisObject->Edict);
 				}
 			}
+			break;
+
+			case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
+			{
+				if (FClassnameIs(ThisObject->Edict, "func_plat"))
+				{
+					ThisObject->Triggers.push_back(ThisObject->Edict);
+				}
+			}
+			break;
+
+			case EAIDynamicMapObjectType::TRIGGER_USE:
+			case EAIDynamicMapObjectType::TRIGGER_TOUCH:
+			case EAIDynamicMapObjectType::TRIGGER_SHOOT:
+			case EAIDynamicMapObjectType::TRIGGER_BREAK:
+			case EAIDynamicMapObjectType::TRIGGER_WELD:
+			{
+				for (auto targetsIt = DynamicMapObjects.begin(); targetsIt != DynamicMapObjects.end(); targetsIt++)
+				{
+					DynamicMapObject* OtherObject = &(*targetsIt);
+
+					if (OtherObject == ThisObject) { continue; }
+
+					vector<edict_t*> CheckedObjects;
+					if (AIMAP_IsDynamicMapTriggerLinkedToObject(ThisObject->Edict, OtherObject->Edict, CheckedObjects))
+					{
+						OtherObject->Triggers.push_back(ThisObject->Edict);
+					}
+				}
+			}
+			break;
+
+			default:
+				break;
 		}
 	}
 }
@@ -1024,29 +1031,33 @@ void AIMAP_SetTrainStartPoints()
 {
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
-		if (it->Type == MAPOBJECT_PLATFORM && it->StopPoints.size() > 2 && it->Targets.size() > 0)
+		// We are only interested in trains which have more than 2 stop points and are using path corners.
+		// If the train is acting like a regular up/down lift then we will just treat it like a regular platform.
+		if (it->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN
+			|| it->StopPoints.size() <= 2
+			|| it->Targets.size() == 0) { continue; }
+
+
+		edict_t* TargetEdict = it->Targets[0];
+		const char* TargetEdictName = STRING(TargetEdict->v.targetname);
+
+		int CurrIndex = 0;
+
+		for (auto stopIt = it->StopPoints.begin(); stopIt != it->StopPoints.end(); stopIt++)
 		{
-			edict_t* TargetEdict = it->Targets[0];
-			const char* TargetEdictName = STRING(TargetEdict->v.targetname);
-
-			int CurrIndex = 0;
-
-			for (auto stopIt = it->StopPoints.begin(); stopIt != it->StopPoints.end(); stopIt++)
+			if (stopIt->CornerEdict == TargetEdict)
 			{
-				if (stopIt->CornerEdict == TargetEdict)
-				{
-					break;
-				}
-
-				CurrIndex++;
+				break;
 			}
 
-			it->NextStopIndex = CurrIndex + 1;
+			CurrIndex++;
+		}
 
-			if (it->NextStopIndex >= it->StopPoints.size())
-			{
-				it->NextStopIndex = 0;
-			}
+		it->NextStopIndex = CurrIndex + 1;
+
+		if (it->NextStopIndex >= it->StopPoints.size())
+		{
+			it->NextStopIndex = 0;
 		}
 	}
 }
@@ -1079,7 +1090,7 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector
 		return false;
 	}
 
-	vector<bot_path_node> TestPath;
+	vector<AvHAIPathNode> TestPath;
 	TestPath.clear();
 
 	// Now we find a path backwards from the valid nav mesh point to our location, trying to get as close as we can to it
@@ -1090,7 +1101,8 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector
 	{
 		for (auto it = TestPath.begin(); it != TestPath.end(); it++)
 		{
-			if (AIMAP_GetObjectBlockingPathPoint(&(*it), SearchObject, nullptr) != nullptr)
+			AvHAIPathNode* ThisPathNode = &(*it);
+			if (AIMAP_GetObjectBlockingPathPoint(ThisPathNode->FromLocation, ThisPathNode->ToLocation, ThisPathNode->flag, SearchObject, nullptr) != nullptr)
 			{
 				return true;
 			}
@@ -1100,15 +1112,6 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector
 	}
 
 	return true;
-}
-
-DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(bot_path_node* PathNode, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject)
-{
-	Vector FromLocation = PathNode->FromLocation;
-	Vector ToLocation = PathNode->Location;
-	ToLocation.z = PathNode->requiredZ;
-
-	return AIMAP_GetObjectBlockingPathPoint(FromLocation, ToLocation, PathNode->flag, SearchObject, IgnoreObject);
 }
 
 DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject)
@@ -1135,7 +1138,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
 
 				if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
 				{
@@ -1155,7 +1158,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
 
 				if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
 				{
@@ -1180,7 +1183,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
 
 				if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
 				{
@@ -1200,7 +1203,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
 
 				if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
 				{
@@ -1224,7 +1227,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 	{
 		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 		{
-			if (it->Type == MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+			if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
 
 			if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
 			{
@@ -1259,7 +1262,7 @@ DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActiva
 		if (!ThisTrigger || !ThisTrigger->bIsActive) { continue; }
 
 		// For triggers we can activate from a distance and are in our LOS, short-cut and add them to the list
-		if (ThisTrigger->Type == TRIGGER_SHOOT || ThisTrigger->Type == TRIGGER_BREAK)
+		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK)
 		{
 			TraceResult hit;
 
@@ -1286,17 +1289,17 @@ DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActiva
 			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
 		}
 
-		float MaxDist = (ThisTrigger->Type == TRIGGER_BREAK || ThisTrigger->Type == TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
+		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
 
 		if (!UTIL_PointIsReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
 
-		if (ObjectToActivate->Type != MAPOBJECT_PLATFORM)
+		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
 		{
 			if (AIMAP_IsPathBlockedByObject(NavProfile, FromLoc, TriggerLocation, ObjectToActivate)) { continue; }
 		}
 		else
 		{
-			vector<bot_path_node> CheckPath;
+			vector<AvHAIPathNode> CheckPath;
 
 			dtStatus PathFindStatus = FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, CheckPath, MaxDist);
 
@@ -1308,7 +1311,7 @@ DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActiva
 			{
 				if (pathIt->flag & NAV_FLAG_PLATFORM)
 				{
-					if (AIMAP_GetClosestPlatformToPoints(pathIt->FromLocation, pathIt->Location) == ObjectToActivate)
+					if (AIMAP_GetClosestPlatformToPoints(pathIt->FromLocation, pathIt->ToLocation) == ObjectToActivate)
 					{
 						bOtherSideOfLift = true;
 						break;
@@ -1426,7 +1429,7 @@ DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, cons
 
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
-		if (it->Type != MAPOBJECT_DOOR && it->Type != MAPOBJECT_PLATFORM) { continue; }
+		if (it->Type != EAIDynamicMapObjectType::MAPOBJECT_DOOR && it->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM) { continue; }
 
 		float distTopPoint = FLT_MAX;
 		float distBottomPoint = FLT_MAX;
@@ -1515,7 +1518,7 @@ bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObjec
 
 	if (IsFlagTeleportType(MovementTypes)) { return false; }
 
-	if (TestObject->Type == TRIGGER_TOUCH) { return false; }
+	if (TestObject->Type == EAIDynamicMapObjectType::TRIGGER_TOUCH) { return false; }
 
 	if (TestObject->Edict->v.solid == SOLID_NOT) { return false; }
 
@@ -1795,19 +1798,19 @@ void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
 
 	switch (Object->Type)
 	{
-		case MAPOBJECT_STATIC:
+		case EAIDynamicMapObjectType::MAPOBJECT_STATIC:
 			CurrentType = "Static";
 			break;
-		case MAPOBJECT_DOOR:
+		case EAIDynamicMapObjectType::MAPOBJECT_DOOR:
 			CurrentType = "Door";
 			break;
-		case MAPOBJECT_PLATFORM:
+		case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
 			CurrentType = "Platform";
 			break;
-		case MAPOBJECT_TRAIN:
+		case EAIDynamicMapObjectType::MAPOBJECT_TRAIN:
 			CurrentType = "Train";
 			break;
-		case TRIGGER_WELD:
+		case EAIDynamicMapObjectType::TRIGGER_WELD:
 			CurrentType = "Weldable";
 			break;
 		default:
@@ -1822,19 +1825,19 @@ void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
 
 	switch (Object->State)
 	{
-		case OBJECTSTATE_START:
+		case EAIDynamicMapObjectState::OBJECTSTATE_START:
 			CurrentState = "Start";
 			break;
-		case OBJECTSTATE_IDLE:
+		case EAIDynamicMapObjectState::OBJECTSTATE_IDLE:
 			CurrentState = "Idle";
 			break;
-		case OBJECTSTATE_PREPARING:
+		case EAIDynamicMapObjectState::OBJECTSTATE_PREPARING:
 			CurrentState = "Activated";
 			break;
-		case OBJECTSTATE_MOVING:
+		case EAIDynamicMapObjectState::OBJECTSTATE_MOVING:
 			CurrentState = "Moving";
 			break;
-		case OBJECTSTATE_OPEN:
+		case EAIDynamicMapObjectState::OBJECTSTATE_OPEN:
 			CurrentState = "Open";
 			break;
 		default:
@@ -1880,16 +1883,16 @@ void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
 
 		switch (ThisTrigger->State)
 		{
-			case OBJECTSTATE_IDLE:
+			case EAIDynamicMapObjectState::OBJECTSTATE_IDLE:
 				CurrentState = "Idle";
 				break;
-			case OBJECTSTATE_PREPARING:
+			case EAIDynamicMapObjectState::OBJECTSTATE_PREPARING:
 				CurrentState = "Activated";
 				break;
-			case OBJECTSTATE_MOVING:
+			case EAIDynamicMapObjectState::OBJECTSTATE_MOVING:
 				CurrentState = "Moving";
 				break;
-			case OBJECTSTATE_OPEN:
+			case EAIDynamicMapObjectState::OBJECTSTATE_OPEN:
 				CurrentState = "Open";
 				break;
 			default:
@@ -1902,25 +1905,25 @@ void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
 
 		switch (ThisTrigger->Type)
 		{
-			case TRIGGER_TOUCH:
+			case EAIDynamicMapObjectType::TRIGGER_TOUCH:
 				CurrentState = "Touch";
 				break;
-			case TRIGGER_USE:
+			case EAIDynamicMapObjectType::TRIGGER_USE:
 				CurrentState = "Use";
 				break;
-			case TRIGGER_SHOOT:
+			case EAIDynamicMapObjectType::TRIGGER_SHOOT:
 				CurrentState = "Shoot";
 				break;
-			case TRIGGER_BREAK:
+			case EAIDynamicMapObjectType::TRIGGER_BREAK:
 				CurrentState = "Break";
 				break;
-			case TRIGGER_WELD:
+			case EAIDynamicMapObjectType::TRIGGER_WELD:
 				CurrentState = "Weld";
 				break;
-			case MAPOBJECT_PLATFORM:
+			case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
 				CurrentState = "Touch";
 				break;
-			case MAPOBJECT_DOOR:
+			case EAIDynamicMapObjectType::MAPOBJECT_DOOR:
 				CurrentState = "Use";
 				break;
 			default:

@@ -5,7 +5,7 @@
 #include <vector>
 
 // Sound types affect how audible they are to bots, how easy it is to pinpoint the location of the sound etc
-typedef enum _AVHAISOUNDTYPE
+enum class EAISoundType
 {
 	AI_SOUND_NONE = 0,		// Blank sound
 	AI_SOUND_FOOTSTEP, 		// Footstep sound
@@ -13,19 +13,18 @@ typedef enum _AVHAISOUNDTYPE
 	AI_SOUND_SHOOT,			// Pew pew
 	AI_SOUND_VOICELINE,		// Player played a voice line (e.g. "Need a medpack")
 	AI_SOUND_OTHER			// Miscellaneous sound e.g. building
-} AvHAISoundType;
+};
 
-typedef struct _AVHAISOUND
+struct AvHAISound
 {
 	int EntIndex = 0;
 	float SoundLocation[3] = {0.0f, 0.0f, 0.0f};
 	float Volume = 1.0f;
-	AvHAISoundType SoundType = AI_SOUND_NONE;
+	EAISoundType SoundType = EAISoundType::AI_SOUND_NONE;
+};
 
-} AvHAISound;
 
-
-void AISND_RegisterNewSound(int EntIndex, float* NewLocation, AvHAISoundType NewSoundType, float Volume = 1.0f);
+void AISND_RegisterNewSound(int EntIndex, float* NewLocation, EAISoundType NewSoundType, float Volume = 1.0f);
 
 AvHAISound AISND_PopSound();
 
