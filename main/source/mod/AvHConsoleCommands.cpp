@@ -1448,13 +1448,13 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	}
 	else if (FStrEq(pcmd, "bot_drawtempobstacles"))
 	{
-		AIDEBUG_DrawTemporaryObstacles(10.0f);
+		AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex::NAV_MESH_REGULAR, 10.0f);
 
 		theSuccess = true;
 	}
 	else if (FStrEq(pcmd, "bot_drawoffmeshconns"))
 	{
-		AIDEBUG_DrawOffMeshConnections(10.0f);
+		AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex::NAV_MESH_REGULAR, 10.0f);
 
 		theSuccess = true;
 	}

@@ -27,7 +27,7 @@ bool AIMAP_BuildMapData()
 	if (!AIMAP_PopulateDynamicMapObjects()) { return false; }
 
 	AIMAP_LinkDynamicMapObjectsToTriggers();
-	AIMAP_LinkDynamicMapObjectsToOffmeshConnections();
+	AIMAP_LinkDynamicMapObjectsToOffMeshConnections();
 	AIMAP_SetTrainStartPoints();
 	AIMAP_PopulateAllConnectionsAffectedByDynamicObjects();
 
@@ -1000,7 +1000,7 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 	}
 }
 
-void AIMAP_LinkDynamicMapObjectsToOffmeshConnections()
+void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 {
 	const int InvalidIndex = static_cast<int>(NAV_MESH_INVALID);
 

@@ -28,7 +28,7 @@ constexpr float max_ai_jump_height = 62.0f;
 constexpr auto MAX_PATH_POLY = 512;
 
 // Possible movement types. Defines the actions the bot needs to take to traverse this node
-enum NavMovementFlag
+enum EAINavMovementFlag : uint16
 {
 	NAV_FLAG_NONE = 0,
 	NAV_FLAG_DISABLED = 1 << 31,		// Disabled
@@ -50,8 +50,18 @@ enum NavMovementFlag
 	NAV_FLAG_ALL = -1		// All flags
 };
 
+inline EAINavMovementFlag operator|(EAINavMovementFlag a, EAINavMovementFlag b)
+{
+	return static_cast<EAINavMovementFlag>(static_cast<uint16>(a) | static_cast<uint16>(b));
+}
+
+inline EAINavMovementFlag operator&(EAINavMovementFlag a, EAINavMovementFlag b)
+{
+	return static_cast<EAINavMovementFlag>(static_cast<uint16>(a) & static_cast<uint16>(b));
+}
+
 // Nav hint types
-enum NavHintType
+enum EAINavHintType : uint16
 {
 	NAV_HINT_BUILD_COMMCHAIR = 1 << 0,		// Place Command Chair
 	NAV_HINT_BUILD_INFPORTAL = 1 << 1,		// Place Infantry Portal
@@ -70,8 +80,18 @@ enum NavHintType
 	NAV_HINT_ANY = -1		// Any hint type
 };
 
+inline EAINavHintType operator|(EAINavHintType a, EAINavHintType b)
+{
+	return static_cast<EAINavHintType>(static_cast<uint16>(a) | static_cast<uint16>(b));
+}
+
+inline EAINavHintType operator&(EAINavHintType a, EAINavHintType b)
+{
+	return static_cast<EAINavHintType>(static_cast<uint16>(a) & static_cast<uint16>(b));
+}
+
 // Area types. Defines the cost of movement through an area and which flag to use
-enum NavArea
+enum EAINavArea
 {
 	NAV_AREA_NULL = 0,		// Null area, cuts a hole in the mesh
 	NAV_AREA_UNWALKABLE = 60,		// Unwalkable
@@ -88,7 +108,7 @@ enum NavArea
 };
 
 // Profile indices. Use these when retrieving base agent profile information
-enum NavProfileIndex
+enum EAINavProfileIndex
 {
 	NAV_PROFILE_MARINE = 0,		// Marine
 	NAV_PROFILE_SKULK = 1,		// Skulk
@@ -100,7 +120,7 @@ enum NavProfileIndex
 };
 
 // Profile indices. Use these when retrieving base agent profile information
-enum NavMeshIndex
+enum EAINavMeshIndex
 {
 	NAV_MESH_REGULAR = 0,		// Regular Nav Mesh
 	NAV_MESH_ONOS = 1,		// Onos Nav Mesh
@@ -112,13 +132,13 @@ enum NavMeshIndex
 // Agent profile definition. Holds all information an agent needs when querying the nav mesh
 struct NavAgentProfile
 {
-	NavMeshIndex MeshIndex = NAV_MESH_INVALID;
+	EAINavMeshIndex MeshIndex = NAV_MESH_INVALID;
 	class dtQueryFilter Filters;
 	bool bFlyingProfile = false;
 
 	NavAgentProfile() = default;
 
-	NavAgentProfile(NavMeshIndex InMeshIndex, NavMovementFlag InFlags, bool bInFlyingProfile)
+	NavAgentProfile(EAINavMeshIndex InMeshIndex, EAINavMovementFlag InFlags, bool bInFlyingProfile)
 		: MeshIndex(InMeshIndex)
 		, bFlyingProfile(bInFlyingProfile)
 	{
@@ -145,7 +165,7 @@ inline bool IsValidNavMeshIndex(int CheckIndex)
 }
 
 // Retrieve appropriate flag for area (See process() in the MeshProcess struct)
-inline NavMovementFlag GetFlagForArea(NavArea Area)
+inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)
 {
 	switch (Area)
 	{
@@ -177,7 +197,7 @@ inline NavMovementFlag GetFlagForArea(NavArea Area)
 }
 
 // Get appropriate debug colour for the area. Returns RGB as 3 unsigned chars encoded into a single unsigned int
-inline void GetDebugColorForArea(NavArea Area, unsigned char& R, unsigned char& G, unsigned char& B)
+inline void GetDebugColorForArea(EAINavArea Area, unsigned char& R, unsigned char& G, unsigned char& B)
 {
 	switch (Area)
 	{
@@ -250,7 +270,7 @@ inline void GetDebugColorForArea(NavArea Area, unsigned char& R, unsigned char& 
 }
 
 // Get appropriate debug colour for the movement flag. Returns RGB as 3 unsigned chars encoded into a single unsigned int
-inline void GetDebugColorForFlag(NavMovementFlag Flag, unsigned char& R, unsigned char& G, unsigned char& B)
+inline void GetDebugColorForFlag(EAINavMovementFlag Flag, unsigned char& R, unsigned char& G, unsigned char& B)
 {
 	switch (Flag)
 	{
@@ -343,7 +363,7 @@ inline void GetDebugColorForFlag(NavMovementFlag Flag, unsigned char& R, unsigne
 }
 
 // Return name of a flag for debugging purposes
-inline void GetFlagName(NavMovementFlag Flag, char* outName)
+inline void GetFlagName(EAINavMovementFlag Flag, char* outName)
 {
 	if (!outName) { return; }
 
@@ -404,7 +424,7 @@ inline void GetFlagName(NavMovementFlag Flag, char* outName)
 }
 
 // Returns true if this flag is a teleport move (i.e. not affected by doors or other obstacles)
-inline bool IsFlagTeleportType(NavMovementFlag Flag)
+inline bool IsFlagTeleportType(EAINavMovementFlag Flag)
 {
 	switch (Flag)
 	{
@@ -446,7 +466,7 @@ inline bool IsFlagTeleportType(NavMovementFlag Flag)
 }
 
 // Return name of a flag for debugging purposes
-inline void GetAreaName(NavArea Area, char* outName)
+inline void GetAreaName(EAINavArea Area, char* outName)
 {
 	if (!outName) { return; }
 
@@ -641,7 +661,7 @@ inline Vector UTIL_VecDetourToGoldSrc(const float* DetourVector)
 }
 
 // Return the appropriate base nav profile information
-inline const NavAgentProfile GetBaseAgentProfile(const NavProfileIndex Index)
+inline const NavAgentProfile GetBaseAgentProfile(const EAINavProfileIndex Index)
 {
 	return BaseAgentProfiles[Index];
 }

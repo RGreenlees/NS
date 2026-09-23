@@ -56,7 +56,7 @@ enum class EAINavMeshLoadResult
 
 struct NavOffMeshConnection
 {
-	NavMeshIndex NavMeshIndex = NavMeshIndex::NAV_MESH_INVALID;
+	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
 	Vector FromLocation = ZERO_VECTOR; // The start point of the connection
 	Vector ToLocation = ZERO_VECTOR; // The end point of the connection
 	unsigned int ConnectionFlags = 0; // The type of connection it is
@@ -84,7 +84,7 @@ struct NavHint
 // Can also be later removed to undo the change, hence "temporary" obstacle.
 struct NavTempObstacle
 {
-	NavMeshIndex NavMeshIndex = NAV_MESH_INVALID; // Which nav mesh this obstacle belongs to
+	EAINavMeshIndex NavMeshIndex = NAV_MESH_INVALID; // Which nav mesh this obstacle belongs to
 	Vector Location = ZERO_VECTOR; // The location of the obstacle. This will be at the BASE of the cylinder
 	float Radius = 0.0f; // How wide the cylindrical obstacle is
 	float Height = 0.0f; // How tall the cylinder is
@@ -108,7 +108,7 @@ struct NavHitResult
 // Links together a tile cache, nav query and the nav mesh into one handy structure for all your querying needs
 struct NavMesh
 {
-	NavMeshIndex MeshIndex = NAV_MESH_INVALID;
+	EAINavMeshIndex MeshIndex = NAV_MESH_INVALID;
 	class dtTileCache* tileCache = nullptr;
 	class dtNavMeshQuery* navQuery = nullptr;
 	class dtNavMesh* navMesh = nullptr;
@@ -215,10 +215,10 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname);
 
 // Will pick up any pending off-mesh obstacles or off-mesh connections waiting to be added/removed/modified
 // on the desired navmesh, and will apply the changes. Returns true if the mesh was fully up to date at the end.
-bool AIMESH_UpdateTileCache(NavMeshIndex MeshIndex);
+bool AIMESH_UpdateTileCache(EAINavMeshIndex MeshIndex);
 
 // Returns true if the requested navmesh is fully up to date and has no pending changes to be applied.
-bool AIMESH_IsNavMeshUpToDate(NavMeshIndex MeshIndex);
+bool AIMESH_IsNavMeshUpToDate(EAINavMeshIndex MeshIndex);
 
 // Returns the current state of the nav mesh, whether it is loaded or not.
 EAINavMeshStatus AIMESH_GetNavMeshStatus();
@@ -233,12 +233,12 @@ bool AIMESH_IsNavMeshLoaded();
 void AIMESH_GetNavMeshFilePath(const char* mapname, char* buffer);
 
 // Guarantees that a non-null pointer return will be a valid, fully-initialized NavMesh
-NavMesh* AIMESH_GetNavMeshAtIndex(NavMeshIndex DesiredIndex);
+NavMesh* AIMESH_GetNavMeshAtIndex(EAINavMeshIndex DesiredIndex);
 
 std::vector<NavMesh*> AIMESH_GetAllNavMeshes();
 
 /* Adds a new off-mesh connection to the specified navmesh at runtime. Bots using this nav mesh will immediately start using this connection if they're allowed to */
-NavOffMeshConnection* AIMESH_AddOffMeshConnection(NavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, unsigned char area, unsigned int flags, bool bBiDirectional);
+NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, unsigned char area, unsigned int flags, bool bBiDirectional);
 
 // Changes the flags on an existing off-mesh connection
 void AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const unsigned int NewFlag);
@@ -248,14 +248,14 @@ bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef);
 
 
 // Applies a temporary obstacle to the navmesh. Returns a pointer to the temp obstacle created if successful.
-NavTempObstacle* AIMESH_AddTemporaryObstacle(NavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, unsigned char Area);
+NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, unsigned char Area);
 
 // Will remove the temporary obstacle from the navmesh completely.
 // NOTE: This will also null the supplied pointer if successful, as the pointer will be gone from the navmesh.
 bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove);
 
 // Add a hint to the requested nav mesh
-NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags);
+NavHint* AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags);
 
 /*
 	Project point to navmesh:
@@ -263,7 +263,7 @@ NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, un
 	Uses pExtents by default if not supplying one.
 	Returns ZERO_VECTOR if not projected successfully
 */
-Vector AIMESH_ProjectPointToNavmesh(NavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile = GetBaseAgentProfile(NAV_PROFILE_DEFAULT), const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
+Vector AIMESH_ProjectPointToNavmesh(EAINavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile = GetBaseAgentProfile(NAV_PROFILE_DEFAULT), const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
 
 // Finds any random point on the navmesh that is relevant for the bot. Returns ZERO_VECTOR if none found
 Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const Vector& SearchPoint = ZERO_VECTOR, bool bIgnoreReachability = true);
@@ -273,13 +273,17 @@ Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const V
 
 	Returns ZERO_VECTOR if none found
 */
-Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter = NAV_FLAG_NONE);
+Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = NAV_FLAG_NONE);
 
 /*	Finds any random point on the navmesh of the area type (e.g. crouch area) that is relevant for the bot within the min and max radius of the origin point,
 	taking reachability into account(will not return impossible to reach location).
 
 	Returns ZERO_VECTOR if none found
 */
-Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter = NAV_FLAG_NONE);
+Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = NAV_FLAG_NONE);
+
+
+void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTime);
+void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTime);
 
 #endif // AVH_AI_NAVMESH_H

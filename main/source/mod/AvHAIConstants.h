@@ -1,3 +1,11 @@
+//
+// EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
+//
+// AvHAIConstants.h
+//
+// Defines all bot logic constants used for thinking
+//
+
 #pragma once
 
 #ifndef AVH_AI_CONSTANTS_H
@@ -81,7 +89,7 @@ enum class EAIHiveTechStatus
 	HIVE_TECH_MOVEMENT = 3
 };
 
-enum class EAIReachabilityStatus : uint16
+enum class EAIReachabilityFlags : uint16
 {
 	AI_REACHABILITY_NONE = 0,
 	AI_REACHABILITY_MARINE = 1u << 0,
@@ -94,15 +102,21 @@ enum class EAIReachabilityStatus : uint16
 	AI_REACHABILITY_ALL = -1
 };
 
-inline EAIReachabilityStatus operator|(EAIReachabilityStatus a, EAIReachabilityStatus b)
+inline EAIReachabilityFlags operator|(EAIReachabilityFlags a, EAIReachabilityFlags b)
 {
-	return static_cast<EAIReachabilityStatus>(static_cast<uint16>(a) | static_cast<uint16>(b));
+	return static_cast<EAIReachabilityFlags>(static_cast<uint16>(a) | static_cast<uint16>(b));
 }
 
-inline EAIReachabilityStatus operator&(EAIReachabilityStatus a, EAIReachabilityStatus b)
+inline EAIReachabilityFlags operator&(EAIReachabilityFlags a, EAIReachabilityFlags b)
 {
-	return static_cast<EAIReachabilityStatus>(static_cast<uint16>(a) & static_cast<uint16>(b));
+	return static_cast<EAIReachabilityFlags>(static_cast<uint16>(a) & static_cast<uint16>(b));
 }
+
+template<class T> inline bool EnumHasAnyFlags (T a, T b) { return (static_cast<uint32>(a) & static_cast<uint32>(b)) > 0; }
+template<class T> inline bool EnumHasAllFlags(T a, T b) { return (static_cast<uint32>(a) & static_cast<uint32>(b)) == static_cast<uint32>(b); }
+template<class T> inline void EnumAddFlags(T &a, T b) { a = static_cast<T>(static_cast<uint32>(a) | static_cast<uint32>(b)); }
+template<class T> inline void EnumRemoveFlags(T& a, T b) { a = static_cast<T>(static_cast<uint32>(a) & ~static_cast<uint32>(b)); }
+template<class T> inline T EnumGetCombinedFlags(T a, T b) { return static_cast<T>(static_cast<uint32>(a) | static_cast<uint32>(b)); }
 
 enum class EAIStructureStatus : uint16
 {
@@ -295,8 +309,8 @@ struct AvHAIHiveDefinition
 	std::vector<NavTempObstacle*> ObstacleRefs;		// When in progress or built, will place an obstacle so bots don't try to walk through it
 	float NextFloorLocationCheck = 0.0f;			// When should the closest navigable point to the hive be calculated? Used to delay the check after a hive is built
 	AvHTeamNumber OwningTeam = TEAM_IND;			// Which team owns this hive currently (TEAM_IND if empty)
-	EAIReachabilityStatus TeamAReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;		// Who on team A can reach this node?
-	EAIReachabilityStatus TeamBReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;		// Who on team B can reach this node?
+	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team A can reach this node?
+	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team B can reach this node?
 	char HiveName[64] = {'\0'};
 };
 
@@ -305,13 +319,26 @@ struct DeployableSearchFilter
 	EAIStructureType DeployableTypes = EAIStructureType::ALL_STRUCTURES;
 	EAIStructureStatus IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
 	EAIStructureStatus ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIReachabilityStatus ReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;
+	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	float MinSearchRadius = 0.0f;
 	float MaxSearchRadius = 0.0f;
 	bool bConsiderPhaseDistance = false;
 	AvHTeamNumber DeployableTeam = TEAM_IND;
 	AvHTeamNumber ReachabilityTeam = TEAM_IND;
 	EAIStructurePurpose PurposeFlags = EAIStructurePurpose::STRUCTURE_PURPOSE_ANY;
+};
+
+struct DroppedItemSearchFilter
+{
+	EAIDeployableItemType DeployableTypes = EAIDeployableItemType::DEPLOYABLE_ITEM_ALL;
+	EAIStructureStatus IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
+	EAIStructureStatus ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
+	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+	float MinSearchRadius = 0.0f;
+	float MaxSearchRadius = 0.0f;
+	bool bConsiderPhaseDistance = false;
+	AvHTeamNumber DeployableTeam = TEAM_IND;
+	AvHTeamNumber ReachabilityTeam = TEAM_IND;
 };
 
 // Pending message a bot wants to say. Allows for a delay in sending a message to simulate typing, or prevent too many messages on the same frame
@@ -341,14 +368,14 @@ struct AvHAIBuildableStructure
 {
 	AvHBaseBuildable* EntityRef = nullptr;
 	int EntIndex = -1;
-	edict_t* edict = nullptr; // Reference to structure edict
+	edict_t* Edict = nullptr; // Reference to structure edict
 	Vector Location = g_vecZero; // origin of the structure edict
 	float healthPercent = 0.0f; // Current health of the building
 	float lastDamagedTime = 0.0f; // When it was last damaged by something. Used by bots to determine if still needs defending
 	EAIStructureType StructureType = EAIStructureType::STRUCTURE_NONE; // Type of structure it is (e.g. hive, comm chair, infantry portal, defence chamber etc.)
 	EAIStructureStatus StructureStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIReachabilityStatus TeamAReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;
-	EAIReachabilityStatus TeamBReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;
+	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the building has been removed from play
 	std::vector<NavTempObstacle*> TempObstacles;
 	vector<NavOffMeshConnection*> OffMeshConnections; // References to any off-mesh connections this structure is associated with
@@ -358,24 +385,24 @@ struct AvHAIBuildableStructure
 	bool bReachabilityMarkedDirty = false; // If true, reachability flags will be recalculated for this structure
 	bool bPlacedByHuman = true; // This structure was placed by a human: AI commander will not recycle these unless it absolutely makes sense to
 
-	bool IsValid() { return !FNullEnt(edict) && !edict->free && !(edict->v.flags & EF_NODRAW) && edict->v.deadflag == DEAD_NO; }
-	bool IsCompleted() { return (StructureStatusFlags & EAIStructureStatus::STRUCTURE_STATUS_COMPLETED) != EAIStructureStatus::STRUCTURE_STATUS_NONE; }
-	bool IsIdle() { return (StructureStatusFlags & EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING) == EAIStructureStatus::STRUCTURE_STATUS_NONE; }
+	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+	bool IsCompleted() const { return (StructureStatusFlags & EAIStructureStatus::STRUCTURE_STATUS_COMPLETED) != EAIStructureStatus::STRUCTURE_STATUS_NONE; }
+	bool IsIdle() const { return (StructureStatusFlags & EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING) == EAIStructureStatus::STRUCTURE_STATUS_NONE; }
 
 };
 
 // Any kind of pickup that has been dropped either by the commander or by a player
 struct AvHAIDroppedItem
 {
-	edict_t* edict = nullptr; // Reference to the item edict
+	edict_t* Edict = nullptr; // Reference to the item edict
 	Vector Location = g_vecZero; // Origin of the entity
 	EAIDeployableItemType ItemType = EAIDeployableItemType::DEPLOYABLE_ITEM_NONE; // Is it a weapon, health pack, ammo pack etc?
-	EAIReachabilityStatus TeamAReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;
-	EAIReachabilityStatus TeamBReachabilityFlags = EAIReachabilityStatus::AI_REACHABILITY_NONE;
+	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	bool bReachabilityMarkedDirty = false; // Reachability needs to be recalculated
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the item has been removed from play
 
-	bool IsValid() { return !FNullEnt(edict) && !edict->free && !(edict->v.flags & EF_NODRAW) && edict->v.deadflag == DEAD_NO; }
+	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
 };
 
 // Affects the bot's pathfinding choices

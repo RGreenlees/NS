@@ -27,13 +27,13 @@ enum LerkFlightBehaviour
 };
 
 void SetBaseNavProfile(AvHAIPlayer* pBot);
-void UpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
-void MarineUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
-void SkulkUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
-void GorgeUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
-void LerkUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
-void FadeUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
-void OnosUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle);
+void UpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
+void MarineUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
+void SkulkUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
+void GorgeUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
+void LerkUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
+void FadeUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
+void OnosUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
 
 
 
@@ -120,9 +120,6 @@ void ClearBotMovement(AvHAIPlayer* pBot);
 
 // Called every bot frame (default is 60fps). Ensures the tile cache is updated after obstacles are placed
 bool UTIL_UpdateTileCache();
-
-void AIDEBUG_DrawOffMeshConnections(float DrawTime);
-void AIDEBUG_DrawTemporaryObstacles(float DrawTime);
 
 Vector UTIL_GetNearestPointOnNavWall(AvHAIPlayer* pBot, const float MaxRadius);
 Vector UTIL_GetNearestPointOnNavWall(const nav_profile& NavProfile, const Vector Location, const float MaxRadius);

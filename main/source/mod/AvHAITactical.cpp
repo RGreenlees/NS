@@ -1,13 +1,10 @@
 //
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
-// bot_gorge.cpp
+// AvHAITactical.cpp
 //
-// Contains gorge-related functions. Needs refactoring into helper function file
+// Tracks information about the game state, including structures and research
 //
-
-
-
 
 #include "AvHAITactical.h"
 #include "AvHAINavigation.h"
@@ -61,12 +58,6 @@ Vector TeamBRelocationPoint = ZERO_VECTOR;
 
 bool bEnableRelocationAtStart = false; // For this round, should the AI commander try relocating at the start of the match?
 
-extern nav_mesh NavMeshes[MAX_NAV_MESHES]; // Array of nav meshes. Currently only 3 are used (building, onos, and regular)
-extern nav_profile BaseNavProfiles[MAX_NAV_PROFILES]; // Array of nav profiles
-
-bool bNavMeshModified = false;
-extern bool bTileCacheUpToDate;
-
 edict_t* LastSeenLerkTeamA = nullptr; // Track who went lerk on team A last time. This ensures we don't get endless cycles of lerks
 edict_t* LastSeenLerkTeamB = nullptr; // Track who went lerk on team B last time. This ensures we don't get endless cycles of lerks
 
@@ -78,137 +69,97 @@ vector<AvHAISquad> ActiveSquads;
 vector<AvHAIMarineBase> ActiveTeamABases; // If Team A are marines, any active bases they have established around the map
 vector<AvHAIMarineBase> ActiveTeamBBases; // If Team B are marines, any active bases they have established around the map
 
-std::vector<AvHAIBuildableStructure> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter)
+bool AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, const DeployableSearchFilter* Filter, const Vector& SearchLocation)
 {
-	std::vector<AvHAIBuildableStructure> Result;
+	if (!Structure || !Structure->IsValid()) { return false; }
 
-	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
-	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
+	if (!EnumHasAnyFlags(Structure->StructureType, Filter->DeployableTypes)) { return false; }
+	if (EnumHasAnyFlags(Structure->StructureStatusFlags, Filter->ExcludeStatusFlags)) { return false; }
+	if (!EnumHasAllFlags(Structure->StructureStatusFlags, Filter->IncludeStatusFlags)) { return false; }
+	if (Structure->Purpose != Filter->PurposeFlags && !EnumHasAllFlags(Structure->Purpose, Filter->PurposeFlags)) { return false; }
 
-	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
-
-	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
+	if (Filter->ReachabilityFlags != EAIReachabilityFlags::AI_REACHABILITY_NONE)
 	{
-		for (auto& it : TeamAStructureMap)
-		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+		const EAIReachabilityFlags StructureReachabilityFlags = (Filter->ReachabilityTeam == TEAM_IND)
+			? EnumGetCombinedFlags(Structure->TeamAReachabilityFlags, Structure->TeamBReachabilityFlags)
+			: (Filter->ReachabilityTeam == TEAM_ONE) ? Structure->TeamAReachabilityFlags : Structure->TeamBReachabilityFlags;
 
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE)
-			{
-				unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-				if (Filter->ReachabilityTeam != TEAM_IND)
-				{
-					StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-				}
-
-				if (!(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-			}
-
-			if (it.second.StructureType & Filter->DeployableTypes)
-			{
-				float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-				if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq))
-				{
-					Result.push_back(it.second);
-				}
-			}
-		}
+		if (!EnumHasAnyFlags(StructureReachabilityFlags, Filter->ReachabilityFlags)) { return false; }
 	}
 
-	if (Filter->DeployableTeam == TeamB || Filter->DeployableTeam == TEAM_IND)
+	if (Filter->MaxSearchRadius <= 0.0f && Filter->MinSearchRadius <= 0.0f) { return true; }
+
+	const float MinDistSq = sqrf(Filter->MinSearchRadius);
+	const float MaxDistSq = sqrf(Filter->MaxSearchRadius);
+
+	const float DistSq = (Filter->bConsiderPhaseDistance)
+		? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, SearchLocation))
+		: vDist2DSq(Structure->Location, SearchLocation);
+
+	if (Filter->MaxSearchRadius > 0.0f)
 	{
-		for (auto& it : TeamBStructureMap)
-		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
-
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE)
-			{
-				unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-				if (Filter->ReachabilityTeam != TEAM_IND)
-				{
-					StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-				}
-
-				if (!(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-			}
-
-			if (it.second.StructureType & Filter->DeployableTypes)
-			{
-				float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-				if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq))
-				{
-					Result.push_back(it.second);
-				}
-			}
-		}
+		if (DistSq > MaxDistSq) { return false; }
 	}
 
-	return Result;
+	if (Filter->MinSearchRadius > 0.0f)
+	{
+		if (DistSq < MinDistSq) { return false; }
+	}
+
+	return true;
 }
 
-std::vector<AvHAIBuildableStructure*> AITAC_FindAllDeployablesByRef(const Vector& Location, const DeployableSearchFilter* Filter)
+bool AITAC_DoesDroppedItemMatchFilter(const AvHAIDroppedItem* Item, const DroppedItemSearchFilter* Filter, const Vector& SearchLocation)
 {
-	std::vector<AvHAIBuildableStructure*> Result;
+	if (!Item || !Item->IsValid()) { return false; }
+
+	if (!EnumHasAnyFlags(Item->ItemType, Filter->DeployableTypes)) { return false; }
+
+	if (Filter->ReachabilityFlags != EAIReachabilityFlags::AI_REACHABILITY_NONE)
+	{
+		const EAIReachabilityFlags ItemReachabilityFlags = (Filter->ReachabilityTeam == TEAM_IND)
+			? EnumGetCombinedFlags(Item->TeamAReachabilityFlags, Item->TeamBReachabilityFlags)
+			: (Filter->ReachabilityTeam == TEAM_ONE) ? Item->TeamAReachabilityFlags : Item->TeamBReachabilityFlags;
+
+		if (!EnumHasAnyFlags(ItemReachabilityFlags, Filter->ReachabilityFlags)) { return false; }
+	}
+
+	if (Filter->MaxSearchRadius <= 0.0f && Filter->MinSearchRadius <= 0.0f) { return true; }
+
+	const float MinDistSq = sqrf(Filter->MinSearchRadius);
+	const float MaxDistSq = sqrf(Filter->MaxSearchRadius);
+
+	const float DistSq = (Filter->bConsiderPhaseDistance)
+		? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Item->Location, SearchLocation))
+		: vDist2DSq(Item->Location, SearchLocation);
+
+	if (Filter->MaxSearchRadius > 0.0f)
+	{
+		if (DistSq > MaxDistSq) { return false; }
+	}
+
+	if (Filter->MinSearchRadius > 0.0f)
+	{
+		if (DistSq < MinDistSq) { return false; }
+	}
+}
+
+std::vector<const AvHAIBuildableStructure*> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter)
+{
+	std::vector<const AvHAIBuildableStructure*> Result;
 
 	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
 	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
-
-	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
 
 	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
 	{
 		for (auto& it : TeamAStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-				if (Filter->ReachabilityTeam != TEAM_IND)
-				{
-					StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-				}
-
-				if (!(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-			}
-
-			if (it.second.StructureType & Filter->DeployableTypes)
-			{
-				float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-				if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq))
-				{
-					Result.push_back(&it.second);
-				}
+				Result.push_back(&it.second);
 			}
 		}
 	}
@@ -217,32 +168,11 @@ std::vector<AvHAIBuildableStructure*> AITAC_FindAllDeployablesByRef(const Vector
 	{
 		for (auto& it : TeamBStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-				if (Filter->ReachabilityTeam != TEAM_IND)
-				{
-					StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-				}
-
-				if (!(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-			}
-
-			if (it.second.StructureType & Filter->DeployableTypes)
-			{
-				float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-				if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq))
-				{
-					Result.push_back(&it.second);
-				}
+				Result.push_back(&it.second);
 			}
 		}
 	}
@@ -255,39 +185,15 @@ bool AITAC_DeployableExistsAtLocation(const Vector& Location, const DeployableSe
 	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
 	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
 
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
-
 	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
 	{
 		for (auto& it : TeamAStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			if (it.second.StructureType & Filter->DeployableTypes)
-			{
-				float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-				if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq))
-				{
-					return true;
-				}
+				return true;
 			}
 		}
 	}
@@ -296,29 +202,11 @@ bool AITAC_DeployableExistsAtLocation(const Vector& Location, const DeployableSe
 	{
 		for (auto& it : TeamBStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			if (it.second.StructureType & Filter->DeployableTypes)
-			{
-				float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-				if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq))
-				{
-					return true;
-				}
+				return true;
 			}
 		}
 	}
@@ -326,46 +214,31 @@ bool AITAC_DeployableExistsAtLocation(const Vector& Location, const DeployableSe
 	return false;
 }
 
-AvHAIBuildableStructure	AITAC_FindClosestDeployableToLocation(const Vector& Location, const DeployableSearchFilter* Filter)
+const AvHAIBuildableStructure* AITAC_FindClosestDeployableToLocation(const Vector& Location, const DeployableSearchFilter* Filter)
 {
 	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
 	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
 
-	AvHAIBuildableStructure Result;
-	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
+	const AvHAIBuildableStructure* Result = nullptr;
+	float CurrMinDist = FLT_MAX;
 
 	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
 	{
 		for (auto& it : TeamAStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
+				const float DistSq = (Filter->bConsiderPhaseDistance)
+					? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, Location))
+					: vDist2DSq(Structure->Location, Location);
 
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (FNullEnt(Result.edict) || DistSq < CurrMinDist))
-			{
-				Result = it.second;
-				CurrMinDist = DistSq;
+				if (DistSq < CurrMinDist)
+				{
+					Result = Structure;
+					CurrMinDist = DistSq;
+				}
 			}
 		}
 	}
@@ -374,28 +247,19 @@ AvHAIBuildableStructure	AITAC_FindClosestDeployableToLocation(const Vector& Loca
 	{
 		for (auto& it : TeamBStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
+				const float DistSq = (Filter->bConsiderPhaseDistance)
+					? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, Location))
+					: vDist2DSq(Structure->Location, Location);
 
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (FNullEnt(Result.edict) || DistSq < CurrMinDist))
-			{
-				Result = it.second;
-				CurrMinDist = DistSq;
+				if (DistSq < CurrMinDist)
+				{
+					Result = Structure;
+					CurrMinDist = DistSq;
+				}
 			}
 		}
 	}
@@ -403,46 +267,31 @@ AvHAIBuildableStructure	AITAC_FindClosestDeployableToLocation(const Vector& Loca
 	return Result;
 }
 
-AvHAIBuildableStructure* AITAC_FindClosestDeployableToLocationByRef(const Vector& Location, const DeployableSearchFilter* Filter)
+const AvHAIBuildableStructure* AITAC_FindFurthestDeployableFromLocation(const Vector& Location, const DeployableSearchFilter* Filter)
 {
 	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
 	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
 
-	AvHAIBuildableStructure* Result = NULL;
+	const AvHAIBuildableStructure* Result = nullptr;
 	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
 
 	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
 	{
 		for (auto& it : TeamAStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
+				const float DistSq = (Filter->bConsiderPhaseDistance)
+					? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, Location))
+					: vDist2DSq(Structure->Location, Location);
 
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (!Result || DistSq < CurrMinDist))
-			{
-				Result = &it.second;
-				CurrMinDist = DistSq;
+				if (DistSq > CurrMinDist)
+				{
+					Result = Structure;
+					CurrMinDist = DistSq;
+				}
 			}
 		}
 	}
@@ -451,28 +300,19 @@ AvHAIBuildableStructure* AITAC_FindClosestDeployableToLocationByRef(const Vector
 	{
 		for (auto& it : TeamBStructureMap)
 		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+			const AvHAIBuildableStructure* Structure = &it.second;
 
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter))
 			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
+				const float DistSq = (Filter->bConsiderPhaseDistance)
+					? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, Location))
+					: vDist2DSq(Structure->Location, Location);
 
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (!Result || DistSq < CurrMinDist))
-			{
-				Result = &it.second;
-				CurrMinDist = DistSq;
+				if (DistSq > CurrMinDist)
+				{
+					Result = Structure;
+					CurrMinDist = DistSq;
+				}
 			}
 		}
 	}
@@ -480,209 +320,42 @@ AvHAIBuildableStructure* AITAC_FindClosestDeployableToLocationByRef(const Vector
 	return Result;
 }
 
-AvHAIBuildableStructure AITAC_FindFurthestDeployableFromLocation(const Vector& Location, const DeployableSearchFilter* Filter)
+const AvHAIDroppedItem* AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict)
 {
-	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
-	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
-
-	AvHAIBuildableStructure Result;
-	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
-
-	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
-	{
-		for (auto& it : TeamAStructureMap)
-		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
-
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
-			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && DistSq > CurrMinDist)
-			{
-				Result = it.second;
-				CurrMinDist = DistSq;
-			}
-		}
-	}
-
-	if (Filter->DeployableTeam == TeamB || Filter->DeployableTeam == TEAM_IND)
-	{
-		for (auto& it : TeamBStructureMap)
-		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
-
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
-			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && DistSq > CurrMinDist)
-			{
-				Result = it.second;
-				CurrMinDist = DistSq;
-			}
-		}
-	}
-
-	return Result;
-}
-
-AvHAIBuildableStructure* AITAC_FindFurthestDeployableFromLocationByRef(const Vector& Location, const DeployableSearchFilter* Filter)
-{
-	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
-	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
-
-	AvHAIBuildableStructure* Result = nullptr;
-	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(Filter->MinSearchRadius);
-	float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
-
-	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
-	{
-		for (auto& it : TeamAStructureMap)
-		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
-
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
-			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && DistSq > CurrMinDist)
-			{
-				Result = &it.second;
-				CurrMinDist = DistSq;
-			}
-		}
-	}
-
-	if (Filter->DeployableTeam == TeamB || Filter->DeployableTeam == TEAM_IND)
-	{
-		for (auto& it : TeamBStructureMap)
-		{
-			if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
-
-			if (it.second.StructureStatusFlags & Filter->ExcludeStatusFlags) { continue; }
-			if ((it.second.StructureStatusFlags & Filter->IncludeStatusFlags) != Filter->IncludeStatusFlags) { continue; }
-			if (!(it.second.StructureType & Filter->DeployableTypes)) { continue; }
-			if (it.second.Purpose != Filter->PurposeFlags && (it.second.Purpose & Filter->PurposeFlags) != it.second.Purpose) { continue; }
-
-			unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-			if (Filter->ReachabilityTeam != TEAM_IND)
-			{
-				StructureReachabilityFlags = (Filter->ReachabilityTeam == TeamA) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
-			}
-
-			if (Filter->ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & Filter->ReachabilityFlags)) { continue; }
-
-			float DistSq = (Filter->bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-			if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && DistSq > CurrMinDist)
-			{
-				Result = &it.second;
-				CurrMinDist = DistSq;
-			}
-		}
-	}
-
-	return Result;
-}
-
-AvHAIDroppedItem AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict)
-{
-	AvHAIDroppedItem Result;
-
-	if (FNullEnt(ItemEdict)) { return Result; }
+	if (FNullEnt(ItemEdict)) { return nullptr; }
 
 	int EntIndex = ENTINDEX(ItemEdict);
 
-	if (EntIndex < 0) { return Result; }
+	if (EntIndex < 0) { return nullptr; }
 
-	Result = MarineDroppedItemMap[EntIndex];
+	std::unordered_map<int, AvHAIDroppedItem>::const_iterator Found = MarineDroppedItemMap.find(EntIndex);
 
-	return Result;
+	if (Found == MarineDroppedItemMap.end()) { return nullptr; }
+
+	return &Found->second;
 }
 
-AvHAIDroppedItem AITAC_FindClosestItemToLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance)
+const AvHAIDroppedItem* AITAC_FindClosestItemToLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters)
 {
-	AvHAIDroppedItem Result;
-	float CurrMinDist = 0.0f;
-
-	float MinDistSq = sqrf(MinRadius);
-	float MaxDistSq = sqrf(MaxRadius);
-
-	bool bUseMinDist = MinDistSq > 0.1f;
-	bool bUseMaxDist = MaxDistSq > 0.1f;
+	const AvHAIDroppedItem* Result = nullptr;
+	float CurrMinDist = FLT_MAX;
 
 	for (auto& it : MarineDroppedItemMap)
 	{
-		if (FNullEnt(it.second.edict) || it.second.edict->v.deadflag != DEAD_NO || (it.second.edict->v.effects & EF_NODRAW)) { continue; }
+		const AvHAIDroppedItem* Item = &it.second;
 
-		unsigned int StructureReachabilityFlags = (it.second.TeamAReachabilityFlags | it.second.TeamBReachabilityFlags);
-
-		if (SearchingTeam != TEAM_IND)
+		if (AITAC_DoesDroppedItemMatchFilter(Item, ItemFilters, Location))
 		{
-			StructureReachabilityFlags = (SearchingTeam == GetGameRules()->GetTeamANumber()) ? it.second.TeamAReachabilityFlags : it.second.TeamBReachabilityFlags;
+			const float DistSq = (ItemFilters->bConsiderPhaseDistance)
+				? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Item->Location, Location))
+				: vDist2DSq(Item->Location, Location);
+
+			if (DistSq < CurrMinDist)
+			{
+				Result = Item;
+				CurrMinDist = DistSq;
+			}
 		}
-
-		if (ReachabilityFlags != AI_REACHABILITY_NONE && !(StructureReachabilityFlags & ReachabilityFlags)) { continue; }
-
-		if (it.second.ItemType != ItemType) { continue; }
-
-		float DistSq = (bConsiderPhaseDistance) ? sqrf(AITAC_GetPhaseDistanceBetweenPoints(it.second.Location, Location)) : vDist2DSq(it.second.Location, Location);
-
-		if ((!bUseMinDist || DistSq >= MinDistSq) && (!bUseMaxDist || DistSq <= MaxDistSq) && (!Result.IsValid() || DistSq < CurrMinDist))
-		{
-			Result = it.second;
-			CurrMinDist = DistSq;
-		}
-
 	}
 
 	return Result;
@@ -761,9 +434,9 @@ bool AITAC_ItemExistsInLocation(const Vector& Location, const AvHAIDeployableIte
 	return false;
 }
 
-AvHAIBuildableStructure AITAC_GetDeployableFromEdict(const edict_t* Structure)
+AvHAIBuildableStructure* AITAC_GetDeployableFromEdict(const edict_t* Structure)
 {
-	AvHAIBuildableStructure Result;
+	AvHAIBuildableStructure* Result = nullptr;
 
 	if (FNullEnt(Structure)) { return Result; }
 
@@ -2793,7 +2466,7 @@ void AITAC_RemovePhaseGateConnections(AvHAIBuildableStructure* SourceGate, AvHAI
 	{
 		if (it->TargetObject == TargetGate->edict)
 		{
-			UTIL_RemoveOffMeshConnections(&(*it));
+			AIMESH_RemoveOffMeshConnection(*it);
 			it = SourceGate->OffMeshConnections.erase(it);
 		}
 		else
@@ -2808,7 +2481,7 @@ void AITAC_OnStructureBeginRecycling(AvHAIBuildableStructure* RecyclingStructure
 	if (!RecyclingStructure || FNullEnt(RecyclingStructure->edict) || RecyclingStructure->edict->v.deadflag != DEAD_NO || (RecyclingStructure->edict->v.effects & EF_NODRAW)) { return; }
 
 	// For phase gates, treat them like they've been destroyed
-	if (RecyclingStructure->StructureType == STRUCTURE_MARINE_PHASEGATE)
+	if (RecyclingStructure->StructureType == EAIStructureType::STRUCTURE_MARINE_PHASEGATE)
 	{
 		AITAC_OnStructureDestroyed(RecyclingStructure);
 	}
@@ -2820,21 +2493,21 @@ void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 
 	UTIL_RemoveStructureTemporaryObstacles(DestroyedStructure);
 
-	if (DestroyedStructure->StructureType == STRUCTURE_MARINE_PHASEGATE)
+	// Eliminate all connections from this phase gate
+	for (auto it = DestroyedStructure->OffMeshConnections.begin(); it != DestroyedStructure->OffMeshConnections.end(); it++)
 	{
-		// Eliminate all connections from this phase gate
-		for (auto it = DestroyedStructure->OffMeshConnections.begin(); it != DestroyedStructure->OffMeshConnections.end(); it++)
-		{
-			UTIL_RemoveOffMeshConnections(&(*it));
-		}
+		AIMESH_RemoveOffMeshConnection(*it);
+	}
 
-		DestroyedStructure->OffMeshConnections.clear();
+	DestroyedStructure->OffMeshConnections.clear();
 
+	if (DestroyedStructure->StructureType == EAIStructureType::STRUCTURE_MARINE_PHASEGATE)
+	{
 		DeployableSearchFilter Filter;
-		Filter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
+		Filter.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
 		Filter.DeployableTeam = (AvHTeamNumber)DestroyedStructure->edict->v.team;
-		Filter.ReachabilityFlags = AI_REACHABILITY_NONE;
-		Filter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+		Filter.ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+		Filter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
 
 		// Get all other completed phase gates for this team and remove any connections going to this structure
 		std::vector<AvHAIBuildableStructure*> OtherPhaseGates = AITAC_FindAllDeployablesByRef(DestroyedStructure->Location, &Filter);
@@ -2850,7 +2523,7 @@ void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 		}
 	}
 
-	if (DestroyedStructure->StructureType == STRUCTURE_MARINE_INFANTRYPORTAL)
+	if (DestroyedStructure->StructureType == EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL)
 	{
 		AvHTeamNumber Team = (AvHTeamNumber)DestroyedStructure->edict->v.team;
 
@@ -2864,18 +2537,6 @@ void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 		}
 
 		AITAC_GetTeamStartingLocation(Team); // Force refresh of reachabilities and team starting locations
-	}
-
-	vector<NavHint*> NavHints = NAV_GetHintsOfType(DestroyedStructure->StructureType);
-
-	for (auto it = NavHints.begin(); it != NavHints.end(); it++)
-	{
-		NavHint* ThisHint = (*it);
-
-		if (ThisHint->OccupyingBuilding == DestroyedStructure->edict)
-		{
-			ThisHint->OccupyingBuilding = nullptr;
-		}
 	}
 }
 
@@ -2945,6 +2606,7 @@ void AITAC_ClearMapAIData(bool bInitialMapLoad)
 
 		while (!bTileCacheUpToDate && NumAttempts < 30)
 		{
+			AIMESH_UpdateTileCache()
 			UTIL_UpdateTileCache();
 			NumAttempts++;
 		}
@@ -3180,8 +2842,6 @@ bool UTIL_IsStructureElectrified(edict_t* Structure)
 	if (FNullEnt(Structure)) { return false; }
 
 	return (!UTIL_StructureIsRecycling(Structure) && (Structure->v.iuser4 & MASK_UPGRADE_11));
-
-
 }
 
 bool UTIL_StructureIsFullyBuilt(edict_t* Structure)
@@ -3207,7 +2867,7 @@ bool UTIL_StructureIsFullyBuilt(edict_t* Structure)
 
 }
 
-bool UTIL_IsBuildableStructureStillReachable(AvHAIPlayer* pBot, const edict_t* Structure)
+bool AITAC_IsBuildableStructureStillReachable(AvHAIPlayer* pBot, const edict_t* Structure)
 {
 	int Index = ENTINDEX(Structure);
 
@@ -3238,13 +2898,13 @@ bool UTIL_IsDroppedItemStillReachable(AvHAIPlayer* pBot, const edict_t* Item)
 	return (TeamReachability & pBot->BotNavInfo.NavProfile.ReachabilityFlag);
 }
 
-AvHAIWeapon UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict)
+EAIWeaponId UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict)
 {
 	int Index = ENTINDEX(ItemEdict);
 
-	if (Index < 0) { return WEAPON_INVALID; }
+	if (Index < 0) { return EAIWeaponId::WEAPON_INVALID; }
 
-	AvHAIDeployableItemType ItemType = MarineDroppedItemMap[Index].ItemType;
+	EAIDeployableItemType ItemType = MarineDroppedItemMap[Index].ItemType;
 
 	switch (ItemType)
 	{
@@ -3319,8 +2979,8 @@ bool AITAC_ElectricalResearchIsAvailable(edict_t* Structure)
 
 	if (UTIL_IsStructureElectrified(Structure)) { return false; }
 
-	AvHAIDeployableStructureType StructureTypeToElectrify = GetStructureTypeFromEdict(Structure);
-	AvHAIDeployableStructureType ElectrifyableStructureTypes = (AvHAIDeployableStructureType)(STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY | STRUCTURE_MARINE_RESTOWER);
+	EAIStructureType StructureTypeToElectrify = GetStructureTypeFromEdict(Structure);
+	EAIStructureType ElectrifyableStructureTypes = (EAIStructureType)(STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY | STRUCTURE_MARINE_RESTOWER);
 
 	if (!(ElectrifyableStructureTypes & StructureTypeToElectrify)) { return false; }
 
@@ -3389,7 +3049,7 @@ const AvHAIHiveDefinition* AITAC_GetActiveHiveNearestLocation(AvHTeamNumber Team
 
 	for (auto it = Hives.begin(); it != Hives.end(); it++)
 	{
-		if (it->Status != HIVE_STATUS_BUILT || it->OwningTeam != Team) { continue; }
+		if (it->Status != EAIHiveStatusType::HIVE_STATUS_BUILT || it->OwningTeam != Team) { continue; }
 
 		float ThisDist = vDist3DSq(SearchLocation, it->Location);
 
@@ -3410,7 +3070,7 @@ const AvHAIHiveDefinition* AITAC_GetNonEmptyHiveNearestLocation(const Vector Sea
 
 	for (auto it = Hives.begin(); it != Hives.end(); it++)
 	{
-		if (it->Status == HIVE_STATUS_UNBUILT) { continue; }
+		if (it->Status == EAIHiveStatusType::HIVE_STATUS_UNBUILT) { continue; }
 
 		float ThisDist = vDist3DSq(SearchLocation, it->Location);
 

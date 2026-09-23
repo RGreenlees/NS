@@ -1,9 +1,9 @@
 //
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
-// bot_tactical.h
-// 
-// Contains all helper functions for making tactical decisions
+// AvHAITactical.cpp
+//
+// Tracks information about the game state, including structures and research
 //
 
 #pragma once
@@ -20,15 +20,14 @@ static const float structure_inventory_refresh_rate = 0.2f;
 // How frequently to update the global list of dropped marine items (in seconds). 0 = every frame
 static const float item_inventory_refresh_rate = 0.2f;
 
+bool						AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, const DeployableSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
+bool						AITAC_DoesDroppedItemMatchFilter(const AvHAIDroppedItem* Item, const DroppedItemSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
 bool						AITAC_DeployableExistsAtLocation(const Vector& Location, const DeployableSearchFilter* Filter);
-std::vector<AvHAIBuildableStructure> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter);
-std::vector<AvHAIBuildableStructure*> AITAC_FindAllDeployablesByRef(const Vector& Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure		AITAC_FindClosestDeployableToLocation(const Vector& Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure*	AITAC_FindClosestDeployableToLocationByRef(const Vector& Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure		AITAC_FindFurthestDeployableFromLocation(const Vector& Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure*	AITAC_FindFurthestDeployableFromLocationByRef(const Vector& Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure		AITAC_GetDeployableFromEdict(const edict_t* Structure);
-AvHAIBuildableStructure*	AITAC_GetDeployableRefFromEdict(const edict_t* Structure);
+std::vector<const AvHAIBuildableStructure*> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter);
+const AvHAIBuildableStructure*		AITAC_FindClosestDeployableToLocation(const Vector& Location, const DeployableSearchFilter* Filter);
+const AvHAIBuildableStructure*		AITAC_FindFurthestDeployableFromLocation(const Vector& Location, const DeployableSearchFilter* Filter);
+const AvHAIBuildableStructure*		AITAC_GetDeployableFromEdict(const edict_t* Structure);
+const AvHAIBuildableStructure*	AITAC_GetDeployableRefFromEdict(const edict_t* Structure);
 AvHAIBuildableStructure		AITAC_GetNearestDeployableDirectlyReachable(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter);
 AvHAIBuildableStructure*	AITAC_GetNearestDeployableDirectlyReachableByRef(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter);
 AvHAIBuildableStructure		AITAC_GetDeployableStructureByEntIndex(AvHTeamNumber Team, int EntIndex);
@@ -73,11 +72,11 @@ string						AITAC_GetLocationName(Vector Location);
 
 AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags);
 
-AvHAIDroppedItem			AITAC_FindClosestItemToLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
+const AvHAIDroppedItem*			AITAC_FindClosestItemToLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters);
 bool						AITAC_ItemExistsInLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
 int							AITAC_GetNumItemsInLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
 
-AvHAIDroppedItem			AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict);
+const AvHAIDroppedItem*			AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict);
 
 Vector						AITAC_GetRandomBuildHintInLocation(const unsigned int StructureType, const Vector SearchLocation, const float SearchRadius);
 
@@ -134,9 +133,9 @@ AvHAIResourceNode* AITAC_FindNearestResourceNodeToLocation(const Vector Location
 AvHAIResourceNode* AITAC_GetNearestResourceNodeToLocation(const Vector Location);
 vector<AvHAIResourceNode*> AITAC_GetAllMatchingResourceNodes(const Vector Location, const DeployableSearchFilter* Filter);
 
-bool UTIL_IsBuildableStructureStillReachable(AvHAIPlayer* pBot, const edict_t* Structure);
+bool AITAC_IsBuildableStructureStillReachable(AvHAIPlayer* pBot, const edict_t* Structure);
 bool UTIL_IsDroppedItemStillReachable(AvHAIPlayer* pBot, const edict_t* Item);
-AvHAIWeapon UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict);
+EAIWeaponId UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict);
 
 int AITAC_GetNumActivePlayersOnTeam(const AvHTeamNumber Team);
 int AITAC_GetNumPlayersOfTeamInArea(const AvHTeamNumber Team, const Vector SearchLocation, const float SearchRadius, const bool bConsiderPhaseDist, const edict_t* IgnorePlayer, const AvHUser3 IgnoreClass);

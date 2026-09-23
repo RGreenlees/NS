@@ -123,7 +123,7 @@ void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject);
 
 DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict);
 void AIMAP_LinkDynamicMapObjectsToTriggers();
-void AIMAP_LinkDynamicMapObjectsToOffmeshConnections();
+void AIMAP_LinkDynamicMapObjectsToOffMeshConnections();
 void AIMAP_SetTrainStartPoints();
 void AIMAP_PopulateAllConnectionsAffectedByDynamicObjects();
 bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* TargetObject, vector<edict_t*> CheckedObjects);

@@ -106,7 +106,7 @@ struct MeshProcess : public dtTileCacheMeshProcess
 		// Update poly flags from areas.
 		for (int i = 0; i < params->polyCount; ++i)
 		{
-			polyFlags[i] = GetFlagForArea((NavArea)polyAreas[i]);
+			polyFlags[i] = GetFlagForArea((EAINavArea)polyAreas[i]);
 		}
 	}
 };
@@ -147,7 +147,7 @@ void AIMESH_GetNavMeshFilePath(const char* mapname, char* buffer)
 	strcpy(buffer, navPath.c_str());
 }
 
-NavMesh* AIMESH_GetNavMeshAtIndex(NavMeshIndex DesiredIndex)
+NavMesh* AIMESH_GetNavMeshAtIndex(EAINavMeshIndex DesiredIndex)
 {
 	if (!IsValidNavMeshIndex(DesiredIndex)) { return nullptr; }
 
@@ -171,7 +171,7 @@ std::vector<NavMesh*> AIMESH_GetAllNavMeshes()
 
 	for (int i = 0; i < InvalidIndex; i++)
 	{
-		const NavMeshIndex NavIndex = static_cast<NavMeshIndex>(i);
+		const EAINavMeshIndex NavIndex = static_cast<EAINavMeshIndex>(i);
 
 		NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavIndex);
 
@@ -184,7 +184,7 @@ std::vector<NavMesh*> AIMESH_GetAllNavMeshes()
 	return Result;
 }
 
-bool AIMESH_UpdateTileCache(NavMeshIndex MeshIndex)
+bool AIMESH_UpdateTileCache(EAINavMeshIndex MeshIndex)
 {
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
 
@@ -195,7 +195,7 @@ bool AIMESH_UpdateTileCache(NavMeshIndex MeshIndex)
 	return FoundMesh->IsUpToDate();
 }
 
-bool AIMESH_IsNavMeshUpToDate(NavMeshIndex MeshIndex)
+bool AIMESH_IsNavMeshUpToDate(EAINavMeshIndex MeshIndex)
 {
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
 
@@ -259,7 +259,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 		fseek(OpenedNavFile, fileHeader.tileCacheOffsets[i], SEEK_SET);
 
 		NavMesh NewNavMesh;
-		NavMeshIndex NewIndex = static_cast<NavMeshIndex>(i);
+		EAINavMeshIndex NewIndex = static_cast<EAINavMeshIndex>(i);
 
 		// More nav meshes than we were expecting.
 		if (!IsValidNavMeshIndex(NewIndex))
@@ -426,7 +426,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 	return EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS;
 }
 
-NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags)
+NavHint* AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags)
 {
 	if (!IsValidNavMeshIndex(TargetNavMesh)) { return nullptr; }
 
@@ -443,7 +443,7 @@ NavHint* AIMESH_AddHintToNavmesh(NavMeshIndex TargetNavMesh, Vector Location, un
 	return &(*prev(FoundNavMesh->MeshHints.end()));
 }
 
-NavOffMeshConnection* AIMESH_AddOffMeshConnection(NavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, unsigned char area, unsigned int flags, bool bBiDirectional)
+NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, unsigned char area, unsigned int flags, bool bBiDirectional)
 {
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
 
@@ -521,7 +521,7 @@ bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
 	}
 }
 
-NavTempObstacle* AIMESH_AddTemporaryObstacle(NavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, unsigned char Area)
+NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, unsigned char Area)
 {
 	NavMesh* ParentNavMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
 
@@ -575,7 +575,7 @@ bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove)
 	return bSuccessful;
 }
 
-Vector AIMESH_ProjectPointToNavmesh(NavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile, const Vector Extents)
+Vector AIMESH_ProjectPointToNavmesh(EAINavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile, const Vector Extents)
 {
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
 
@@ -685,7 +685,7 @@ Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const V
 	return ReturnValue;
 }
 
-Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter)
+Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter)
 {
 	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile.MeshIndex);
 
@@ -737,7 +737,7 @@ Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile,
 	return Result;
 }
 
-Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, NavMovementFlag FlagFilter = NAV_FLAG_NONE)
+Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = NAV_FLAG_NONE)
 {
 	int maxIterations = 0;
 	float MinRadiusSq = sqrf(MinRadius);
@@ -755,6 +755,74 @@ Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, 
 	}
 
 	return ZERO_VECTOR;
+}
+
+void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTime)
+{
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!FoundMesh) { return; }
+
+	int NumDrawn = 0;
+
+	for (int i = 0; i < FoundMesh->tileCache->getOffMeshCount(); i++)
+	{
+		const dtOffMeshConnection* con = FoundMesh->tileCache->getOffMeshConnection(i);
+
+		if (con->state == DT_OFFMESH_EMPTY || con->state == DT_OFFMESH_REMOVING) { continue; }
+
+		Vector StartLine = Vector(con->pos[0], -con->pos[2], con->pos[1]);
+		Vector EndLine = Vector(con->pos[3], -con->pos[5], con->pos[4]);
+
+		unsigned char r, g, b;
+
+		GetDebugColorForFlag(static_cast<EAINavMovementFlag>(con->flags), r, g, b);
+
+		UTIL_DrawLine(INDEXENT(1), StartLine, EndLine, DrawTime, r, g, b);
+
+		NumDrawn++;
+
+		if (NumDrawn > 30)
+		{
+			break;
+		}
+	}
+}
+
+void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTime)
+{
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!FoundMesh) { return; }
+
+		int NumObstacles = FoundMesh->tileCache->getObstacleCount();
+
+		for (int i = 0; i < NumObstacles; i++)
+		{
+			const dtTileCacheObstacle* ObstacleRef = FoundMesh->tileCache->getObstacle(i);
+
+			// TODO: Add support for AABB and orientated box types
+			if (!ObstacleRef || ObstacleRef->state != DT_OBSTACLE_PROCESSED || ObstacleRef->type != ObstacleType::DT_OBSTACLE_CYLINDER) { continue; }
+
+			unsigned char r, g, b;
+
+			const EAINavArea NavArea = static_cast<EAINavArea>(ObstacleRef->cylinder.area);
+
+			GetDebugColorForArea(NavArea, r, g, b);
+
+			float Radius = ObstacleRef->cylinder.radius;
+			float Height = ObstacleRef->cylinder.height;
+
+			// The location of obstacles in Recast are at the bottom of the shape, not the centre
+			Vector Centre = Vector(ObstacleRef->cylinder.pos[0], -ObstacleRef->cylinder.pos[2], ObstacleRef->cylinder.pos[1] + (Height * 0.5f));
+
+			if (vDist2DSq(INDEXENT(1)->v.origin, Centre) > sqrf(UTIL_MetresToGoldSrcUnits(10.0f))) { continue; }
+
+			Vector bMin = Centre - Vector(Radius, Radius, Height * 0.5f);
+			Vector bMax = Centre + Vector(Radius, Radius, (Height * 0.5f));
+
+			UTIL_DrawBox(INDEXENT(1), bMin, bMax, DrawTime, r, g, b);
+		}
 }
 
 void NavMesh::RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionToRemove)
