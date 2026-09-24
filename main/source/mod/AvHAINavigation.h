@@ -246,14 +246,13 @@ Vector UTIL_ProjectPointToNavmesh(const Vector Location, const Vector Extents, c
 	Point is on navmesh:
 	Returns true if it was able to project the point to the navmesh (see UTIL_ProjectPointToNavmesh())
 */
-bool UTIL_PointIsOnNavmesh(const Vector Location, const nav_profile& NavProfile);
-bool UTIL_PointIsOnNavmesh(const nav_profile& NavProfile, const Vector Location, const Vector SearchExtents);
+bool UTIL_PointIsOnNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector SearchExtents = DefaultReachableExtents);
 
 // Sets the BotNavInfo so the bot can track if it's on the ground, in the air, climbing a wall, on a ladder etc.
 void UTIL_UpdateBotMovementStatus(AvHAIPlayer* pBot);
 
 // Returns true if a path could be found between From and To location. Cheaper than full path finding, only a rough check to confirm it can be done.
-bool UTIL_PointIsReachable(const nav_profile& NavProfile, const Vector FromLocation, const Vector ToLocation, const float MaxAcceptableDistance);
+bool UTIL_PointIsReachable(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, const float MaxAcceptableDistance);
 
 // If the bot has a path, it will work out how far along the path it can see and return the furthest point. Used so that the bot looks ahead along the path rather than just at its next path point
 Vector UTIL_GetFurthestVisiblePointOnPath(const AvHAIPlayer* pBot);

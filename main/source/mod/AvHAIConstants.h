@@ -73,7 +73,7 @@ enum class EAIWeaponId : uint32
 };
 
 // Hives can either be unbuilt ("ghost" hive), in progress or fully built (active)
-enum class EAIHiveStatusType
+enum class EAIHiveStatus
 {
 	HIVE_STATUS_UNBUILT = 0,
 	HIVE_STATUS_BUILDING = 1,
@@ -120,15 +120,17 @@ template<class T> inline T EnumGetCombinedFlags(T a, T b) { return static_cast<T
 
 enum class EAIStructureStatus : uint16
 {
-	STRUCTURE_STATUS_NONE = 0,					// No filters, all buildings will be returned
-	STRUCTURE_STATUS_COMPLETED = 1,				// Structure is fully built
-	STRUCTURE_STATUS_ELECTRIFIED = 1 << 1,
-	STRUCTURE_STATUS_RECYCLING = 1 << 2,
-	STRUCTURE_STATUS_PARASITED = 1 << 3,
-	STRUCTURE_STATUS_UNDERATTACK = 1 << 4,
-	STRUCTURE_STATUS_RESEARCHING = 1 << 5,
-	STRUCTURE_STATUS_DAMAGED = 1 << 6,
-	STRUCTURE_STATUS_DISABLED = 1 << 7,		// For marine turrets when there's no TF
+	STRUCTURE_STATUS_NONE = 0,				// No filters, all buildings will be returned
+	STRUCTURE_STATUS_GHOST = 1 << 0,		// For marine structure, this is their "ghost" form before anyone has started building it
+	STRUCTURE_STATUS_PARTIAL = 1 << 1,		// Partially finished, but not yet completed
+	STRUCTURE_STATUS_COMPLETED = 1 << 2,	// Structure is fully built
+	STRUCTURE_STATUS_ELECTRIFIED = 1 << 3,
+	STRUCTURE_STATUS_RECYCLING = 1 << 4,
+	STRUCTURE_STATUS_PARASITED = 1 << 5,
+	STRUCTURE_STATUS_UNDERATTACK = 1 << 6,
+	STRUCTURE_STATUS_RESEARCHING = 1 << 7,
+	STRUCTURE_STATUS_DAMAGED = 1 << 8,		// When it's completed, but at less than 100% health
+	STRUCTURE_STATUS_DISABLED = 1 << 9,		// For marine turrets when there's no TF
 
 	STRUCTURE_STATUS_ALL = -1
 };
@@ -280,29 +282,30 @@ enum class EAICombatStrategy
 // Data structure used to track resource nodes in the map
 struct AvHAIResourceNode
 {
-	AvHFuncResource* ResourceEntity = nullptr;						// The func_resource edict reference
-	edict_t* ResourceEdict = nullptr;
+	AvHFuncResource* ResourceNodeEntity = nullptr;						// The func_resource edict reference
+	edict_t* Edict = nullptr;
 	Vector Location = g_vecZero;									// origin of the func_resource edict (not the tower itself)
-	bool bIsOccupied = false;										// True if there is any resource tower on it
 	AvHTeamNumber OwningTeam = TEAM_IND;							// The team that has currently capped this node (TEAM_IND if none)
-	edict_t* ActiveTowerEntity = nullptr;							// Reference to the resource tower edict (if capped)
+	const AvHAIBuildableStructure* ActiveTowerEntity = nullptr;							// Reference to the resource tower edict (if capped)
 	bool bIsBaseNode = false;										// Is this a node in the marine base or active alien hive?
 	edict_t* ParentHive = nullptr;
-	unsigned int TeamAReachabilityFlags = 0;		// Who on team A can reach this node?
-	unsigned int TeamBReachabilityFlags = 0;		// Who on team B can reach this node?
+	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team A can reach this node?
+	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team B can reach this node?
 	bool bReachabilityMarkedDirty = false;							// Reachability needs to be recalculated
 	float NextReachabilityRefreshTime = 0.0f;
+
+	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
 };
 
 // Data structure to hold information about each hive in the map
 struct AvHAIHiveDefinition
 {
 	AvHHive* HiveEntity = nullptr;					// Hive entity reference
-	edict_t* HiveEdict = nullptr;					// Hive edict reference
+	edict_t* Edict = nullptr;					// Hive edict reference
 	Vector Location = g_vecZero;					// Origin of the hive
 	Vector FloorLocation = g_vecZero;				// Some hives are suspended in the air, this is the floor location directly beneath it
-	EAIHiveStatusType Status = EAIHiveStatusType::HIVE_STATUS_UNBUILT;	// Can be unbuilt, in progress, or fully built
-	AvHMessageID TechStatus = MESSAGE_NULL;			// What tech (if any) is assigned to this hive right now
+	EAIHiveStatus Status = EAIHiveStatus::HIVE_STATUS_UNBUILT;	// Can be unbuilt, in progress, or fully built
+	EAIHiveTechStatus TechStatus = EAIHiveTechStatus::HIVE_TECH_NONE;			// What tech (if any) is assigned to this hive right now
 	bool bIsUnderAttack = false;					// Is the hive currently under attack? Becomes false if not taken damage for more than 10 seconds
 	float HealthPercent = 0.0f;						// If the hive is built and active, what its health currently is
 	AvHAIResourceNode* HiveResNodeRef = nullptr;	// Which resource node (indexes into ResourceNodes array) belongs to this hive?
@@ -314,7 +317,7 @@ struct AvHAIHiveDefinition
 	char HiveName[64] = {'\0'};
 };
 
-struct DeployableSearchFilter
+struct StructureSearchFilter
 {
 	EAIStructureType DeployableTypes = EAIStructureType::ALL_STRUCTURES;
 	EAIStructureStatus IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
@@ -339,6 +342,16 @@ struct DroppedItemSearchFilter
 	bool bConsiderPhaseDistance = false;
 	AvHTeamNumber DeployableTeam = TEAM_IND;
 	AvHTeamNumber ReachabilityTeam = TEAM_IND;
+};
+
+struct ResourceNodeSearchFilter
+{
+	int32 OwningTeam = -1;
+	AvHTeamNumber ReachabilityTeam = TEAM_IND;
+	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+	float MinSearchRadius = 0.0f;
+	float MaxSearchRadius = 0.0f;
+	bool bConsiderPhaseDistance = false;
 };
 
 // Pending message a bot wants to say. Allows for a delay in sending a message to simulate typing, or prevent too many messages on the same frame
@@ -384,10 +397,34 @@ struct AvHAIBuildableStructure
 	EAIStructurePurpose Purpose = EAIStructurePurpose::STRUCTURE_PURPOSE_NONE;
 	bool bReachabilityMarkedDirty = false; // If true, reachability flags will be recalculated for this structure
 	bool bPlacedByHuman = true; // This structure was placed by a human: AI commander will not recycle these unless it absolutely makes sense to
+	AvHTeamNumber Team = TEAM_IND;
 
 	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
-	bool IsCompleted() const { return (StructureStatusFlags & EAIStructureStatus::STRUCTURE_STATUS_COMPLETED) != EAIStructureStatus::STRUCTURE_STATUS_NONE; }
-	bool IsIdle() const { return (StructureStatusFlags & EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING) == EAIStructureStatus::STRUCTURE_STATUS_NONE; }
+
+	bool IsGhost() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_GHOST); }
+
+	bool IsPartiallyBuilt() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARTIAL); }
+
+	bool IsParasited() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARASITED); }
+
+	bool IsCompleted() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED); }
+
+	bool IsUnderAttack() const
+	{
+		return !EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING)
+			&& EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_UNDERATTACK);
+	}
+
+	bool IsElectrified() const
+	{
+		return !EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING)
+			&& EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_ELECTRIFIED);
+	}
+
+	bool IsIdle() const
+	{
+		return !EnumHasAnyFlags(StructureStatusFlags, (EAIStructureStatus::STRUCTURE_STATUS_RECYCLING | EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING));
+	}
 
 };
 

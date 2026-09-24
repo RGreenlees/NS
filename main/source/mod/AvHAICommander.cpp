@@ -291,7 +291,7 @@ void AICOMM_IssueOrderForAssignedJob(AvHAIPlayer* pBot, ai_commander_order* Orde
 		{
 			Vector OrderLocation = Hive->FloorLocation;
 
-			DeployableSearchFilter StructureFilter;
+			StructureSearchFilter StructureFilter;
 			StructureFilter.DeployableTeam = pBot->Player->GetTeam();
 			StructureFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY;
 			StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -627,7 +627,7 @@ void AICOMM_UpdatePlayerOrders(AvHAIPlayer* pBot)
 
 	if (AICOMM_ShouldCommanderPrioritiseNodes(pBot) && AICOMM_GetNumPlayersAssignedToOrderType(pBot, ORDERPURPOSE_SECURE_RESNODE) < MinResGatherers)
 	{
-		DeployableSearchFilter ResNodeFilter;
+		StructureSearchFilter ResNodeFilter;
 		ResNodeFilter.ReachabilityTeam = pBot->Player->GetTeam();
 		ResNodeFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
 
@@ -905,7 +905,7 @@ bool AICOMM_IssueSecureHiveOrder(AvHAIPlayer* pBot, edict_t* Recipient, const Av
 
 	if (bPhaseGatesAvailable)
 	{
-		DeployableSearchFilter PGFilter;
+		StructureSearchFilter PGFilter;
 		PGFilter.DeployableTeam = CommanderTeam;
 		PGFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
 		PGFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -922,7 +922,7 @@ bool AICOMM_IssueSecureHiveOrder(AvHAIPlayer* pBot, edict_t* Recipient, const Av
 		}
 	}
 
-	DeployableSearchFilter TFFilter;
+	StructureSearchFilter TFFilter;
 	TFFilter.DeployableTeam = CommanderTeam;
 	TFFilter.DeployableTypes = STRUCTURE_MARINE_TURRETFACTORY;
 	TFFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -938,7 +938,7 @@ bool AICOMM_IssueSecureHiveOrder(AvHAIPlayer* pBot, edict_t* Recipient, const Av
 		return AICOMM_IssueMovementOrder(pBot, Recipient, OrderLocation);
 	}
 
-	DeployableSearchFilter TurretFilter;
+	StructureSearchFilter TurretFilter;
 	TurretFilter.DeployableTeam = CommanderTeam;
 	TurretFilter.DeployableTypes = STRUCTURE_MARINE_TURRET;
 	TurretFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1174,7 +1174,7 @@ Vector AICOMM_GetNextScanLocation(AvHAIPlayer* pBot)
 
 	AvHClassType EnemyType = AIMGR_GetTeamType(EnemyTeam);
 
-	DeployableSearchFilter ObsFilter;
+	StructureSearchFilter ObsFilter;
 	ObsFilter.DeployableTeam = BotTeam;
 	ObsFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 	ObsFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -1229,7 +1229,7 @@ Vector AICOMM_GetNextScanLocation(AvHAIPlayer* pBot)
 				}
 			}
 
-			DeployableSearchFilter EnemyStuffFilter;
+			StructureSearchFilter EnemyStuffFilter;
 			EnemyStuffFilter.DeployableTeam = EnemyTeam;
 			EnemyStuffFilter.MaxSearchRadius = BALANCE_VAR(kSiegeTurretRange);
 
@@ -1410,7 +1410,7 @@ bool AICOMM_CheckForNextBuildAction(AvHAIPlayer* pBot)
 
 	if (Resources > 100)
 	{
-		DeployableSearchFilter StructureFilter;
+		StructureSearchFilter StructureFilter;
 
 		StructureFilter.DeployableTypes = STRUCTURE_MARINE_RESTOWER;
 		StructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1438,7 +1438,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 	// First thing: if our base is damaged and there's nobody able to weld, drop a welder so we don't let the base die
 	bool bBaseIsDamaged = false;
 
-	DeployableSearchFilter DamagedBaseStructures;
+	StructureSearchFilter DamagedBaseStructures;
 	DamagedBaseStructures.DeployableTypes = (STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL);
 	DamagedBaseStructures.DeployableTeam = CommanderTeam;
 	DamagedBaseStructures.ReachabilityTeam = CommanderTeam;
@@ -1472,7 +1472,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 		if (!NearestWelder.IsValid() && !bPlayerHasWelder)
 		{
-			DeployableSearchFilter ArmouryFilter;
+			StructureSearchFilter ArmouryFilter;
 			ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 			ArmouryFilter.DeployableTeam = CommanderTeam;
 			ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1543,7 +1543,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (NumTeamWelders < NumDesiredWelders)
 	{
-		DeployableSearchFilter ArmouryFilter;
+		StructureSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 		ArmouryFilter.DeployableTeam = CommanderTeam;
 		ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1574,7 +1574,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (NumShottysInPlay < NumDesiredShotguns)
 	{
-		DeployableSearchFilter ArmouryFilter;
+		StructureSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 		ArmouryFilter.DeployableTeam = CommanderTeam;
 		ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1595,7 +1595,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 	bool bNeedsMines = false;
 	int DesiredMines = 0;
 
-	DeployableSearchFilter MineFilter;
+	StructureSearchFilter MineFilter;
 	MineFilter.DeployableTypes = STRUCTURE_MARINE_DEPLOYEDMINE;
 
 	int NumDeployedMines = AITAC_GetNumDeployablesNearLocation(ZERO_VECTOR, &MineFilter);
@@ -1604,7 +1604,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 	{
 		int UnminedStructures = 0;
 
-		DeployableSearchFilter MineStructures;
+		StructureSearchFilter MineStructures;
 		MineStructures.DeployableTeam = CommanderTeam;
 		MineStructures.DeployableTypes = (STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_INFANTRYPORTAL);
 		MineStructures.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1635,7 +1635,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (NumMinesInPlay < DesiredMines)
 	{
-		DeployableSearchFilter ArmouryFilter;
+		StructureSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 		ArmouryFilter.DeployableTeam = CommanderTeam;
 		ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1654,7 +1654,7 @@ bool AICOMM_CheckForNextSupplyAction(AvHAIPlayer* pBot)
 
 	if (!AITAC_ResearchIsComplete(CommanderTeam, TECH_RESEARCH_HEAVYARMOR)) { return false; }
 	
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = STRUCTURE_MARINE_ADVARMOURY;
 	StructureFilter.DeployableTeam = CommanderTeam;
 	StructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1757,7 +1757,7 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot)
 
 		if (Hive->Status != HIVE_STATUS_UNBUILT) { continue; }
 
-		DeployableSearchFilter TFFilter;
+		StructureSearchFilter TFFilter;
 		TFFilter.DeployableTeam = pBot->Player->GetTeam();
 		TFFilter.DeployableTypes = STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY;
 		TFFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1802,7 +1802,7 @@ bool AICOMM_CheckForNextResearchAction(AvHAIPlayer* pBot)
 	}
 
 
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTeam = CommanderTeam;
 	StructureFilter.ReachabilityTeam = CommanderTeam;
 	StructureFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
@@ -1963,7 +1963,7 @@ const AvHAIHiveDefinition* AICOMM_GetHiveSiegeOpportunityNearestLocation(AvHAIPl
 
 		if (Hive->Status == HIVE_STATUS_UNBUILT) { continue; }
 
-		DeployableSearchFilter StructureFilter;
+		StructureSearchFilter StructureFilter;
 		StructureFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
 		StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
 		StructureFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2291,7 +2291,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 				break;
 		}
 
-		DeployableSearchFilter ArmouryFilter;
+		StructureSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTeam = CommanderTeam;
 		ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 		ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2379,7 +2379,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 			return false;
 		}
 
-		DeployableSearchFilter PrototypeLabFilter;
+		StructureSearchFilter PrototypeLabFilter;
 		PrototypeLabFilter.DeployableTeam = CommanderTeam;
 		PrototypeLabFilter.DeployableTypes = STRUCTURE_MARINE_PROTOTYPELAB;
 		PrototypeLabFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2452,7 +2452,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 		AvHAIDeployableItemType ItemToDrop = (NextRequest->RequestType == BUILD_HMG) ? DEPLOYABLE_ITEM_HMG : DEPLOYABLE_ITEM_GRENADELAUNCHER;
 		float Cost = (NextRequest->RequestType == BUILD_HMG) ? BALANCE_VAR(kHMGCost) : BALANCE_VAR(kGrenadeLauncherCost);
 
-		DeployableSearchFilter ArmouryFilter;
+		StructureSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTeam = CommanderTeam;
 		ArmouryFilter.DeployableTypes = STRUCTURE_MARINE_ADVARMOURY;
 		ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2534,7 +2534,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (NextRequest->RequestType == BUILD_SCAN)
 	{
-		DeployableSearchFilter ObsFilter;
+		StructureSearchFilter ObsFilter;
 		ObsFilter.DeployableTeam = CommanderTeam;
 		ObsFilter.DeployableTypes = STRUCTURE_MARINE_OBSERVATORY;
 		ObsFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2623,7 +2623,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (NextRequest->RequestType == BUILD_OBSERVATORY || NextRequest->RequestType == BUILD_ARMSLAB)
 	{
-		DeployableSearchFilter ArmouryFilter;
+		StructureSearchFilter ArmouryFilter;
 		ArmouryFilter.DeployableTeam = CommanderTeam;
 		ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
 		ArmouryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2643,7 +2643,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 	if (NextRequest->RequestType == BUILD_PROTOTYPE_LAB)
 	{
-		DeployableSearchFilter RequiredFilter;
+		StructureSearchFilter RequiredFilter;
 		RequiredFilter.DeployableTeam = CommanderTeam;
 		RequiredFilter.DeployableTypes = STRUCTURE_MARINE_ADVARMOURY;
 		RequiredFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2831,7 +2831,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 	{
 		if (NextRequest->RequestType == BUILD_INFANTRYPORTAL)
 		{
-			DeployableSearchFilter CCFilter;
+			StructureSearchFilter CCFilter;
 			CCFilter.DeployableTeam = CommanderTeam;
 			CCFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
 			CCFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2852,7 +2852,7 @@ bool AICOMM_CheckForNextSupportAction(AvHAIPlayer* pBot)
 
 		if (NextRequest->RequestType == BUILD_SIEGE || NextRequest->RequestType == BUILD_TURRET)
 		{
-			DeployableSearchFilter TFFilter;
+			StructureSearchFilter TFFilter;
 			TFFilter.DeployableTeam = CommanderTeam;
 			TFFilter.DeployableTypes = (NextRequest->RequestType == BUILD_SIEGE) ? STRUCTURE_MARINE_ADVTURRETFACTORY : STRUCTURE_MARINE_TURRETFACTORY;
 			TFFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2986,7 +2986,7 @@ void AICOMM_PopulateBaseList(AvHAIPlayer* pBot)
 
 	Vector BaseLocation = ActiveCommChair->v.origin;
 
-	DeployableSearchFilter CommChairsFilter;
+	StructureSearchFilter CommChairsFilter;
 	CommChairsFilter.DeployableTeam = BotTeam;
 	CommChairsFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
 	CommChairsFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -2998,7 +2998,7 @@ void AICOMM_PopulateBaseList(AvHAIPlayer* pBot)
 	// Basically, find all comm chairs in the map, and whichever one has the most infantry portals around it, that's the base
 	for (auto it = AllCommChairs.begin(); it != AllCommChairs.end(); it++)
 	{
-		DeployableSearchFilter InfPortalFilter;
+		StructureSearchFilter InfPortalFilter;
 		InfPortalFilter.DeployableTeam = BotTeam;
 		InfPortalFilter.DeployableTypes = STRUCTURE_MARINE_INFANTRYPORTAL;
 		InfPortalFilter.MaxSearchRadius = BALANCE_VAR(kCommandStationBuildDistance);
@@ -3025,7 +3025,7 @@ void AICOMM_PopulateBaseList(AvHAIPlayer* pBot)
 
 	// Get all structures and start adding them to our base
 
-	DeployableSearchFilter AllStructuresFilter;
+	StructureSearchFilter AllStructuresFilter;
 	AllStructuresFilter.DeployableTeam = BotTeam;
 	AllStructuresFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 	AllStructuresFilter.DeployableTypes = (SEARCH_ALL_STRUCTURES & ~(STRUCTURE_MARINE_RESTOWER)); // Don't include resource towers in this list
@@ -3131,7 +3131,7 @@ void AICOMM_PopulateBaseList(AvHAIPlayer* pBot)
 				}
 				else
 				{
-					DeployableSearchFilter EnemyStuffFilter;
+					StructureSearchFilter EnemyStuffFilter;
 					EnemyStuffFilter.DeployableTeam = EnemyTeam;
 					EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 					EnemyStuffFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
@@ -3242,7 +3242,7 @@ void AICOMM_PopulateBaseList(AvHAIPlayer* pBot)
 					}
 					else
 					{
-						DeployableSearchFilter EnemyStuffFilter;
+						StructureSearchFilter EnemyStuffFilter;
 						EnemyStuffFilter.DeployableTeam = EnemyTeam;
 						EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 						EnemyStuffFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
@@ -3281,7 +3281,7 @@ void AICOMM_CommanderThink(AvHAIPlayer* pBot)
 			return;
 		}
 
-		DeployableSearchFilter StructureFilter;
+		StructureSearchFilter StructureFilter;
 		StructureFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 		StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
 		StructureFilter.DeployableTeam = pBot->Player->GetTeam();
@@ -3406,7 +3406,7 @@ void AICOMM_UpdateMainBaseStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base)
 	// In that case, if we've not yet established the base and the enemy have already started building fortifications there, then abandon the base.
 	if (!Base->bIsBaseEstablished && vDist2DSq(Base->BaseLocation, AITAC_GetCommChairLocation(pBot->Player->GetTeam())) > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
 	{
-		DeployableSearchFilter EnemyStuffFilter;
+		StructureSearchFilter EnemyStuffFilter;
 		EnemyStuffFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 		EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 		EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -3448,7 +3448,7 @@ void AICOMM_UpdateGuardpostStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base)
 	// If we've not started building this base and the enemy are already securing this area then don't start building it out
 	if (!Base->bBaseInitialised)
 	{
-		DeployableSearchFilter EnemyStuffFilter;
+		StructureSearchFilter EnemyStuffFilter;
 		EnemyStuffFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 		EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 		EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -3505,7 +3505,7 @@ void AICOMM_UpdateOutpostStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base)
 	// If we've not started building this base and the enemy are already securing this area then don't start building it out
 	if (!Base->bBaseInitialised)
 	{
-		DeployableSearchFilter EnemyStuffFilter;
+		StructureSearchFilter EnemyStuffFilter;
 		EnemyStuffFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 		EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 		EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -3548,7 +3548,7 @@ void AICOMM_UpdateSiegeBaseStatus(AvHAIPlayer* pBot, AvHAIMarineBase* Base)
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
 
-	DeployableSearchFilter EnemyStuffFilter;
+	StructureSearchFilter EnemyStuffFilter;
 	EnemyStuffFilter.DeployableTeam = EnemyTeam;
 	EnemyStuffFilter.MaxSearchRadius = BALANCE_VAR(kSiegeTurretRange);
 
@@ -3752,7 +3752,7 @@ void AICOMM_DeployBases(AvHAIPlayer* pBot)
 
 			if (!bHasOutpost)
 			{
-				DeployableSearchFilter EnemyStuffFilter;
+				StructureSearchFilter EnemyStuffFilter;
 				EnemyStuffFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 				EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 				EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -3806,7 +3806,7 @@ void AICOMM_DeployBases(AvHAIPlayer* pBot)
 						// If this player isn't right inside the hive and hasn't been spotted by an enemy, then they're eligible to start building a siege base
 						if (!(ThisPlayer->pev->iuser4 & MASK_VIS_SIGHTED))
 						{
-							DeployableSearchFilter EnemyStuffFilter;
+							StructureSearchFilter EnemyStuffFilter;
 							EnemyStuffFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 							EnemyStuffFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 							EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -3931,7 +3931,7 @@ bool AICOMM_ShouldCommanderLeaveChair(AvHAIPlayer* pBot)
 
 	if (NumAliveMarinesInBase > 0) { return false; }
 
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 	StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
 	StructureFilter.DeployableTeam = pBot->Player->GetTeam();
@@ -3990,7 +3990,7 @@ const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPl
 
 		Vector SecureLocation = Hive->FloorLocation;
 
-		DeployableSearchFilter StructureFilter;
+		StructureSearchFilter StructureFilter;
 		StructureFilter.DeployableTeam = CommanderTeam;
 		StructureFilter.ReachabilityTeam = CommanderTeam;
 		StructureFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
@@ -4014,7 +4014,7 @@ const AvHAIHiveDefinition* AICOMM_GetEmptyHiveOpportunityNearestLocation(AvHAIPl
 
 		if (NumEnemiesNearby > 0) { continue; }
 
-		DeployableSearchFilter EnemyStuff;
+		StructureSearchFilter EnemyStuff;
 		EnemyStuff.DeployableTeam = EnemyTeam;
 		EnemyStuff.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 		EnemyStuff.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -4055,7 +4055,7 @@ bool AICOMM_IsHiveFullySecured(AvHAIPlayer* CommanderBot, const AvHAIHiveDefinit
 	bool bTurretFactoryElectrified = false;
 	int NumTurrets = 0;
 
-	DeployableSearchFilter SearchFilter;
+	StructureSearchFilter SearchFilter;
 	SearchFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
 	SearchFilter.DeployableTeam = CommanderTeam;
 	SearchFilter.ReachabilityTeam = CommanderTeam;
@@ -4199,7 +4199,7 @@ bool AICOMM_ShouldBeacon(AvHAIPlayer* pBot)
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
-	DeployableSearchFilter ObservatoryFilter;
+	StructureSearchFilter ObservatoryFilter;
 	ObservatoryFilter.DeployableTypes = STRUCTURE_MARINE_OBSERVATORY;
 	ObservatoryFilter.DeployableTeam = BotTeam;
 	ObservatoryFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -4371,7 +4371,7 @@ bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
 		}
 
 		// The enemy beat us to it and has started setting up shop in that location
-		DeployableSearchFilter EnemyStuffFilter;
+		StructureSearchFilter EnemyStuffFilter;
 		EnemyStuffFilter.DeployableTeam = EnemyTeam;
 		EnemyStuffFilter.DeployableTypes = (STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY);
 		EnemyStuffFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -4396,7 +4396,7 @@ bool AICOMM_ShouldCommanderRelocate(AvHAIPlayer* pBot)
 	{
 		if (CurrentMainBase->NumBuilders > 0) { return false; }
 
-		DeployableSearchFilter ObsFilter;
+		StructureSearchFilter ObsFilter;
 		ObsFilter.DeployableTeam = Team;
 		ObsFilter.DeployableTypes = STRUCTURE_MARINE_OBSERVATORY;
 		ObsFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;

@@ -1561,7 +1561,7 @@ bool AIMGR_IsMatchPracticallyOver()
 	}
 	else
 	{
-		DeployableSearchFilter ChairFilter;
+		StructureSearchFilter ChairFilter;
 		ChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
 		ChairFilter.DeployableTeam = TeamANumber;
 		ChairFilter.ReachabilityTeam = TeamANumber;
@@ -1576,7 +1576,7 @@ bool AIMGR_IsMatchPracticallyOver()
 	}
 	else
 	{
-		DeployableSearchFilter ChairFilter;
+		StructureSearchFilter ChairFilter;
 		ChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
 		ChairFilter.DeployableTeam = TeamBNumber;
 		ChairFilter.ReachabilityTeam = TeamBNumber;

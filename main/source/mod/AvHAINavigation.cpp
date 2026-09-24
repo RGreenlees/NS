@@ -1869,11 +1869,15 @@ dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle,
 	return DT_SUCCESS;
 }
 
-bool UTIL_PointIsReachable(const nav_profile &NavProfile, const Vector FromLocation, const Vector ToLocation, const float MaxAcceptableDistance)
+bool UTIL_PointIsReachable(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, const float MaxAcceptableDistance)
 {
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
+	if (!NavProfile) { return false; }
+
+	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return false; }
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
 	if (!m_navQuery || vIsZero(FromLocation) || vIsZero(ToLocation))
 	{
@@ -1883,7 +1887,6 @@ bool UTIL_PointIsReachable(const nav_profile &NavProfile, const Vector FromLocat
 	float pStartPos[3] = { FromLocation.x, FromLocation.z, -FromLocation.y };
 	float pEndPos[3] = { ToLocation.x, ToLocation.z, -ToLocation.y };
 
-	dtStatus status;
 	dtPolyRef StartPoly;
 	float StartNearest[3];
 	dtPolyRef EndPoly;
@@ -1894,20 +1897,20 @@ bool UTIL_PointIsReachable(const nav_profile &NavProfile, const Vector FromLocat
 	float searchExtents[3] = { MaxAcceptableDistance, 50.0f, MaxAcceptableDistance };
 
 	// find the start polygon
-	status = m_navQuery->findNearestPoly(pStartPos, searchExtents, m_navFilter, &StartPoly, StartNearest);
+	dtStatus status = FoundMesh->navQuery->findNearestPoly(pStartPos, searchExtents, m_navFilter, &StartPoly, StartNearest);
 	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	// find the end polygon
-	status = m_navQuery->findNearestPoly(pEndPos, searchExtents, m_navFilter, &EndPoly, EndNearest);
+	status = FoundMesh->navQuery->findNearestPoly(pEndPos, searchExtents, m_navFilter, &EndPoly, EndNearest);
 	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
 	{
 		return false; // couldn't find a polygon
 	}
 
-	status = m_navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
+	status = FoundMesh->navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
 
 	if (nPathCount == 0)
 	{
@@ -1919,7 +1922,7 @@ bool UTIL_PointIsReachable(const nav_profile &NavProfile, const Vector FromLocat
 		float epos[3];
 		dtVcopy(epos, EndNearest);
 
-		m_navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
+		FoundMesh->navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
 
 		return (dtVdistSqr(EndNearest, epos) <= sqrf(MaxAcceptableDistance));
 
@@ -3306,7 +3309,7 @@ void StructureBlockedMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vect
 
 	pBot->desiredMovementDir = vForward;
 
-	DeployableSearchFilter BlockingFilter;
+	StructureSearchFilter BlockingFilter;
 	BlockingFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 	BlockingFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(3.0f);
 
@@ -4388,7 +4391,7 @@ void LiftMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 
 void PhaseGateMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 {
-	DeployableSearchFilter PGFilter;
+	StructureSearchFilter PGFilter;
 	PGFilter.DeployableTeam = pBot->Player->GetTeam();
 	PGFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
 	PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
@@ -4558,7 +4561,7 @@ bool IsBotOffPhaseGateNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector Mov
 {
 	if (vDist2DSq(pBot->Edict->v.origin, MoveStart) > sqrf(UTIL_MetresToGoldSrcUnits(2.0f)) && vDist2DSq(pBot->Edict->v.origin, MoveEnd) > sqrf(UTIL_MetresToGoldSrcUnits(2.0f))) { return true; }
 
-	DeployableSearchFilter PGFilter;
+	StructureSearchFilter PGFilter;
 	PGFilter.DeployableTeam = pBot->Player->GetTeam();
 	PGFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 	PGFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -5063,14 +5066,14 @@ bool UTIL_PointIsDirectlyReachable(const AvHAIPlayer* pBot, const Vector targetP
 	int pathCount = 0;
 
 
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, pReachableExtents, m_navFilter, &StartPoly, StartNearest);
+	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_navFilter, &StartPoly, StartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly))
 	{
 		return false;
 	}
 
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, pReachableExtents, m_navFilter, &EndPoly, EndNearest);
+	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_navFilter, &EndPoly, EndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly))
 	{
@@ -5137,14 +5140,14 @@ bool UTIL_PointIsDirectlyReachable(const AvHAIPlayer* pBot, const Vector start, 
 	dtPolyRef PolyPath[MAX_PATH_POLY];
 	int pathCount = 0;
 
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, pReachableExtents, m_navFilter, &StartPoly, StartNearest);
+	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_navFilter, &StartPoly, StartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly))
 	{
 		return false;
 	}
 
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, pReachableExtents, m_navFilter, &EndPoly, EndNearest);
+	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_navFilter, &EndPoly, EndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly))
 	{
@@ -5230,14 +5233,14 @@ bool UTIL_PointIsDirectlyReachable(const nav_profile &NavProfile, const Vector s
 	dtPolyRef PolyPath[MAX_PATH_POLY];
 	int pathCount = 0;
 
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, pReachableExtents, m_navFilter, &StartPoly, StartNearest);
+	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_navFilter, &StartPoly, StartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly))
 	{
 		return false;
 	}
 
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, pReachableExtents, m_navFilter, &EndPoly, EndNearest);
+	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_navFilter, &EndPoly, EndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly))
 	{
@@ -5459,14 +5462,14 @@ bool UTIL_PointIsDirectlyReachable(const Vector start, const Vector target, cons
 	int pathCount = 0;
 
 
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, pReachableExtents, m_Filter, &StartPoly, StartNearest);
+	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_Filter, &StartPoly, StartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly))
 	{
 		return false;
 	}
 
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, pReachableExtents, m_Filter, &EndPoly, EndNearest);
+	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_Filter, &EndPoly, EndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly))
 	{
@@ -5531,14 +5534,14 @@ float UTIL_PointIsDirectlyReachable_DEBUG(const Vector start, const Vector targe
 	int pathCount = 0;
 
 
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, pReachableExtents, m_Filter, &StartPoly, StartNearest);
+	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_Filter, &StartPoly, StartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly))
 	{
 		return 1.1f;
 	}
 
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, pReachableExtents, m_Filter, &EndPoly, EndNearest);
+	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_Filter, &EndPoly, EndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly))
 	{
@@ -5670,7 +5673,7 @@ unsigned char UTIL_GetNavAreaAtLocation(const nav_profile &NavProfile, const Vec
 	dtPolyRef FoundPoly;
 	float NavNearest[3];
 
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, pReachableExtents, m_navFilter, &FoundPoly, NavNearest);
+	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
 
 	if (dtStatusSucceed(success))
 	{
@@ -5701,7 +5704,7 @@ unsigned char UTIL_GetNavAreaAtLocation(const Vector Location)
 	dtPolyRef FoundPoly;
 	float NavNearest[3];
 
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, pReachableExtents, m_navFilter, &FoundPoly, NavNearest);
+	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
 
 	if (dtStatusSucceed(success))
 	{
@@ -6607,7 +6610,7 @@ Vector FindClosestPointBackOnPath(AvHAIPlayer* pBot, Vector Destination)
 
 	if (vIsZero(ValidNavmeshPoint))
 	{
-		DeployableSearchFilter ResNodeFilter;
+		StructureSearchFilter ResNodeFilter;
 		ResNodeFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 
 		AvHAIResourceNode* NearestResNode = AITAC_FindNearestResourceNodeToLocation(pBot->Edict->v.origin, &ResNodeFilter);
@@ -7544,7 +7547,7 @@ Vector UTIL_ProjectPointToNavmesh(const Vector Location, const Vector Extents, c
 	}
 }
 
-bool UTIL_PointIsOnNavmesh(const Vector Location, const nav_profile &NavProfile)
+bool UTIL_PointIsOnNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector SearchExtents)
 {
 	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
 	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
@@ -7552,38 +7555,18 @@ bool UTIL_PointIsOnNavmesh(const Vector Location, const nav_profile &NavProfile)
 
 	if (!m_navQuery) { return false; }
 
-	float pCheckLoc[3] = { Location.x, Location.z, -Location.y };
+	float dtCheckLoc[3];
+	UTIL_VecGoldSrcToDetour(Location, dtCheckLoc);
+
+	float dtCheckExtents[3];
+	UTIL_VecGoldSrcToDetour(SearchExtents, dtCheckExtents);
 
 	dtPolyRef FoundPoly;
 	float NavNearest[3];
 
-	float pCheckExtents[3] = { 5.0f, 50.0f, 5.0f };
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, pCheckExtents, m_navFilter, &FoundPoly, NavNearest);
+	dtStatus success = m_navQuery->findNearestPoly(dtCheckLoc, dtCheckExtents, m_navFilter, &FoundPoly, NavNearest);
 
 	return dtStatusSucceed(success) && FoundPoly > 0;
-
-}
-
-bool UTIL_PointIsOnNavmesh(const nav_profile& NavProfile, const Vector Location, const Vector SearchExtents)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return false; }
-
-	float pCheckLoc[3] = { Location.x, Location.z, -Location.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	float pCheckExtents[3] = { SearchExtents.x, SearchExtents.z, SearchExtents.y };
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, pCheckExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	return dtStatusSucceed(success) && FoundPoly > 0;
-
 }
 
 void HandlePlayerAvoidance(AvHAIPlayer* pBot, const Vector MoveDestination)

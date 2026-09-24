@@ -20,19 +20,15 @@ static const float structure_inventory_refresh_rate = 0.2f;
 // How frequently to update the global list of dropped marine items (in seconds). 0 = every frame
 static const float item_inventory_refresh_rate = 0.2f;
 
-bool						AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, const DeployableSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
+bool						AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, const StructureSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
 bool						AITAC_DoesDroppedItemMatchFilter(const AvHAIDroppedItem* Item, const DroppedItemSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
-bool						AITAC_DeployableExistsAtLocation(const Vector& Location, const DeployableSearchFilter* Filter);
-std::vector<const AvHAIBuildableStructure*> AITAC_FindAllDeployables(const Vector& Location, const DeployableSearchFilter* Filter);
-const AvHAIBuildableStructure*		AITAC_FindClosestDeployableToLocation(const Vector& Location, const DeployableSearchFilter* Filter);
-const AvHAIBuildableStructure*		AITAC_FindFurthestDeployableFromLocation(const Vector& Location, const DeployableSearchFilter* Filter);
-const AvHAIBuildableStructure*		AITAC_GetDeployableFromEdict(const edict_t* Structure);
-const AvHAIBuildableStructure*	AITAC_GetDeployableRefFromEdict(const edict_t* Structure);
-AvHAIBuildableStructure		AITAC_GetNearestDeployableDirectlyReachable(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure*	AITAC_GetNearestDeployableDirectlyReachableByRef(AvHAIPlayer* pBot, const Vector Location, const DeployableSearchFilter* Filter);
-AvHAIBuildableStructure		AITAC_GetDeployableStructureByEntIndex(AvHTeamNumber Team, int EntIndex);
-AvHAIBuildableStructure*	AITAC_GetDeployableStructureRefByEntIndex(AvHTeamNumber Team, int EntIndex);
-int							AITAC_GetNumDeployablesNearLocation(const Vector& Location, const DeployableSearchFilter* Filter);
+bool						AITAC_DoesResourceNodeMatchFilter(const AvHAIResourceNode* ResourceNode, const ResourceNodeSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
+bool						AITAC_DeployableExistsAtLocation(const Vector& Location, const StructureSearchFilter* Filter);
+std::vector<const AvHAIBuildableStructure*> AITAC_FindAllDeployables(const Vector& Location, const StructureSearchFilter* Filter);
+const AvHAIBuildableStructure*		AITAC_FindClosestDeployableToLocation(const Vector& Location, const StructureSearchFilter* Filter);
+const AvHAIBuildableStructure*		AITAC_FindFurthestDeployableFromLocation(const Vector& Location, const StructureSearchFilter* Filter);
+const AvHAIBuildableStructure*		AITAC_GetStructureFromEdict(const edict_t* Structure);
+int							AITAC_GetNumStructuresAtLocation(const Vector& Location, const StructureSearchFilter* Filter);
 void						AITAC_PopulateHiveData();
 void						AITAC_RefreshHiveData();
 void						AITAC_PopulateResourceNodes();
@@ -61,7 +57,9 @@ const AvHAIHiveDefinition*	AITAC_GetActiveHiveNearestLocation(AvHTeamNumber Team
 const AvHAIHiveDefinition*	AITAC_GetNonEmptyHiveNearestLocation(const Vector SearchLocation);
 
 Vector						AITAC_GetCommChairLocation(AvHTeamNumber Team);
-edict_t*					AITAC_GetCommChair(AvHTeamNumber Team);
+
+// Will prefer to find whichever chair is in use, and if not then ideally a fully built one. Failing that, a partially-constructed one.
+const AvHAIBuildableStructure*	AITAC_GetCommChair(AvHTeamNumber Team);
 
 Vector						AITAC_GetTeamOriginalStartLocation(AvHTeamNumber Team);
 Vector						AITAC_GetTeamStartingLocation(AvHTeamNumber Team);
@@ -73,22 +71,22 @@ string						AITAC_GetLocationName(Vector Location);
 AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags);
 
 const AvHAIDroppedItem*			AITAC_FindClosestItemToLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters);
-bool						AITAC_ItemExistsInLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
-int							AITAC_GetNumItemsInLocation(const Vector& Location, const AvHAIDeployableItemType ItemType, AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags, float MinRadius, float MaxRadius, bool bConsiderPhaseDistance);
+bool						AITAC_ItemExistsInLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters);
+int							AITAC_GetNumItemsInLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters);
 
-const AvHAIDroppedItem*			AITAC_GetDroppedItemRefFromEdict(edict_t* ItemEdict);
+const AvHAIDroppedItem*			AITAC_GetDroppedItemRefFromEdict(const edict_t* ItemEdict);
 
 Vector						AITAC_GetRandomBuildHintInLocation(const unsigned int StructureType, const Vector SearchLocation, const float SearchRadius);
 
-Vector AITAC_GetFloorLocationForHive(const AvHAIHiveDefinition* Hive);
+Vector AITAC_GetFloorLocationForHive(const AvHAIHiveDefinition* Hive, const NavAgentProfile* NavProfile);
 
 int AITAC_GetNumHives();
 int AITAC_GetNumTeamHives(AvHTeamNumber Team, bool bFullyCompletedOnly);
 
 void AITAC_OnNavMeshModified();
 
-AvHMessageID UTIL_StructureTypeToImpulseCommand(const AvHAIDeployableStructureType StructureType);
-AvHMessageID UTIL_ItemTypeToImpulseCommand(const AvHAIDeployableItemType ItemType);
+AvHMessageID UTIL_StructureTypeToImpulseCommand(const EAIStructureType StructureType);
+AvHMessageID UTIL_ItemTypeToImpulseCommand(const EAIDeployableItemType ItemType);
 
 edict_t* AITAC_GetClosestPlayerOnTeamWithLOS(AvHTeamNumber Team, const Vector& Location, float SearchRadius, edict_t* IgnorePlayer);
 bool AITAC_AnyPlayerOnTeamHasLOSToLocation(AvHTeamNumber Team, const Vector& Location, float SearchRadius, edict_t* IgnorePlayer);
@@ -118,20 +116,19 @@ bool UTIL_ShouldStructureCollide(AvHAIDeployableStructureType StructureType);
 float UTIL_GetStructureRadiusForObstruction(AvHAIDeployableStructureType StructureType);
 unsigned char UTIL_GetAreaForObstruction(AvHAIDeployableStructureType StructureType, const edict_t* BuildingEdict);
 
-bool UTIL_IsStructureElectrified(edict_t* Structure);
-bool UTIL_StructureIsFullyBuilt(edict_t* Structure);
+bool UTIL_IsStructureElectrified(const AvHAIBuildableStructure* Structure);
+bool UTIL_StructureIsFullyBuilt(const AvHAIBuildableStructure* Structure);
 bool UTIL_StructureIsRecycling(edict_t* Structure);
 bool AITAC_StructureCanBeUpgraded(edict_t* Structure);
 
 AvHAIHiveDefinition* AITAC_GetHiveFromEdict(const edict_t* Edict);
-AvHAIResourceNode* AITAC_GetResourceNodeFromEdict(const edict_t* Edict);
+const AvHAIResourceNode* AITAC_GetResourceNodeFromEdict(const edict_t* Edict);
 
 // What percentage of all viable (can be reached by the requested team) resource nodes does the team currently own? Expressed as 0.0 - 1.0
 float AITAC_GetTeamResNodeOwnership(const AvHTeamNumber Team, bool bIncludeBaseNodes);
-int	AITAC_GetNumResourceNodesNearLocation(const Vector Location, const DeployableSearchFilter* Filter);
-AvHAIResourceNode* AITAC_FindNearestResourceNodeToLocation(const Vector Location, const DeployableSearchFilter* Filter);
-AvHAIResourceNode* AITAC_GetNearestResourceNodeToLocation(const Vector Location);
-vector<AvHAIResourceNode*> AITAC_GetAllMatchingResourceNodes(const Vector Location, const DeployableSearchFilter* Filter);
+int	AITAC_GetNumResourceNodesNearLocation(const Vector Location, const ResourceNodeSearchFilter* Filter);
+const AvHAIResourceNode* AITAC_FindNearestResourceNodeToLocation(const Vector Location, const ResourceNodeSearchFilter* Filter);
+vector<const AvHAIResourceNode*> AITAC_GetAllMatchingResourceNodes(const Vector Location, const ResourceNodeSearchFilter* Filter);
 
 bool AITAC_IsBuildableStructureStillReachable(AvHAIPlayer* pBot, const edict_t* Structure);
 bool UTIL_IsDroppedItemStillReachable(AvHAIPlayer* pBot, const edict_t* Item);
@@ -147,28 +144,27 @@ vector<AvHPlayer*> AITAC_GetAllPlayersOnTeamOfClass(const AvHTeamNumber Team, co
 edict_t* AITAC_GetNearestPlayerOfClassInArea(const AvHTeamNumber Team, const Vector SearchLocation, const float SearchRadius, const bool bConsiderPhaseDist, const edict_t* IgnorePlayer, const AvHUser3 SearchClass);
 vector<edict_t*> AITAC_GetAllPlayersOfClassInArea(const AvHTeamNumber Team, const Vector SearchLocation, const float SearchRadius, const bool bConsiderPhaseDist, const edict_t* IgnorePlayer, const AvHUser3 SearchClass);
 
-AvHAIHiveDefinition* AITAC_GetTeamHiveWithTech(const AvHTeamNumber Team, const AvHMessageID Tech);
-bool AITAC_TeamHiveWithTechExists(const AvHTeamNumber Team, const AvHMessageID Tech);
+const AvHAIHiveDefinition* AITAC_GetTeamHiveWithTech(const AvHTeamNumber Team, const EAIHiveTechStatus Tech);
+bool AITAC_TeamHiveWithTechExists(const AvHTeamNumber Team, const EAIHiveTechStatus Tech);
 
-AvHAIDeployableItemType UTIL_GetItemTypeFromEdict(const edict_t* ItemEdict);
-bool UTIL_DroppedItemIsPrimaryWeapon(const AvHAIDeployableItemType ItemType);
+EAIDeployableItemType UTIL_GetItemTypeFromEdict(const edict_t* ItemEdict);
+bool UTIL_DeployedItemIsPrimaryWeapon(const EAIDeployableItemType ItemType);
 
-AvHAIWeapon UTIL_GetWeaponTypeFromDroppedItem(const AvHAIDeployableItemType ItemType);
+EAIWeaponId UTIL_GetWeaponTypeFromDroppedItem(const EAIDeployableItemType ItemType);
 
 bool UTIL_StructureIsResearching(edict_t* Structure);
 bool UTIL_StructureIsResearching(edict_t* Structure, const AvHMessageID Research);
 bool UTIL_StructureIsUpgrading(edict_t* Structure);
 
 bool AITAC_MarineResearchIsAvailable(const AvHTeamNumber Team, const AvHMessageID Research);
-bool AITAC_ElectricalResearchIsAvailable(edict_t* Structure);
+bool AITAC_ElectricalResearchIsAvailable(const AvHAIBuildableStructure* Structure);
 
-Vector UTIL_GetNextMinePosition(edict_t* StructureToMine);
-Vector UTIL_GetNextMinePosition2(edict_t* StructureToMine);
-int UTIL_GetCostOfStructureType(AvHAIDeployableStructureType StructureType);
+Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine);
+int UTIL_GetCostOfStructureType(EAIStructureType StructureType);
 
 edict_t* AITAC_GetNearestHumanAtLocation(const AvHTeamNumber Team, const Vector Location, const float MaxSearchRadius);
 
-AvHAIDeployableStructureType UTIL_GetChamberTypeForHiveTech(AvHMessageID HiveTech);
+EAIStructureType UTIL_GetChamberTypeForHiveTech(AvHMessageID HiveTech);
 
 bool AITAC_ResearchIsComplete(const AvHTeamNumber Team, const AvHTechID Research);
 
@@ -195,13 +191,13 @@ bool AITAC_IsAlienHarasserNeeded(AvHAIPlayer* pBot);
 
 bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleHive);
 
-AvHAIDeployableStructureType AITAC_GetNextMissingUpgradeChamberForTeam(AvHTeamNumber Team, int& NumMissing);
+EAIStructureType AITAC_GetNextMissingUpgradeChamberForTeam(AvHTeamNumber Team, int& NumMissing);
 
 void AITAC_OnTeamStartsModified();
 
 edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLocation, edict_t* SearchingPlayer, bool bIncludeGorges);
 
-bool AITAC_IsAlienUpgradeAvailableForTeam(AvHTeamNumber Team, HiveTechStatus DesiredTech);
+bool AITAC_IsAlienUpgradeAvailableForTeam(AvHTeamNumber Team, EAIHiveTechStatus DesiredTech);
 
 int AITAC_GetNumWeaponsInPlay(AvHTeamNumber Team, AvHAIWeapon WeaponType);
 
@@ -213,8 +209,8 @@ bool AITAC_IsStructureOfTypeNearLocation(AvHTeamNumber Team, unsigned int Struct
 void AITAC_UpdateSquads();
 void AITAC_ManageSquads();
 void AITAC_ClearSquads();
-AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, edict_t* TaskTarget, BotTaskType ObjectiveType);
-AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, Vector TaskLocation, BotTaskType ObjectiveType);
+AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, edict_t* TaskTarget, EAITaskType ObjectiveType);
+AvHAISquad* AITAC_GetSquadForObjective(AvHAIPlayer* pBot, Vector TaskLocation, EAITaskType ObjectiveType);
 Vector AITAC_GetGatherLocationForSquad(AvHAISquad* Squad);
 
 Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team);
@@ -227,7 +223,7 @@ void AITAC_DetermineRelocationEnabled();
 
 bool AITAC_IsMarineBaseValid(AvHAIMarineBase* Base);
 void AITAC_ManageActiveMarineBases();
-void AITAC_AddNewBase(AvHTeamNumber Team, Vector NewBaseLocation, MarineBaseType NewBaseType);
+void AITAC_AddNewBase(AvHTeamNumber Team, Vector NewBaseLocation, EAIMarineBaseType NewBaseType);
 bool AITAC_CanBuildOutBase(const AvHAIMarineBase* Base);
 bool AITAC_CanBuildOutMainBase(const AvHAIMarineBase* Base);
 bool AITAC_CanBuildOutOutpost(const AvHAIMarineBase* Base);

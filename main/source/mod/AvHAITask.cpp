@@ -114,7 +114,7 @@ void AITASK_OnCompleteCommanderTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		{
 			if (vDist2DSq(pBot->Edict->v.origin, AITAC_GetTeamStartingLocation(EnemyTeam)) < sqrf(UTIL_MetresToGoldSrcUnits(10.0f)))
 			{
-				DeployableSearchFilter EnemyStuffFilter;
+				StructureSearchFilter EnemyStuffFilter;
 				EnemyStuffFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 				EnemyStuffFilter.DeployableTeam = EnemyTeam;
 				EnemyStuffFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -133,7 +133,7 @@ void AITASK_OnCompleteCommanderTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			}
 		}
 
-		DeployableSearchFilter EnemyResTowerFilter;
+		StructureSearchFilter EnemyResTowerFilter;
 		EnemyResTowerFilter.DeployableTypes = SEARCH_ANY_RES_TOWER;
 		EnemyResTowerFilter.DeployableTeam = (AIMGR_GetEnemyTeam(pBot->Player->GetTeam()));
 		EnemyResTowerFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -599,7 +599,7 @@ bool AITASK_IsMineStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Ta
 
 	if (!PlayerHasWeapon(pBot->Player, WEAPON_MARINE_MINES)) { return false; }
 
-	DeployableSearchFilter MineFilter;
+	StructureSearchFilter MineFilter;
 	MineFilter.DeployableTypes = STRUCTURE_MARINE_DEPLOYEDMINE;
 	MineFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
 	MineFilter.bConsiderPhaseDistance = false;
@@ -715,7 +715,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 	// but we can still clear the area of enemy structures
 	if (!IsPlayerSkulk(pBot->Edict) && !IsPlayerGorge(pBot->Edict))
 	{
-		DeployableSearchFilter EnemyStructuresFilter;
+		StructureSearchFilter EnemyStructuresFilter;
 		EnemyStructuresFilter.DeployableTeam = EnemyTeam;
 		EnemyStructuresFilter.ReachabilityTeam = BotTeam;
 		EnemyStructuresFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -726,7 +726,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 
 	if (!FNullEnt(ResNodeIndex->ParentHive))
 	{
-		DeployableSearchFilter EnemyStructuresFilter;
+		StructureSearchFilter EnemyStructuresFilter;
 		EnemyStructuresFilter.DeployableTeam = EnemyTeam;
 		EnemyStructuresFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 		EnemyStructuresFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -760,7 +760,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 			if (!bCanAttackStructures) { return false; }
 			
 			// If we can clear the area of enemy junk then do so, otherwise we're finished
-			DeployableSearchFilter EnemyStructuresFilter;
+			StructureSearchFilter EnemyStructuresFilter;
 			EnemyStructuresFilter.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 			EnemyStructuresFilter.ReachabilityTeam = BotTeam;
 			EnemyStructuresFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -785,7 +785,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 			if (GetPlayerResources(OtherBuilder) >= (int)(kResourceTowerCost * 0.7f))
 			{
 				// If we can clear the area of enemy junk then do so, otherwise we will let the other guy place the tower
-				DeployableSearchFilter EnemyStructuresFilter;
+				StructureSearchFilter EnemyStructuresFilter;
 				EnemyStructuresFilter.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 				EnemyStructuresFilter.ReachabilityTeam = BotTeam;
 				EnemyStructuresFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -828,7 +828,7 @@ bool AITASK_IsMarineCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 	if (FNullEnt(ResNodeIndex->ActiveTowerEntity) || !UTIL_StructureIsFullyBuilt(ResNodeIndex->ActiveTowerEntity)) { return true; }
 
 	// At this point, the node is capped fully. However, don't consider a res node secured if the enemy still has their junk lying around. Clear it all out.
-	DeployableSearchFilter EnemyStructures;
+	StructureSearchFilter EnemyStructures;
 	EnemyStructures.DeployableTypes = SEARCH_ALL_STRUCTURES;
 	EnemyStructures.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 	EnemyStructures.ReachabilityTeam = BotTeam;
@@ -895,7 +895,7 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 		SearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
 	}
 
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = SEARCH_ALL_ALIEN_STRUCTURES;
 	StructureFilter.MaxSearchRadius = SearchRadius * 1.25f;
 	StructureFilter.DeployableTeam = BotTeam;	
@@ -949,7 +949,7 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 
 	if (!bCanAttackStructures) { return false; }
 
-	DeployableSearchFilter EnemyStuff;
+	StructureSearchFilter EnemyStuff;
 	EnemyStuff.DeployableTypes = SEARCH_ALL_STRUCTURES;
 	EnemyStuff.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 	EnemyStuff.ReachabilityTeam = BotTeam;
@@ -971,7 +971,7 @@ bool AITASK_IsAlienSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
-	DeployableSearchFilter EnemyStuff;
+	StructureSearchFilter EnemyStuff;
 	EnemyStuff.DeployableTypes = SEARCH_ALL_STRUCTURES;
 	EnemyStuff.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 	EnemyStuff.ReachabilityTeam = BotTeam;
@@ -988,7 +988,7 @@ bool AITASK_IsAssaultMarineBaseTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask
 
 	if (AIMGR_GetTeamType(EnemyTeam) != AVH_CLASS_TYPE_MARINE) { return false; }
 
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTeam = EnemyTeam;
 	StructureFilter.DeployableTypes = (STRUCTURE_MARINE_OBSERVATORY | STRUCTURE_MARINE_ARMSLAB | STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_PROTOTYPELAB);
 	StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
@@ -1028,7 +1028,7 @@ bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 	bool bTurretFactoryElectrified = false;
 	int NumTurrets = 0;
 
-	DeployableSearchFilter SearchFilter;
+	StructureSearchFilter SearchFilter;
 	SearchFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY);
 	SearchFilter.DeployableTeam = BotTeam;
 	SearchFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -1067,7 +1067,7 @@ bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 
 	// Don't consider a hive secured if the enemy still has their junk in there. Clear it all out.
 
-	DeployableSearchFilter EnemyStructures;
+	StructureSearchFilter EnemyStructures;
 	EnemyStructures.DeployableTypes = SEARCH_ALL_STRUCTURES;
 	EnemyStructures.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 	EnemyStructures.ReachabilityTeam = BotTeam;
@@ -1405,7 +1405,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	AvHAIDeployableStructureType NextStructure = STRUCTURE_NONE;
 
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTeam = BotTeam;
 	StructureFilter.MaxSearchRadius = SearchRadius * 1.25f;
 	StructureFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
@@ -1503,7 +1503,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We have nothing to build, or we don't have enough resources yet, see if there's any unfinished structures we can finish off
 	if (GetPlayerActiveClass(pBot->Player) == AVH_USER3_ALIEN_PLAYER2)
 	{
-		DeployableSearchFilter UnfinishedFilter;
+		StructureSearchFilter UnfinishedFilter;
 		UnfinishedFilter.DeployableTeam = BotTeam;
 		UnfinishedFilter.ExcludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 		UnfinishedFilter.ReachabilityTeam = BotTeam;
@@ -1523,7 +1523,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We can't build anything, see if there's anything to attack nearby
 	if (!IsPlayerGorge(pBot->Edict) || PlayerHasWeapon(pBot->Player, WEAPON_GORGE_BILEBOMB))
 	{
-		DeployableSearchFilter EnemyStructureFilter;
+		StructureSearchFilter EnemyStructureFilter;
 		EnemyStructureFilter.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 		EnemyStructureFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 		EnemyStructureFilter.ReachabilityTeam = BotTeam;
@@ -1995,7 +1995,7 @@ void BotProgressTakeCommandTask(AvHAIPlayer* pBot)
 
 	if (!vIsZero(RelocationPoint) && AITAC_IsRelocationCompleted(BotTeam, RelocationPoint))
 	{
-		DeployableSearchFilter RelocationChairFilter;
+		StructureSearchFilter RelocationChairFilter;
 		RelocationChairFilter.DeployableTeam = BotTeam;
 		RelocationChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
 		RelocationChairFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
@@ -2262,7 +2262,7 @@ void AlienProgressBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		{
 			AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
-			DeployableSearchFilter UnfinishedFilter;
+			StructureSearchFilter UnfinishedFilter;
 			UnfinishedFilter.DeployableTeam = BotTeam;
 			UnfinishedFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 			UnfinishedFilter.ReachabilityTeam = BotTeam;
@@ -2506,7 +2506,7 @@ void AlienProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		if (EnemyClassType == AVH_CLASS_TYPE_MARINE)
 		{
-			DeployableSearchFilter PGFilter;
+			StructureSearchFilter PGFilter;
 			PGFilter.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 			PGFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
 			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
@@ -2568,7 +2568,7 @@ void AlienProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We don't have enough resources to cap the node yet, so take out any enemy structures in the area while we wait if we can
 	if (bBotCanAttackStructures)
 	{
-		DeployableSearchFilter EnemyStructureFilter;
+		StructureSearchFilter EnemyStructureFilter;
 		EnemyStructureFilter.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
 		EnemyStructureFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
 		EnemyStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
@@ -2795,7 +2795,7 @@ void AlienProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// Don't prioritise electrified structures if we're skulk or lerk
 	bool bAvoidElectrified = (pBot->Player->GetUser3() == AVH_USER3_ALIEN_PLAYER1 || pBot->Player->GetUser3() == AVH_USER3_ALIEN_PLAYER3);
 
-	DeployableSearchFilter EnemyStuffFilter;
+	StructureSearchFilter EnemyStuffFilter;
 	EnemyStuffFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 	EnemyStuffFilter.DeployableTeam = EnemyTeam;
 	EnemyStuffFilter.ReachabilityTeam = BotTeam;
@@ -2901,7 +2901,7 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(BotTeam);
 
-	DeployableSearchFilter StructureFilter;
+	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = SEARCH_ALL_MARINE_STRUCTURES;
 	StructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 	StructureFilter.DeployableTeam = BotTeam;
@@ -2985,7 +2985,7 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	// We won't start attacking enemy structures until we have built a turret factory or phase gate so we don't reveal our evil plans until we're ready
 	if (bKeyStructureBuilt)
 	{
-		DeployableSearchFilter EnemyStructures;
+		StructureSearchFilter EnemyStructures;
 		EnemyStructures.DeployableTypes = SEARCH_ALL_STRUCTURES;
 		EnemyStructures.DeployableTeam = EnemyTeam;
 		EnemyStructures.ReachabilityTeam = BotTeam;
@@ -3046,7 +3046,7 @@ void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 			if (EnemyType == AVH_CLASS_TYPE_MARINE)
 			{
-				DeployableSearchFilter EnemyStructureFilter;
+				StructureSearchFilter EnemyStructureFilter;
 				EnemyStructureFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 				EnemyStructureFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
 				EnemyStructureFilter.ReachabilityTeam = pBot->Player->GetTeam();
@@ -3068,7 +3068,7 @@ void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	}
 
 	// Clear out any enemy structures around the node
-	DeployableSearchFilter EnemyStructureFilter;
+	StructureSearchFilter EnemyStructureFilter;
 
 	EnemyStructureFilter.DeployableTeam = AIMGR_GetEnemyTeam(pBot->Player->GetTeam());
 	EnemyStructureFilter.DeployableTypes = SEARCH_ALL_STRUCTURES;
@@ -3130,7 +3130,7 @@ void BotProgressAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 	}
 
-	DeployableSearchFilter EnemyStructureFilter;
+	StructureSearchFilter EnemyStructureFilter;
 	EnemyStructureFilter.DeployableTeam = EnemyTeam;
 	EnemyStructureFilter.ReachabilityTeam = BotTeam;
 	EnemyStructureFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;

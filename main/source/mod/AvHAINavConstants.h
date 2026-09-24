@@ -116,7 +116,8 @@ enum EAINavProfileIndex
 	NAV_PROFILE_LERK = 3,		// Lerk
 	NAV_PROFILE_FADE = 4,		// Fade
 	NAV_PROFILE_ONOS = 5,		// Onos
-	NAV_PROFILE_DEFAULT = 6,		// Default profile which has all capabilities except disabled flags, and 1.0 area costs for everything
+	NAV_PROFILE_CONSTRUCTION = 6, // Profile for determining structure placement
+	NAV_PROFILE_DEFAULT = 7,		// Default profile which has all capabilities except disabled flags, and 1.0 area costs for everything
 };
 
 // Profile indices. Use these when retrieving base agent profile information
@@ -618,6 +619,23 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile5.Filters.setAreaCost(10, 1.0);
 	BaseAgentProfiles.push_back(NewProfile5);
 
+	NavAgentProfile NewProfile6;
+	NewProfile6.MeshIndex = NAV_MESH_CONSTRUCTION;
+	NewProfile6.Filters.setIncludeFlags(0x7fffffff);
+	NewProfile6.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile6.Filters.setAreaCost(0, 1.0);
+	NewProfile6.Filters.setAreaCost(1, 1.0);
+	NewProfile6.Filters.setAreaCost(2, 1.0);
+	NewProfile6.Filters.setAreaCost(3, 1.0);
+	NewProfile6.Filters.setAreaCost(4, 1.0);
+	NewProfile6.Filters.setAreaCost(5, 1.0);
+	NewProfile6.Filters.setAreaCost(6, 1.0);
+	NewProfile6.Filters.setAreaCost(7, 1.0);
+	NewProfile6.Filters.setAreaCost(8, 1.0);
+	NewProfile6.Filters.setAreaCost(9, 1.0);
+	NewProfile6.Filters.setAreaCost(10, 1.0);
+	BaseAgentProfiles.push_back(NewProfile6);
+
 	NavAgentProfile DefaultProfile;
 	DefaultProfile.MeshIndex = NAV_MESH_REGULAR;
 	DefaultProfile.Filters.setIncludeFlags(0x7fffffff);
@@ -655,15 +673,19 @@ inline void UTIL_VecGoldSrcToDetour(const Vector& GoldSrcVector, float* OutDetou
 // Returns a GoldSrc Vector from the supplied Detour float[3] coordinates.
 inline Vector UTIL_VecDetourToGoldSrc(const float* DetourVector)
 {
-	if (!DetourVector) { return ZERO_VECTOR; }
+	if (!DetourVector) { return Vector(0.0f, 0.0f, 0.0f); }
 
 	return Vector(DetourVector[0], -DetourVector[2], DetourVector[1]);
 }
 
 // Return the appropriate base nav profile information
-inline const NavAgentProfile GetBaseAgentProfile(const EAINavProfileIndex Index)
+inline const NavAgentProfile* GetBaseAgentProfile(const EAINavProfileIndex Index)
 {
-	return BaseAgentProfiles[Index];
+	unsigned int NavIndex = static_cast<unsigned int>(Index);
+
+	if (NavIndex > static_cast<unsigned int>(EAINavProfileIndex::NAV_PROFILE_DEFAULT)) { return nullptr; }
+
+	return &BaseAgentProfiles[Index];
 }
 
 #endif
