@@ -10,10 +10,13 @@
 #ifndef AVH_AI_NAVIGATION_H
 #define AVH_AI_NAVIGATION_H
 
+#include <unordered_map>
+
 #include "DetourStatus.h"
 #include "DetourNavMeshQuery.h"
 #include "DetourTileCache.h"
 #include "AvHAIPlayer.h"
+#include "AvHAIConstants.h"
 
 constexpr auto MIN_PATH_RECALC_TIME = 0.33f; // How frequently can a bot recalculate its path? Default to max 3 times per second
 constexpr auto MAX_BOT_STUCK_TIME = 30.0f; // How long a bot can be stuck, unable to move, before giving up and suiciding
@@ -35,6 +38,11 @@ void LerkUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
 void FadeUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
 void OnosUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
 
+
+
+bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach);
+void AINAV_CalculateMarineReachabilityFlags(const Vector& FromLocation, const Vector& ToLocation, EAIReachabilityFlags& OutReachabilityFlags, float MaxAcceptableDistance = max_ai_use_reach);
+void AINAV_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vector& ToLocation, EAIReachabilityFlags& OutReachabilityFlags, float MaxAcceptableDistance = max_ai_use_reach);
 
 
 // Roughly estimates the movement cost to move between FromLocation and ToLocation. Uses simple formula of distance between points x cost modifier for that movement
@@ -285,8 +293,6 @@ void ClearBotStuckMovement(AvHAIPlayer* pBot);
 
 void UTIL_ClearDoorData();
 void UTIL_ClearWeldablesData();
-
-const nav_profile GetBaseNavProfile(const int index);
 
 // Based on the direction the bot wants to move and it's current facing angle, sets the forward and side move, and the directional buttons to make the bot actually move
 void BotMovementInputs(AvHAIPlayer* pBot);

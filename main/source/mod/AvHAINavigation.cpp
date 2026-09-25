@@ -37,6 +37,121 @@
 
 #include <cfloat>
 
+std::vector<AvHAITeamStartingLocation> TeamAStartingLocations;
+std::vector<AvHAITeamStartingLocation> TeamBStartingLocations;
+
+bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance)
+{
+	if (!NavProfile) { return false; }
+
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return false; }
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
+
+	bool bStartInWater = UTIL_IsPointInSwimArea(FromLocation);
+	bool bEndInWater = UTIL_IsPointInSwimArea(ToLocation);
+
+	if (bStartInWater && bEndInWater)
+	{
+		if (UTIL_QuickHullTrace(nullptr, FromLocation, ToLocation)) { return true; }
+	}
+
+	float dtStartPos[3];
+	float dtEndPos[3];
+
+	UTIL_VecGoldSrcToDetour(FromLocation, dtStartPos);
+	UTIL_VecGoldSrcToDetour(ToLocation, dtEndPos);
+
+	if (bStartInWater)
+	{
+		TraceResult Hit;
+		UTIL_TraceLine(FromLocation, FromLocation - Vector(0.0f, 0.0f, 1000.0f), ignore_monsters, nullptr, &Hit);
+
+		if (Hit.flFraction < 1.0f)
+		{
+			UTIL_VecGoldSrcToDetour(Hit.vecEndPos, dtStartPos);
+		}
+	}
+
+	if (bEndInWater)
+	{
+		TraceResult Hit;
+		UTIL_TraceLine(ToLocation, ToLocation - Vector(0.0f, 0.0f, 1000.0f), ignore_monsters, nullptr, &Hit);
+
+		if (Hit.flFraction < 1.0f)
+		{
+			UTIL_VecGoldSrcToDetour(Hit.vecEndPos, dtEndPos);
+		}
+	}
+
+	dtStatus status;
+	dtPolyRef StartPoly;
+	float StartNearest[3];
+	dtPolyRef EndPoly;
+	float EndNearest[3];
+	dtPolyRef PolyPath[MAX_PATH_POLY];
+	int nPathCount = 0;
+
+	float searchExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
+
+	// find the start polygon
+	status = m_navQuery->findNearestPoly(pStartPos, searchExtents, m_navFilter, &StartPoly, StartNearest);
+	if (!dtStatusSucceed(status))
+	{
+		return false; // couldn't find a polygon
+	}
+
+	// find the end polygon
+	status = m_navQuery->findNearestPoly(pEndPos, searchExtents, m_navFilter, &EndPoly, EndNearest);
+	if (!dtStatusSucceed(status))
+	{
+		return false; // couldn't find a polygon
+	}
+
+	status = m_navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
+
+	if (nPathCount == 0)
+	{
+		return false; // couldn't find a path
+	}
+
+	if (PolyPath[nPathCount - 1] != EndPoly)
+	{
+		float epos[3];
+		dtVcopy(epos, EndNearest);
+
+		m_navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
+
+		if (dtVdistSqr(EndNearest, epos) <= sqrf(MaxAcceptableDistance))
+		{
+			return true;
+		}
+		else
+		{
+			if (UTIL_IsPointInSwimArea(epos) && UTIL_IsPointInSwimArea(ToLocation))
+			{
+				return true;
+			}
+		}
+	}
+
+	return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 bool UTIL_UpdateTileCache()
 {
@@ -180,49 +295,6 @@ unsigned int UTIL_AddTemporaryObstacle(unsigned int NavMeshIndex, const Vector L
 	}
 
 	return ObstacleNum;
-}
-
-void UTIL_AddStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
-{
-	if (Structure->StructureType == STRUCTURE_MARINE_DEPLOYEDMINE) { return; }
-
-	bool bCollideWithPlayers = UTIL_ShouldStructureCollide(Structure->StructureType);
-
-	float Radius = UTIL_GetStructureRadiusForObstruction(Structure->StructureType);
-
-	// Not all structures collide with players (e.g. phase gate)
-	if (bCollideWithPlayers)
-	{
-		unsigned int area = UTIL_GetAreaForObstruction(Structure->StructureType, Structure->edict);
-
-		// We add an obstacle for the building nav mesh below
-		for (int i = 0; i < BUILDING_NAV_MESH; i++)
-		{
-			unsigned int NewObstacleRef = UTIL_AddTemporaryObstacle(i, UTIL_GetCentreOfEntity(Structure->edict), Radius, 100.0f, area);
-
-			if (NewObstacleRef > 0)
-			{
-				AvHAITempObstacle NewObstacle;
-				NewObstacle.NavMeshIndex = i;
-				NewObstacle.ObstacleRef = NewObstacleRef;
-
-				Structure->Obstacles.push_back(NewObstacle);
-			}
-		}
-	}
-
-	// Always cut a hole in the building nav mesh so we don't try to place anything on top of this structure in future
-	unsigned int NewObstacleRef = UTIL_AddTemporaryObstacle(BUILDING_NAV_MESH, UTIL_GetCentreOfEntity(Structure->edict), Radius * 1.1f, 100.0f, DT_TILECACHE_NULL_AREA);
-
-	if (NewObstacleRef > 0)
-	{
-		AvHAITempObstacle NewObstacle;
-		NewObstacle.NavMeshIndex = BUILDING_NAV_MESH;
-		NewObstacle.ObstacleRef = NewObstacleRef;
-
-		Structure->Obstacles.push_back(NewObstacle);
-	}
-
 }
 
 void UTIL_RemoveStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
@@ -9217,11 +9289,6 @@ void UTIL_RemoveOffMeshConnections(AvHAIOffMeshConnection* RemoveConnectionDef)
 
 		RemoveConnectionDef->ConnectionRefs[i] = 0;
 	}
-}
-
-const nav_profile GetBaseNavProfile(const int index)
-{
-	return BaseNavProfiles[index];
 }
 
 const dtOffMeshConnection* DEBUG_FindNearestOffMeshConnectionToPoint(const Vector Point, unsigned int FilterFlags)

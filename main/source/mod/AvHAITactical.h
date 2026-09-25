@@ -11,14 +11,31 @@
 #ifndef AVH_AI_TACTICAL_H
 #define AVH_AI_TACTICAL_H
 
+#include <unordered_map>
+
 #include "AvHAIPlayer.h"
 #include "AvHAIConstants.h"
+
+typedef unordered_map<int, AvHAIBuildableStructure> AIBuildableStructureMap;
 
 // How frequently to update the global list of built structures (in seconds). 0 = every frame
 static const float structure_inventory_refresh_rate = 0.2f;
 
 // How frequently to update the global list of dropped marine items (in seconds). 0 = every frame
 static const float item_inventory_refresh_rate = 0.2f;
+
+// Defines a player's starting location on a given team. Can be multiple locations
+struct AvHAITeamStartingLocation
+{
+	AvHTeamNumber Team;
+	AvHClassType TeamType;
+	Vector StartingPoint;
+	std::unordered_map<const AvHAIBuildableStructure*, EAIReachabilityFlags> StructureReachabilityMap;
+	std::unordered_map<const AvHAIHiveDefinition*, EAIReachabilityFlags> HiveReachabilityMap;
+
+	void RemoveStructureFromMap(const AvHAIBuildableStructure* StructureToRemove);
+	void RefreshReachabilityMap();
+};
 
 bool						AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, const StructureSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
 bool						AITAC_DoesDroppedItemMatchFilter(const AvHAIDroppedItem* Item, const DroppedItemSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
@@ -36,10 +53,16 @@ void						AITAC_RefreshResourceNodes();
 void						AITAC_UpdateMapAIData();
 void						AITAC_CheckNavMeshModified();
 void						AITAC_RefreshBuildableStructures();
-AvHAIBuildableStructure*	AITAC_UpdateBuildableStructure(CBaseEntity* Structure);
+void						AITAC_AddStructureTemporaryObstacles(AvHAIBuildableStructure* Structure);
+void						AITAC_ClearStructureTemporaryObstacles(AvHAIBuildableStructure* Structure);
+void						AITAC_UpdateBuildableStructure(CBaseEntity* Structure);
+AvHAIBuildableStructure		AITAC_RegisterNewBuildableStructure(CBaseEntity* NewStructure);
+void						AITAC_UpdateBuildableStructureStatusFlags(AvHAIBuildableStructure* Structure);
 void						AITAC_RefreshReachabilityForStructure(AvHAIBuildableStructure* Structure);
 void						AITAC_RefreshReachabilityForResNode(AvHAIResourceNode* ResNode);
 void						AITAC_RefreshReachabilityForHive(AvHAIHiveDefinition* Hive);
+void						AINAV_CalculateMarineReachabilityFlags(const Vector& FromLocation, const Vector& ToLocation, EAIReachabilityFlags& OutReachabilityFlags, float MaxAcceptableDistance = max_ai_use_reach);
+void						AINAV_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vector& ToLocation, EAIReachabilityFlags& OutReachabilityFlags, float MaxAcceptableDistance = max_ai_use_reach);
 void						AITAC_RefreshAllResNodeReachability();
 void						AITAC_RefreshReachabilityForItem(AvHAIDroppedItem* Item);
 void						AITAC_OnStructureCreated(AvHAIBuildableStructure* NewStructure);
@@ -68,7 +91,7 @@ Vector						AITAC_GetTeamRelocationPoint(AvHTeamNumber Team);
 							// Returns the name of the supplied location on the map. This will be the same as what appears in the bottom left of the player's screen
 string						AITAC_GetLocationName(Vector Location);
 
-AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags);
+const AvHAIResourceNode*			AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const ResourceNodeSearchFilter* Filter);
 
 const AvHAIDroppedItem*			AITAC_FindClosestItemToLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters);
 bool						AITAC_ItemExistsInLocation(const Vector& Location, const DroppedItemSearchFilter* ItemFilters);
@@ -110,16 +133,7 @@ void AITAC_UpdateMarineItem(CBaseEntity* Item, AvHAIDeployableItemType ItemType)
 
 void AITAC_OnItemDropped(const AvHAIDroppedItem* NewItem);
 
-AvHAIDeployableStructureType UTIL_IUSER3ToStructureType(const int inIUSER3);
-
-bool UTIL_ShouldStructureCollide(AvHAIDeployableStructureType StructureType);
-float UTIL_GetStructureRadiusForObstruction(AvHAIDeployableStructureType StructureType);
-unsigned char UTIL_GetAreaForObstruction(AvHAIDeployableStructureType StructureType, const edict_t* BuildingEdict);
-
-bool UTIL_IsStructureElectrified(const AvHAIBuildableStructure* Structure);
-bool UTIL_StructureIsFullyBuilt(const AvHAIBuildableStructure* Structure);
-bool UTIL_StructureIsRecycling(edict_t* Structure);
-bool AITAC_StructureCanBeUpgraded(edict_t* Structure);
+EAIStructureType UTIL_IUSER3ToStructureType(const int inIUSER3);
 
 AvHAIHiveDefinition* AITAC_GetHiveFromEdict(const edict_t* Edict);
 const AvHAIResourceNode* AITAC_GetResourceNodeFromEdict(const edict_t* Edict);
@@ -148,7 +162,6 @@ const AvHAIHiveDefinition* AITAC_GetTeamHiveWithTech(const AvHTeamNumber Team, c
 bool AITAC_TeamHiveWithTechExists(const AvHTeamNumber Team, const EAIHiveTechStatus Tech);
 
 EAIDeployableItemType UTIL_GetItemTypeFromEdict(const edict_t* ItemEdict);
-bool UTIL_DeployedItemIsPrimaryWeapon(const EAIDeployableItemType ItemType);
 
 EAIWeaponId UTIL_GetWeaponTypeFromDroppedItem(const EAIDeployableItemType ItemType);
 

@@ -61,8 +61,8 @@ struct NavOffMeshConnection
 	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
 	Vector FromLocation = ZERO_VECTOR; // The start point of the connection
 	Vector ToLocation = ZERO_VECTOR; // The end point of the connection
-	unsigned int ConnectionFlags = 0; // The type of connection it is
-	unsigned int DefaultConnectionFlags = 0; // If this connection is being temporarily modified, what it should normally be
+	EAINavMovementFlag ConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // The type of connection it is
+	EAINavMovementFlag DefaultConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // If this connection is being temporarily modified, what it should normally be
 	unsigned int ConnectionRef = 0; // References to this connection on all defined nav meshes
 	edict_t* LinkedObject = nullptr;
 
@@ -96,6 +96,12 @@ struct NavTempObstacle
 	bool IsValid()
 	{
 		return IsValidNavMeshIndex(NavMeshIndex) && ObstacleRef > 0;
+	}
+
+	void Clear()
+	{
+		NavMeshIndex = NAV_MESH_INVALID;
+		ObstacleRef = 0;
 	}
 };
 
@@ -240,17 +246,17 @@ NavMesh* AIMESH_GetNavMeshAtIndex(EAINavMeshIndex DesiredIndex);
 std::vector<NavMesh*> AIMESH_GetAllNavMeshes();
 
 /* Adds a new off-mesh connection to the specified navmesh at runtime. Bots using this nav mesh will immediately start using this connection if they're allowed to */
-NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, unsigned char area, unsigned int flags, bool bBiDirectional);
+NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional);
 
 // Changes the flags on an existing off-mesh connection
-void AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const unsigned int NewFlag);
+void AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const EAINavMovementFlag NewFlag);
 
 /* Removes the off-mesh connection from all nav meshes which contain it */
 bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef);
 
 
 // Applies a temporary obstacle to the navmesh. Returns a pointer to the temp obstacle created if successful.
-NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, unsigned char Area);
+NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area);
 
 // Will remove the temporary obstacle from the navmesh completely.
 // NOTE: This will also null the supplied pointer if successful, as the pointer will be gone from the navmesh.
@@ -284,6 +290,8 @@ Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile,
 */
 Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = NAV_FLAG_NONE);
 
+
+bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const Vector SearchExtents = DefaultReachableExtents);
 
 void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTime);
 void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTime);

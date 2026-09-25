@@ -94,10 +94,12 @@ enum class EAIReachabilityFlags : uint16
 	AI_REACHABILITY_NONE = 0,
 	AI_REACHABILITY_MARINE = 1u << 0,
 	AI_REACHABILITY_SKULK = 1u << 1,
-	AI_REACHABILITY_GORGE = 1u << 2,
-	AI_REACHABILITY_ONOS = 1u << 3,
-	AI_REACHABILITY_WELDER = 1u << 4,
-	AI_REACHABILITY_UNREACHABLE = 1u << 5,
+	AI_REACHABILITY_SKULK_LEAP = 1u << 2,
+	AI_REACHABILITY_GORGE = 1u << 3,
+	AI_REACHABILITY_LERK = 1u << 4,
+	AI_REACHABILITY_FADE = 1u << 5,
+	AI_REACHABILITY_ONOS = 1u << 6,
+	AI_REACHABILITY_WELDER = 1u << 7,
 
 	AI_REACHABILITY_ALL = -1
 };
@@ -148,12 +150,12 @@ inline EAIStructureStatus operator&(EAIStructureStatus a, EAIStructureStatus b)
 enum class EAIStructureType : uint32
 {
 	STRUCTURE_NONE = 0,
-	STRUCTURE_MARINE_RESTOWER = 1u,
+	STRUCTURE_MARINE_RESTOWER = 1u << 0,
 	STRUCTURE_MARINE_INFANTRYPORTAL = 1u << 1,
 	STRUCTURE_MARINE_TURRETFACTORY = 1u << 2,
 	STRUCTURE_MARINE_ADVTURRETFACTORY = 1u << 3,
-	STRUCTURE_MARINE_ARMOURY = 1u << 4,
-	STRUCTURE_MARINE_ADVARMOURY = 1u << 5,
+	STRUCTURE_MARINE_ARMORY = 1u << 4,
+	STRUCTURE_MARINE_ADVARMORY = 1u << 5,
 	STRUCTURE_MARINE_ARMSLAB = 1u << 6,
 	STRUCTURE_MARINE_PROTOTYPELAB = 1u << 7,
 	STRUCTURE_MARINE_OBSERVATORY = 1u << 8,
@@ -165,16 +167,16 @@ enum class EAIStructureType : uint32
 
 	STRUCTURE_ALIEN_HIVE = 1u << 14,
 	STRUCTURE_ALIEN_RESTOWER = 1u << 15,
-	STRUCTURE_ALIEN_DEFENCECHAMBER = 1u << 16,
+	STRUCTURE_ALIEN_DEFENSECHAMBER = 1u << 16,
 	STRUCTURE_ALIEN_SENSORYCHAMBER = 1u << 17,
 	STRUCTURE_ALIEN_MOVEMENTCHAMBER = 1u << 18,
-	STRUCTURE_ALIEN_OFFENCECHAMBER = 1u << 19,
+	STRUCTURE_ALIEN_OFFENSECHAMBER = 1u << 19,
 
 	ALL_MARINE_STRUCTURES = 0xFFF,
-	ALL_ALIEN_STRUCTURES = (STRUCTURE_ALIEN_HIVE | STRUCTURE_ALIEN_RESTOWER | STRUCTURE_ALIEN_DEFENCECHAMBER | STRUCTURE_ALIEN_SENSORYCHAMBER | STRUCTURE_ALIEN_MOVEMENTCHAMBER | STRUCTURE_ALIEN_OFFENCECHAMBER),
+	ALL_ALIEN_STRUCTURES = (STRUCTURE_ALIEN_HIVE | STRUCTURE_ALIEN_RESTOWER | STRUCTURE_ALIEN_DEFENSECHAMBER | STRUCTURE_ALIEN_SENSORYCHAMBER | STRUCTURE_ALIEN_MOVEMENTCHAMBER | STRUCTURE_ALIEN_OFFENSECHAMBER),
 	ANY_RES_TOWER = (STRUCTURE_MARINE_RESTOWER | STRUCTURE_ALIEN_RESTOWER),
 
-	ALL_STRUCTURES = ((unsigned int)-1 & ~(STRUCTURE_MARINE_DEPLOYEDMINE))
+	ALL_STRUCTURES = ((uint32)-1 & ~(STRUCTURE_MARINE_DEPLOYEDMINE))
 };
 
 inline EAIStructureType operator|(EAIStructureType a, EAIStructureType b)
@@ -286,15 +288,14 @@ struct AvHAIResourceNode
 	edict_t* Edict = nullptr;
 	Vector Location = g_vecZero;									// origin of the func_resource edict (not the tower itself)
 	AvHTeamNumber OwningTeam = TEAM_IND;							// The team that has currently capped this node (TEAM_IND if none)
+	bool bIsOccupied = false;
 	const AvHAIBuildableStructure* ActiveTowerEntity = nullptr;							// Reference to the resource tower edict (if capped)
 	bool bIsBaseNode = false;										// Is this a node in the marine base or active alien hive?
 	edict_t* ParentHive = nullptr;
-	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team A can reach this node?
-	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team B can reach this node?
 	bool bReachabilityMarkedDirty = false;							// Reachability needs to be recalculated
 	float NextReachabilityRefreshTime = 0.0f;
 
-	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+	bool IsValid() const { return ResourceNodeEntity != nullptr && !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
 };
 
 // Data structure to hold information about each hive in the map
@@ -379,53 +380,48 @@ struct AvHAIGuardInfo
 // Data structure to hold information on any kind of buildable structure (hive, resource tower, chamber, marine building etc)
 struct AvHAIBuildableStructure
 {
-	AvHBaseBuildable* EntityRef = nullptr;
-	int EntIndex = -1;
+	CBaseEntity* EntityRef = nullptr;
 	edict_t* Edict = nullptr; // Reference to structure edict
-	Vector Location = g_vecZero; // origin of the structure edict
-	float healthPercent = 0.0f; // Current health of the building
-	float lastDamagedTime = 0.0f; // When it was last damaged by something. Used by bots to determine if still needs defending
 	EAIStructureType StructureType = EAIStructureType::STRUCTURE_NONE; // Type of structure it is (e.g. hive, comm chair, infantry portal, defence chamber etc.)
+	Vector Location = g_vecZero; // origin of the structure edict
+	float HealthPercent = 1.0f; // Current health of the building
 	EAIStructureStatus StructureStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
 	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the building has been removed from play
 	std::vector<NavTempObstacle*> TempObstacles;
 	vector<NavOffMeshConnection*> OffMeshConnections; // References to any off-mesh connections this structure is associated with
-	Vector LastSuccessfulCommanderLocation = g_vecZero; // Tracks the last commander view location where it successfully placed or selected the building
-	Vector LastSuccessfulCommanderAngle = g_vecZero; // Tracks the last commander input angle ("click" location) used to successfully place or select building
-	EAIStructurePurpose Purpose = EAIStructurePurpose::STRUCTURE_PURPOSE_NONE;
-	bool bReachabilityMarkedDirty = false; // If true, reachability flags will be recalculated for this structure
-	bool bPlacedByHuman = true; // This structure was placed by a human: AI commander will not recycle these unless it absolutely makes sense to
+	bool bReachabilityMarkedDirty = true; // If true, reachability flags will be recalculated for this structure
 	AvHTeamNumber Team = TEAM_IND;
 
-	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+	bool IsValid() const { return EntityRef != nullptr && !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
 
-	bool IsGhost() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_GHOST); }
+	bool IsGhost() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_GHOST); }
 
-	bool IsPartiallyBuilt() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARTIAL); }
+	bool IsPartiallyBuilt() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARTIAL); }
 
-	bool IsParasited() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARASITED); }
+	bool IsParasited() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARASITED); }
 
-	bool IsCompleted() const { return EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED); }
+	bool IsCompleted() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED); }
 
-	bool IsUnderAttack() const
+	bool IsRecycling() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING); }
+
+	bool IsResearching() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING); }
+
+	bool IsUpgrading() const { return (IsResearching() && (Edict->v.iuser2 == ARMORY_UPGRADE || Edict->v.iuser2 == TURRET_FACTORY_UPGRADE)); }
+
+	bool IsUnderAttack() const { return IsValid() && !IsRecycling() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_UNDERATTACK); }
+
+	bool IsElectrified() const { return IsValid() && !IsRecycling() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_ELECTRIFIED); }
+
+	bool IsIdle() const { return IsValid() && !IsResearching() && !IsRecycling(); }
+
+	bool CanBeUpgraded() const
 	{
-		return !EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING)
-			&& EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_UNDERATTACK);
+		return IsCompleted()
+			&& IsIdle()
+			&& EnumHasAnyFlags(StructureType, (EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY | EAIStructureType::STRUCTURE_MARINE_ARMORY));
 	}
-
-	bool IsElectrified() const
-	{
-		return !EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING)
-			&& EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_ELECTRIFIED);
-	}
-
-	bool IsIdle() const
-	{
-		return !EnumHasAnyFlags(StructureStatusFlags, (EAIStructureStatus::STRUCTURE_STATUS_RECYCLING | EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING));
-	}
-
 };
 
 // Any kind of pickup that has been dropped either by the commander or by a player
@@ -440,6 +436,19 @@ struct AvHAIDroppedItem
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the item has been removed from play
 
 	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+
+	bool IsPrimaryWeapon() const
+	{
+		switch (ItemType)
+		{
+			case EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER:
+			case EAIDeployableItemType::DEPLOYABLE_ITEM_HMG:
+			case EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN:
+				return true;
+			default:
+				return false;
+		}
+	}
 };
 
 // Affects the bot's pathfinding choices

@@ -518,7 +518,7 @@ void BotAlienAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target)
 		}
 
 		// If we have regen and are hurt and are attacking a damaging structure, let us heal up a bit
-		if ((StructureType == STRUCTURE_MARINE_TURRET || StructureType == STRUCTURE_ALIEN_OFFENCECHAMBER) && GetPlayerOverallHealthPercent(pBot->Edict) < 0.75f && AvHGetAlienUpgradeLevel(pBot->Edict->v.iuser4, MASK_UPGRADE_2) > 0)
+		if ((StructureType == STRUCTURE_MARINE_TURRET || StructureType == STRUCTURE_ALIEN_OFFENSECHAMBER) && GetPlayerOverallHealthPercent(pBot->Edict) < 0.75f && AvHGetAlienUpgradeLevel(pBot->Edict->v.iuser4, MASK_UPGRADE_2) > 0)
 		{
 			return;
 		}
@@ -651,7 +651,7 @@ void BotMarineAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target)
 	{
 		if (IsPlayerReloading(pBot->Player))
 		{
-			if (StructureType == STRUCTURE_MARINE_TURRET || StructureType == STRUCTURE_ALIEN_OFFENCECHAMBER)
+			if (StructureType == STRUCTURE_MARINE_TURRET || StructureType == STRUCTURE_ALIEN_OFFENSECHAMBER)
 			{
 				MoveTo(pBot, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), MOVESTYLE_NORMAL);
 				return;
@@ -880,7 +880,7 @@ void BombardierAttackTarget(AvHAIPlayer* pBot, edict_t* Target)
 	}
 
 	// Back off to reload
-	if (GetStructureTypeFromEdict(Target) == STRUCTURE_ALIEN_OFFENCECHAMBER && UTIL_QuickTrace(pBot->Edict, pBot->CurrentEyePosition, UTIL_GetCentreOfEntity(Target)))
+	if (GetStructureTypeFromEdict(Target) == STRUCTURE_ALIEN_OFFENSECHAMBER && UTIL_QuickTrace(pBot->Edict, pBot->CurrentEyePosition, UTIL_GetCentreOfEntity(Target)))
 	{
 		BotLookAt(pBot, Target);
 		MoveTo(pBot, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), MOVESTYLE_NORMAL);
@@ -1516,7 +1516,7 @@ void BotUpdateView(AvHAIPlayer* pBot)
 
 	if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_ALIEN)
 	{
-		EnemyTurretFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+		EnemyTurretFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 		EnemyTurretFilter.MaxSearchRadius = 700.0f; // For some reason, offence chambers have a hard-coded range
 	}
 	else
@@ -1920,7 +1920,7 @@ void CustomThink(AvHAIPlayer* pBot)
 	if (pBot->CurrentTask->TaskType != TASK_ATTACK)
 	{
 		StructureSearchFilter EnemyOCFilter;
-		EnemyOCFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+		EnemyOCFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 
 		AvHAIBuildableStructure NearestOC = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &EnemyOCFilter);
 
@@ -2602,7 +2602,7 @@ AvHAICombatStrategy GetLerkCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_stat
 
 	StructureSearchFilter TurretFilter;
 	TurretFilter.DeployableTeam = EnemyTeam;
-	TurretFilter.DeployableTypes = (STRUCTURE_MARINE_TURRET | STRUCTURE_ALIEN_OFFENCECHAMBER);
+	TurretFilter.DeployableTypes = (STRUCTURE_MARINE_TURRET | STRUCTURE_ALIEN_OFFENSECHAMBER);
 	TurretFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 	TurretFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 	TurretFilter.MaxSearchRadius = BALANCE_VAR(kTurretRange);
@@ -2879,7 +2879,7 @@ AvHAICombatStrategy GetMarineCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_st
 
 	float DistToEnemy = vDist2DSq(pBot->Edict->v.origin, CurrentEnemy->LastDetectedLocation);
 
-	bool bCanRetreat = AITAC_IsCompletedStructureOfTypeNearLocation(BotTeam, (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY), ZERO_VECTOR, 0.0f);
+	bool bCanRetreat = AITAC_IsCompletedStructureOfTypeNearLocation(BotTeam, (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY), ZERO_VECTOR, 0.0f);
 
 	if (bCanRetreat && pBot->CurrentCombatStrategy == COMBAT_STRATEGY_RETREAT)
 	{
@@ -3254,7 +3254,7 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 		else
 		{
 			StructureSearchFilter NearestArmoury;
-			NearestArmoury.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
+			NearestArmoury.DeployableTypes = (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY);
 			NearestArmoury.DeployableTeam = BotTeam;
 			NearestArmoury.ReachabilityTeam = BotTeam;
 			NearestArmoury.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -3931,7 +3931,7 @@ void AIPlayerSetMarineAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Tas
 		{
 			StructureSearchFilter EnemyDefences;
 			EnemyDefences.DeployableTeam = EnemyTeam;
-			EnemyDefences.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+			EnemyDefences.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 			EnemyDefences.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 			EnemyDefences.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 
@@ -4044,7 +4044,7 @@ void AIPlayerSetWantsAndNeedsCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Ta
 		}
 
 		StructureSearchFilter NearestArmouryFilter;
-		NearestArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
+		NearestArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY);
 		NearestArmouryFilter.DeployableTeam = pBot->Player->GetTeam();
 		NearestArmouryFilter.ReachabilityTeam = pBot->Player->GetTeam();
 		NearestArmouryFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -4102,7 +4102,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		}
 
 		StructureSearchFilter NearestArmouryFilter;
-		NearestArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
+		NearestArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY);
 		NearestArmouryFilter.DeployableTeam = pBot->Player->GetTeam();
 		NearestArmouryFilter.ReachabilityTeam = pBot->Player->GetTeam();
 		NearestArmouryFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -4380,7 +4380,7 @@ void AIPlayerSetSecondaryMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	}
 
 	// If we're engaging an enemy turret then finish the job
-	if (Task->TaskType == TASK_ATTACK && (GetStructureTypeFromEdict(Task->TaskTarget) & (STRUCTURE_ALIEN_OFFENCECHAMBER | STRUCTURE_MARINE_TURRET | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_TURRETFACTORY)))
+	if (Task->TaskType == TASK_ATTACK && (GetStructureTypeFromEdict(Task->TaskTarget) & (STRUCTURE_ALIEN_OFFENSECHAMBER | STRUCTURE_MARINE_TURRET | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_TURRETFACTORY)))
 	{
 		if (vDist2DSq(pBot->Edict->v.origin, Task->TaskTarget->v.origin) < sqrf(UTIL_MetresToGoldSrcUnits(20.0f)))
 		{
@@ -5412,7 +5412,7 @@ void AIPlayerSetSecondaryCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 
 		StructureSearchFilter NearbyArmouryFilter;
-		NearbyArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
+		NearbyArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY);
 		NearbyArmouryFilter.DeployableTeam = BotTeam;
 		NearbyArmouryFilter.ReachabilityTeam = BotTeam;
 		NearbyArmouryFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
@@ -6137,7 +6137,7 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	{
 		if (Task->TaskType == TASK_BUILD && Task->StructureType == MissingStructure) { return; }
 
-		int MaxChambersInOnePlace = (MissingStructure == STRUCTURE_ALIEN_DEFENCECHAMBER) ? 3 : 1;
+		int MaxChambersInOnePlace = (MissingStructure == STRUCTURE_ALIEN_DEFENSECHAMBER) ? 3 : 1;
 
 		vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
 		vector<AvHAIResourceNode*> AllNodes = AITAC_GetAllResourceNodes();
@@ -6241,7 +6241,7 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 			if (AIMGR_GetTeamType(EnemyTeam) == AVH_CLASS_TYPE_ALIEN)
 			{
-				StructureTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+				StructureTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 			}
 
 			StructureSearchFilter EnemyStructureFilter;
@@ -6277,10 +6277,10 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 			{
 				switch ((*it).StructureType)
 				{
-				case STRUCTURE_ALIEN_OFFENCECHAMBER:
+				case STRUCTURE_ALIEN_OFFENSECHAMBER:
 					NumOCs++;
 					break;
-				case STRUCTURE_ALIEN_DEFENCECHAMBER:
+				case STRUCTURE_ALIEN_DEFENSECHAMBER:
 					NumDCs++;
 					break;
 				case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
@@ -6345,7 +6345,7 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		// Don't reinforce RTs which have enemy stuff nearby. Would be suicide for the gorge.
 		StructureSearchFilter EnemyStructureFilter;
 		EnemyStructureFilter.DeployableTeam = EnemyTeam;
-		EnemyStructureFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_ALIEN_OFFENCECHAMBER);
+		EnemyStructureFilter.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_ALIEN_OFFENSECHAMBER);
 		EnemyStructureFilter.ExcludeStatusFlags = (STRUCTURE_STATUS_RECYCLING);
 		EnemyStructureFilter.IncludeStatusFlags = (STRUCTURE_STATUS_COMPLETED);
 		EnemyStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(7.5);
@@ -6368,10 +6368,10 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		{
 			switch ((*it).StructureType)
 			{
-			case STRUCTURE_ALIEN_OFFENCECHAMBER:
+			case STRUCTURE_ALIEN_OFFENSECHAMBER:
 				NumOCs++;
 				break;
-			case STRUCTURE_ALIEN_DEFENCECHAMBER:
+			case STRUCTURE_ALIEN_DEFENSECHAMBER:
 				NumDCs++;
 				break;
 			case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
@@ -6494,7 +6494,7 @@ void AIPlayerSetAlienCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				}
 				else
 				{
-					EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENCECHAMBER);
+					EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENSECHAMBER);
 				}
 
 				// Enemy has started fortifying the hive we want to build a RT in, don't try to cap it
@@ -6580,7 +6580,7 @@ void AIPlayerSetAlienCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			}
 			else
 			{
-				EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENCECHAMBER);
+				EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENSECHAMBER);
 			}
 
 			// Enemy has started fortifying the hive we want to build a RT in, leave that tower alone
@@ -6843,7 +6843,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	}
 	else
 	{
-		EnemyStuffFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+		EnemyStuffFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 	}
 
 	bool bShouldGuardEmptyHive = pBot->Player->GetUser3() < AVH_USER3_ALIEN_PLAYER3;
@@ -6863,7 +6863,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		StructureSearchFilter FriendlyStuffFilter;
 		FriendlyStuffFilter.DeployableTeam = BotTeam;
 		FriendlyStuffFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
-		FriendlyStuffFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+		FriendlyStuffFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 
 		// Don't guard a hive if some defences are already present
 		if (AITAC_GetNumDeployablesNearLocation(ThisHive->FloorLocation, &FriendlyStuffFilter) >= 2) { continue; }
@@ -6967,7 +6967,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 				case STRUCTURE_MARINE_TURRET:
 					ThisStrength += 1;
 					break;
-				case STRUCTURE_ALIEN_OFFENCECHAMBER:
+				case STRUCTURE_ALIEN_OFFENSECHAMBER:
 					ThisStrength += 1;
 					break;
 				default:
@@ -7114,7 +7114,7 @@ void AIPlayerSetAlienHarasserPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Tas
 	else
 	{
 		EnemyStructureFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(20.0f);
-		EnemyStructureFilter.DeployableTypes = (STRUCTURE_ALIEN_RESTOWER | STRUCTURE_ALIEN_DEFENCECHAMBER | STRUCTURE_ALIEN_MOVEMENTCHAMBER | STRUCTURE_ALIEN_SENSORYCHAMBER);
+		EnemyStructureFilter.DeployableTypes = (STRUCTURE_ALIEN_RESTOWER | STRUCTURE_ALIEN_DEFENSECHAMBER | STRUCTURE_ALIEN_MOVEMENTCHAMBER | STRUCTURE_ALIEN_SENSORYCHAMBER);
 		EnemyStructureToAttack = AITAC_FindClosestDeployableToLocation(EnemyBaseLocation, &EnemyStructureFilter);
 	}
 

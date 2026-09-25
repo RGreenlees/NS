@@ -540,7 +540,7 @@ bool AITASK_IsAttackTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	if (IsPlayerMarine(pBot->Edict))
 	{
-		if (StructureType == STRUCTURE_ALIEN_HIVE || StructureType == STRUCTURE_ALIEN_OFFENCECHAMBER)
+		if (StructureType == STRUCTURE_ALIEN_HIVE || StructureType == STRUCTURE_ALIEN_OFFENSECHAMBER)
 		{
 			if (UTIL_GetPlayerPrimaryWeaponClipAmmo(pBot->Player) <= 0 && UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) <= 0)
 			{
@@ -561,7 +561,7 @@ bool AITASK_IsResupplyTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	AvHAIDeployableStructureType StructureType = GetStructureTypeFromEdict(Task->TaskTarget);
 
-	if (StructureType != STRUCTURE_MARINE_ARMOURY && StructureType != STRUCTURE_MARINE_ADVARMOURY) { return false; }
+	if (StructureType != STRUCTURE_MARINE_ARMORY && StructureType != STRUCTURE_MARINE_ADVARMORY) { return false; }
 
 	if (!UTIL_StructureIsFullyBuilt(Task->TaskTarget) || UTIL_StructureIsRecycling(Task->TaskTarget)) { return false; }
 
@@ -738,7 +738,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 		}
 		else
 		{
-			EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENCECHAMBER);
+			EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENSECHAMBER);
 		}
 		
 		// Enemy has started fortifying the hive we want to build a RT in, abort
@@ -916,10 +916,10 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 
 		switch (ThisStructure.StructureType)
 		{
-			case STRUCTURE_ALIEN_OFFENCECHAMBER:
+			case STRUCTURE_ALIEN_OFFENSECHAMBER:
 				NumOffenceChambers++;
 				break;
-			case STRUCTURE_ALIEN_DEFENCECHAMBER:
+			case STRUCTURE_ALIEN_DEFENSECHAMBER:
 				NumDefenceChambers++;
 				break;
 			case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
@@ -990,7 +990,7 @@ bool AITASK_IsAssaultMarineBaseTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask
 
 	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTeam = EnemyTeam;
-	StructureFilter.DeployableTypes = (STRUCTURE_MARINE_OBSERVATORY | STRUCTURE_MARINE_ARMSLAB | STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_PROTOTYPELAB);
+	StructureFilter.DeployableTypes = (STRUCTURE_MARINE_OBSERVATORY | STRUCTURE_MARINE_ARMSLAB | STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_PROTOTYPELAB);
 	StructureFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 	StructureFilter.ReachabilityTeam = BotTeam;
 	StructureFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
@@ -1408,26 +1408,26 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTeam = BotTeam;
 	StructureFilter.MaxSearchRadius = SearchRadius * 1.25f;
-	StructureFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+	StructureFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 
 	int NumOCs = AITAC_GetNumDeployablesNearLocation(ReinforceLocation, &StructureFilter);
 
 	if (NumOCs < 3)
 	{
-		NextStructure = STRUCTURE_ALIEN_OFFENCECHAMBER;
+		NextStructure = STRUCTURE_ALIEN_OFFENSECHAMBER;
 	}
 
 	if (NextStructure == STRUCTURE_NONE)
 	{
 		if (AITAC_TeamHiveWithTechExists(BotTeam, ALIEN_BUILD_DEFENSE_CHAMBER))
 		{
-			StructureFilter.DeployableTypes = STRUCTURE_ALIEN_DEFENCECHAMBER;
+			StructureFilter.DeployableTypes = STRUCTURE_ALIEN_DEFENSECHAMBER;
 
 			int NumDCs = AITAC_GetNumDeployablesNearLocation(ReinforceLocation, &StructureFilter);
 
 			if (NumDCs < 2)
 			{
-				NextStructure = STRUCTURE_ALIEN_DEFENCECHAMBER;
+				NextStructure = STRUCTURE_ALIEN_DEFENSECHAMBER;
 			}
 		}
 	}
@@ -2856,7 +2856,7 @@ void AlienProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	}
 	else
 	{
-		EnemyStuffFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+		EnemyStuffFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 
 		AvHAIBuildableStructure EnemyOC = AITAC_FindClosestDeployableToLocation(Hive->FloorLocation, &EnemyStuffFilter);
 

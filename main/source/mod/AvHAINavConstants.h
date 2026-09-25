@@ -621,7 +621,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile6;
 	NewProfile6.MeshIndex = NAV_MESH_CONSTRUCTION;
-	NewProfile6.Filters.setIncludeFlags(0x7fffffff);
+	NewProfile6.Filters.setIncludeFlags(NAV_FLAG_ALL);
 	NewProfile6.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
 	NewProfile6.Filters.setAreaCost(0, 1.0);
 	NewProfile6.Filters.setAreaCost(1, 1.0);
@@ -638,7 +638,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile DefaultProfile;
 	DefaultProfile.MeshIndex = NAV_MESH_REGULAR;
-	DefaultProfile.Filters.setIncludeFlags(0x7fffffff);
+	DefaultProfile.Filters.setIncludeFlags(NAV_FLAG_ALL);
 	DefaultProfile.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
 	DefaultProfile.Filters.setAreaCost(0, 1.0);
 	DefaultProfile.Filters.setAreaCost(1, 1.0);

@@ -6,6 +6,7 @@
 // Handles all dynamic map data that impacts bot navigation and movement
 //
 #include "AvHAIMapData.h"
+#include "AvHAINavigation.h"
 #include "AvHServerUtil.h"
 #include "AvHAIHelper.h"
 #include "AvHWeldable.h"
@@ -901,7 +902,9 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 	int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
-	NavAgentProfile TestProfile = GetBaseAgentProfile(NAV_PROFILE_DEFAULT);
+	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(NAV_PROFILE_DEFAULT);
+
+	NavAgentProfile TestProfile = *DefaultBase;
 
 	for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end(); it++)
 	{
@@ -1006,7 +1009,7 @@ void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 
 	for (int i = 0; i < InvalidIndex; i++)
 	{
-		const NavMeshIndex MeshIndex = static_cast<NavMeshIndex>(i);
+		const EAINavMeshIndex MeshIndex = static_cast<EAINavMeshIndex>(i);
 
 		NavMesh* FoundNavMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
 
@@ -1116,7 +1119,7 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector
 
 DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject)
 {
-	if (IsFlagTeleportType((NavMovementFlag)MovementFlag)) { return nullptr; }
+	if (IsFlagTeleportType((EAINavMovementFlag)MovementFlag)) { return nullptr; }
 
 	Vector FromLoc = FromLocation;
 	Vector ToLoc = ToLocation;
@@ -1291,7 +1294,7 @@ DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActiva
 
 		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
 
-		if (!UTIL_PointIsReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
+		if (!AINAV_IsPointReachable(&NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
 
 		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
 		{
@@ -1474,7 +1477,7 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 
 	for (int i = 0; i < InvalidIndex; i++)
 	{
-		const NavMeshIndex MeshIndex = static_cast<NavMeshIndex>(i);
+		const EAINavMeshIndex MeshIndex = static_cast<EAINavMeshIndex>(i);
 
 		NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
 
@@ -1514,7 +1517,7 @@ bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObjec
 {
 	if (!TestObject || FNullEnt(TestObject->Edict) || !Connection) { return false; }
 
-	NavMovementFlag MovementTypes = static_cast<NavMovementFlag>(Connection->ConnectionFlags);
+	EAINavMovementFlag MovementTypes = static_cast<EAINavMovementFlag>(Connection->ConnectionFlags);
 
 	if (IsFlagTeleportType(MovementTypes)) { return false; }
 
@@ -1749,7 +1752,7 @@ void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, const int Area)
 
 		for (int NavIndex = 0; NavIndex < InvalidIndex; NavIndex++)
 		{
-			const NavMeshIndex MeshIndex = static_cast<NavMeshIndex>(NavIndex);
+			const EAINavMeshIndex MeshIndex = static_cast<EAINavMeshIndex>(NavIndex);
 
 			NavTempObstacle* NewObstacle = AIMESH_AddTemporaryObstacle(MeshIndex, CurrentPoint, CylinderRadius, SizeZ, Area);
 

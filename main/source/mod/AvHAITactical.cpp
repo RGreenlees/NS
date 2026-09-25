@@ -28,17 +28,16 @@
 
 #include "DetourTileCacheBuilder.h"
 
-#include <unordered_map>
-
-
 vector<AvHAIResourceNode> ResourceNodes;
 vector<AvHAIHiveDefinition> Hives;
 
 float CommanderViewZHeight;
 
-std::unordered_map<int, AvHAIBuildableStructure> TeamAStructureMap;
+std::vector<AvHAITeamStartingLocation> TeamAStartingLocations;
+std::vector<AvHAITeamStartingLocation> TeamBStartingLocations;
 
-std::unordered_map<int, AvHAIBuildableStructure> TeamBStructureMap;
+AIBuildableStructureMap TeamAStructureMap;
+AIBuildableStructureMap TeamBStructureMap;
 
 std::unordered_map<int, AvHAIDroppedItem> MarineDroppedItemMap;
 
@@ -445,7 +444,7 @@ const AvHAIBuildableStructure* AITAC_GetStructureFromEdict(const edict_t* Struct
 
 	if (Structure->v.team == TeamA)
 	{
-		std::unordered_map<int, AvHAIBuildableStructure>::const_iterator Found = TeamAStructureMap.find(EntIndex);
+		AIBuildableStructureMap::const_iterator Found = TeamAStructureMap.find(EntIndex);
 
 		if (Found == TeamAStructureMap.end()) { return nullptr; }
 
@@ -453,7 +452,7 @@ const AvHAIBuildableStructure* AITAC_GetStructureFromEdict(const edict_t* Struct
 	}
 	else
 	{
-		std::unordered_map<int, AvHAIBuildableStructure>::const_iterator Found = TeamBStructureMap.find(EntIndex);
+		AIBuildableStructureMap::const_iterator Found = TeamBStructureMap.find(EntIndex);
 
 		if (Found == TeamBStructureMap.end()) { return nullptr; }
 
@@ -1078,6 +1077,111 @@ void AITAC_RefreshReachabilityForHive(AvHAIHiveDefinition* Hive)
 	}
 }
 
+void AINAV_CalculateMarineReachabilityFlags(const Vector& FromLocation, const Vector& ToLocation, EAIReachabilityFlags& OutReachabilityFlags, float MaxAcceptableDistance)
+{
+	OutReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+
+	const NavAgentProfile* MarineBaseProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+
+	if (!MarineBaseProfile) { return; }
+
+	if (!AIMESH_IsPointOnNavmesh(MarineBaseProfile->MeshIndex, ToLocation)) { return; }
+
+	if (UTIL_PointIsReachable(MarineBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+	{
+		OutReachabilityFlags = EnumGetCombinedFlags(EAIReachabilityFlags::AI_REACHABILITY_MARINE, EAIReachabilityFlags::AI_REACHABILITY_WELDER);
+		return;
+	}
+
+	NavAgentProfile WelderProfile = *MarineBaseProfile;
+	WelderProfile.Filters.addIncludeFlags(EAINavMovementFlag::NAV_FLAG_WELD);
+
+	if (UTIL_PointIsReachable(&WelderProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+	{
+		OutReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_WELDER;
+	}
+}
+
+void AINAV_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vector& ToLocation, EAIReachabilityFlags& OutReachabilityFlags, float MaxAcceptableDistance)
+{
+	OutReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+
+	// Check Onos as their movement profile is unique and uses a different mesh
+	if (const NavAgentProfile* OnosBaseProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_ONOS))
+	{
+		if (AIMESH_IsPointOnNavmesh(OnosBaseProfile->MeshIndex, ToLocation))
+		{
+			if (UTIL_PointIsReachable(OnosBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			{
+				EnumAddFlags(OutReachabilityFlags, EAIReachabilityFlags::AI_REACHABILITY_ONOS);
+			}
+		}
+	}
+
+	// If the chonky gorge can heave his fat arse here, then any of the other non-Onos aliens can.
+	if (const NavAgentProfile* GorgeBaseProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_GORGE))
+	{
+		if (AIMESH_IsPointOnNavmesh(GorgeBaseProfile->MeshIndex, ToLocation))
+		{
+			if (UTIL_PointIsReachable(GorgeBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			{
+				OutReachabilityFlags = (EAIReachabilityFlags::AI_REACHABILITY_GORGE
+					| EAIReachabilityFlags::AI_REACHABILITY_SKULK
+					| EAIReachabilityFlags::AI_REACHABILITY_SKULK_LEAP
+					| EAIReachabilityFlags::AI_REACHABILITY_LERK
+					| EAIReachabilityFlags::AI_REACHABILITY_FADE
+					);
+				return;
+			}
+		}
+	}
+
+	if (const NavAgentProfile* SkulkBaseProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_SKULK))
+	{
+		if (AIMESH_IsPointOnNavmesh(SkulkBaseProfile->MeshIndex, ToLocation))
+		{
+			if (UTIL_PointIsReachable(SkulkBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			{
+				// Assume that if a basic skulk can reach it, so can fade and lerk (which can blink/fly respectively)
+				OutReachabilityFlags = (EAIReachabilityFlags::AI_REACHABILITY_SKULK
+					| EAIReachabilityFlags::AI_REACHABILITY_SKULK_LEAP
+					| EAIReachabilityFlags::AI_REACHABILITY_LERK
+					| EAIReachabilityFlags::AI_REACHABILITY_FADE
+					);
+				return;
+			}
+			else
+			{
+				NavAgentProfile SkulkWithLeapProfile = *SkulkBaseProfile;
+				SkulkWithLeapProfile.Filters.addIncludeFlags(EAINavMovementFlag::NAV_FLAG_LEAP);
+
+				if (UTIL_PointIsReachable(&SkulkWithLeapProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+				{
+					// If a skulk with leap can, then assume lerk and fade also can (since they can blink/fly for leap)
+					OutReachabilityFlags = (EAIReachabilityFlags::AI_REACHABILITY_SKULK_LEAP
+						| EAIReachabilityFlags::AI_REACHABILITY_LERK
+						| EAIReachabilityFlags::AI_REACHABILITY_FADE
+						);
+					return;
+				}
+			}
+		}
+	}
+
+	// Finally, check for any lerk-only reachability given their unique ability to fly
+	if (const NavAgentProfile* LerkBaseProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_LERK))
+	{
+		if (AIMESH_IsPointOnNavmesh(LerkBaseProfile->MeshIndex, ToLocation))
+		{
+			if (UTIL_PointIsReachable(LerkBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			{
+				OutReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_LERK;
+				return;
+			}
+		}
+	}
+}
+
 void AITAC_RefreshReachabilityForResNode(AvHAIResourceNode* ResNode)
 {
 	if (Hives.size() == 0)
@@ -1085,17 +1189,13 @@ void AITAC_RefreshReachabilityForResNode(AvHAIResourceNode* ResNode)
 		AITAC_RefreshHiveData();
 	}
 
-	if (!bTileCacheUpToDate) { return; }
-
 	ResNode->bReachabilityMarkedDirty = false;
 	ResNode->NextReachabilityRefreshTime = 0.0f;
 
-	ResNode->TeamAReachabilityFlags = AI_REACHABILITY_NONE;
-	ResNode->TeamBReachabilityFlags = AI_REACHABILITY_NONE;
+	ResNode->TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+	ResNode->TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 
-	Vector ResNodeLocation = ResNode->Location;
 
-	bool bOnNavMesh = UTIL_PointIsOnNavmesh(GetBaseNavProfile(MARINE_BASE_NAV_PROFILE), ResNodeLocation, Vector(max_player_use_reach, max_player_use_reach, max_player_use_reach));
 
 	if (!bOnNavMesh)
 	{
@@ -1109,7 +1209,9 @@ void AITAC_RefreshReachabilityForResNode(AvHAIResourceNode* ResNode)
 
 	if (GetGameRules()->GetTeamA()->GetTeamType() == AVH_CLASS_TYPE_MARINE)
 	{
-		bool bIsReachableMarine = UTIL_PointIsReachable(GetBaseNavProfile(MARINE_BASE_NAV_PROFILE), TeamAStart, ResNodeLocation, 4.0f);
+		const NavAgentProfile* MarineBaseProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+
+		bool bIsReachableMarine = UTIL_PointIsReachable(GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE), TeamAStart, ResNode->Location, 4.0f);
 
 		if (bIsReachableMarine)
 		{
@@ -1225,11 +1327,11 @@ void AITAC_PopulateResourceNodes()
 	FOR_ALL_ENTITIES(kesFuncResource, AvHFuncResource*)
 
 		AvHAIResourceNode NewResNode;
-		NewResNode.ResourceEntity = theEntity;
-		NewResNode.ResourceEdict = theEntity->edict();
+		NewResNode.ResourceNodeEntity = theEntity;
+		NewResNode.Edict = theEntity->edict();
 		NewResNode.Location = theEntity->pev->origin;
-		NewResNode.TeamAReachabilityFlags = AI_REACHABILITY_NONE;
-		NewResNode.TeamBReachabilityFlags = AI_REACHABILITY_NONE;
+		NewResNode.TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
+		NewResNode.TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 		NewResNode.bReachabilityMarkedDirty = true;
 		NewResNode.NextReachabilityRefreshTime = 0.0f;
 
@@ -1247,72 +1349,77 @@ void AITAC_RefreshResourceNodes()
 
 	for (auto it = ResourceNodes.begin(); it != ResourceNodes.end(); it++)
 	{
-		AvHFuncResource* ResourceEntity = it->ResourceEntity;
+		AvHAIResourceNode* ResourceNode = &(*it);
 
-		it->bIsOccupied = ResourceEntity->GetIsOccupied();
+		if (!ResourceNode || !ResourceNode->IsValid()) { continue; }
 
-		if (it->bIsOccupied)
+		AvHFuncResource* ResourceEntity = ResourceNode->ResourceNodeEntity;
+
+		ResourceNode->bIsOccupied = ResourceEntity->GetIsOccupied();
+
+		if (ResourceNode->bIsOccupied && !ResourceNode->ActiveTowerEntity)
 		{
 			StructureSearchFilter TowerFilter;
-			TowerFilter.DeployableTypes = (STRUCTURE_MARINE_RESTOWER | STRUCTURE_ALIEN_RESTOWER);
+			TowerFilter.DeployableTypes = (EAIStructureType::STRUCTURE_MARINE_RESTOWER | EAIStructureType::STRUCTURE_ALIEN_RESTOWER);
 
-			AvHAIBuildableStructure OccupyingTower = AITAC_FindClosestDeployableToLocation(it->Location, &TowerFilter);
+			std::vector<const AvHAIBuildableStructure*> AllTowerEntities = AITAC_FindAllDeployables(ZERO_VECTOR, &TowerFilter);
 
-			if (OccupyingTower.IsValid())
+			for (auto TowerEntityIt : AllTowerEntities)
 			{
-				it->ActiveTowerEntity = OccupyingTower.edict;
-				it->OwningTeam = OccupyingTower.EntityRef->GetTeamNumber();
+				const AvHAIBuildableStructure* TowerStructure = &(*TowerEntityIt);
+
+				AvHResourceTower* TowerEntity = dynamic_cast<AvHResourceTower*>(TowerStructure->EntityRef);
+
+				if (!TowerEntity) { continue; }
+
+				if (TowerEntity->GetHostResource() == ResourceEntity)
+				{
+					ResourceNode->ActiveTowerEntity = TowerStructure;
+					ResourceNode->OwningTeam = TowerStructure->Team;
+					break;
+				}
 			}
 		}
 		else
 		{
-			it->ActiveTowerEntity = nullptr;
-			it->OwningTeam = TEAM_IND;
+			ResourceNode->ActiveTowerEntity = nullptr;
+			ResourceNode->OwningTeam = TEAM_IND;
 		}
 
-		if (it->bReachabilityMarkedDirty)
-		{
+		if (!ResourceNode->bReachabilityMarkedDirty) { continue; }
 
-			if (it->NextReachabilityRefreshTime == 0.0f)
-			{
-				it->NextReachabilityRefreshTime = gpGlobals->time + frandrange(0.5f, 1.5f);
-			}
-			else
-			{
-				if (gpGlobals->time > it->NextReachabilityRefreshTime)
-				{
-					AITAC_RefreshReachabilityForResNode(&(*it));
-				}
-			}
+		if (ResourceNode->NextReachabilityRefreshTime == 0.0f)
+		{
+			ResourceNode->NextReachabilityRefreshTime = gpGlobals->time + frandrange(0.5f, 1.5f);
+			continue;
+		}
+
+		if (gpGlobals->time > ResourceNode->NextReachabilityRefreshTime)
+		{
+			AITAC_RefreshReachabilityForResNode(ResourceNode);
 		}
 	}
 }
 
-AvHAIResourceNode* AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const unsigned int ReachabilityFlags)
+const AvHAIResourceNode* AITAC_GetRandomResourceNode(AvHTeamNumber SearchingTeam, const ResourceNodeSearchFilter* Filter)
 {
-	AvHAIResourceNode* Result = nullptr;
+	const AvHAIResourceNode* Result = nullptr;
+
 	float MaxScore = 0.0f;
 
 	for (auto it = ResourceNodes.begin(); it != ResourceNodes.end(); it++)
 	{
-		if (ReachabilityFlags != AI_REACHABILITY_NONE)
-		{
-			unsigned int StructureReachabilityFlags = (it->TeamAReachabilityFlags | it->TeamBReachabilityFlags);
+		const AvHAIResourceNode* ResourceNode = &(*it);
 
-			if (SearchingTeam != TEAM_IND)
+		if (AITAC_DoesResourceNodeMatchFilter(ResourceNode, Filter))
+		{
+			float ThisScore = frandrange(0.0f, 1.0f);
+
+			if (!Result || ThisScore > MaxScore)
 			{
-				StructureReachabilityFlags = (SearchingTeam == GetGameRules()->GetTeamANumber()) ? it->TeamAReachabilityFlags : it->TeamBReachabilityFlags;
+				Result = ResourceNode;
+				MaxScore = ThisScore;
 			}
-
-			if (!(StructureReachabilityFlags & ReachabilityFlags)) { continue; }
-		}
-
-		float ThisScore = frandrange(0.0f, 1.0f);
-
-		if (!Result || ThisScore > MaxScore)
-		{
-			Result = &(*it);
-			MaxScore = ThisScore;
 		}
 	}
 
@@ -1448,123 +1555,32 @@ void AITAC_RefreshBuildableStructures()
 {
 	if (!NavmeshLoaded()) { return; }
 
-	CBaseEntity* currStructure = NULL;
+	FOR_ALL_BASEENTITIES()
+		// We are only interested in buildings and deployed mines
+		AvHBaseBuildable* TheBuildableRef = dynamic_cast<AvHBaseBuildable*>(theBaseEntity);
 
-	// Marine Structures
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_command")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+		if (!TheBuildableRef)
+		{
+			AvHDeployedMine* TheMineRef = dynamic_cast<AvHDeployedMine*>(theBaseEntity);
 
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "resourcetower")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+			if (!TheMineRef)
+			{
+				continue;
+			}
+		}
 
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_infportal")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+		edict_t* TheBuildableEdict = theBaseEntity->edict();
 
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_armory")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+		if (FNullEnt(TheBuildableEdict)) { continue; }
 
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_turretfactory")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+		const EAIStructureType ThisStructureType = UTIL_IUSER3ToStructureType(TheBuildableEdict->v.iuser3);
 
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_advturretfactory")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+		if (ThisStructureType == EAIStructureType::STRUCTURE_NONE || ThisStructureType == EAIStructureType::STRUCTURE_ALIEN_HIVE) { continue; }
 
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "siegeturret")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "turret")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_advarmory")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_armslab")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_prototypelab")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "team_observatory")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "phasegate")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "item_mine")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
+		AITAC_UpdateBuildableStructure(theBaseEntity);
+	END_FOR_ALL_BASEENTITIES()
 
 
-	// Alien Structures
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "alienresourcetower")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "defensechamber")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "offensechamber")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "movementchamber")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
-
-	currStructure = NULL;
-	while (((currStructure = UTIL_FindEntityByClassname(currStructure, "sensorychamber")) != NULL) && currStructure)
-	{
-		AITAC_UpdateBuildableStructure(currStructure);
-	}
 
 	int NumReachabilitiesCalculated = 0;
 
@@ -1907,26 +1923,33 @@ void AITAC_RefreshReachabilityForStructure(AvHAIBuildableStructure* Structure)
 	}
 }
 
-AvHAIBuildableStructure* AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
+void AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 {
-	if (!Structure || (Structure->pev->effects & EF_NODRAW) || (Structure->pev->deadflag != DEAD_NO)) { return nullptr; }
+	if (!Structure || (Structure->pev->effects & EF_NODRAW) || (Structure->pev->deadflag != DEAD_NO)) { return; }
 
-	edict_t* BuildingEdict = Structure->edict();
+	const edict_t* BuildingEdict = Structure->edict();
 
-	AvHAIDeployableStructureType StructureType = UTIL_IUSER3ToStructureType(BuildingEdict->v.iuser3);
-
-	if (StructureType == STRUCTURE_NONE) { return nullptr; }
+	if (FNullEnt(BuildingEdict)) { return; }
 
 	int EntIndex = ENTINDEX(BuildingEdict);
 
-	if (EntIndex < 0) { return nullptr; }
+	if (EntIndex < 0) { return; }
+
+	EAIStructureType StructureType = UTIL_IUSER3ToStructureType(BuildingEdict->v.iuser3);
+
+	if (StructureType == EAIStructureType::STRUCTURE_NONE) { return; }
 
 	AvHTeamNumber TeamANumber = GetGameRules()->GetTeamANumber();
-	AvHTeamNumber TeamBNumber = GetGameRules()->GetTeamBNumber();
 
-	std::unordered_map<int, AvHAIBuildableStructure>& BuildingMap = ((AvHTeamNumber)BuildingEdict->v.team == TeamANumber) ? TeamAStructureMap : TeamBStructureMap;
+	AIBuildableStructureMap& BuildingMap = ((AvHTeamNumber)BuildingEdict->v.team == TeamANumber) ? TeamAStructureMap : TeamBStructureMap;
 
-	AvHAIBuildableStructure* StructureRef = &BuildingMap[EntIndex];
+	AIBuildableStructureMap::iterator ExistingAIStructureIndex = BuildingMap.find(EntIndex);
+
+	if (ExistingAIStructureIndex == BuildingMap.end())
+	{
+		AvHAIBuildableStructure NewAIStructure = AITAC_RegisterNewBuildableStructure(Structure);
+		BuildingMap.insert(ExistingAIStructureIndex, pair<int, AvHAIBuildableStructure>(EntIndex, NewAIStructure));
+	}
 
 	if (StructureType == STRUCTURE_MARINE_DEPLOYEDMINE)
 	{
@@ -2061,77 +2084,104 @@ AvHAIBuildableStructure* AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 		AITAC_OnStructureBeginRecycling(&BuildingMap[EntIndex]);
 	}
 
-	if (StructureRef->Purpose == STRUCTURE_PURPOSE_NONE)
+	return StructureRef;
+}
+
+void AITAC_UpdateBuildableStructureStatusFlags(AvHAIBuildableStructure* Structure)
+{
+	if (!Structure || !Structure->IsValid()) { return; }
+
+	int StructureEdictIndex = ENTINDEX(Structure->Edict);
+
+	Structure->StructureStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
+
+	AvHBaseBuildable* BaseBuildable = dynamic_cast<AvHBaseBuildable*>(Structure->EntityRef);
+
+	if (!BaseBuildable || Structure->StructureType == EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE)
 	{
-		AvHTeamNumber StructureTeam = (AvHTeamNumber)StructureRef->edict->v.team;
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED);
+		return;
+	}
 
-		if (AIMGR_GetTeamType(StructureTeam) == AVH_CLASS_TYPE_MARINE)
+	if (Structure->HealthPercent < 1.0f)
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_DAMAGED);
+	}
+
+	if (GetGameRules()->GetIsEntityUnderAttack(StructureEdictIndex))
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_UNDERATTACK);
+	}
+
+	if (BaseBuildable->GetIsBuilt())
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED);
+	}
+	else
+	{
+		if (BaseBuildable->pev->rendermode == kRenderTransTexture)
 		{
-			switch (StructureRef->StructureType)
-			{
-				case STRUCTURE_MARINE_COMMCHAIR:
-				case STRUCTURE_MARINE_INFANTRYPORTAL:
-				case STRUCTURE_MARINE_ARMSLAB:
-				case STRUCTURE_MARINE_PROTOTYPELAB:
-					StructureRef->Purpose = STRUCTURE_PURPOSE_BASE;
-					break;
-				case STRUCTURE_MARINE_RESTOWER:
-					StructureRef->Purpose = STRUCTURE_PURPOSE_GENERAL;
-					break;
-				case STRUCTURE_MARINE_TURRET:
-					StructureRef->Purpose = STRUCTURE_PURPOSE_FORTIFY;
-					break;
-				case STRUCTURE_MARINE_SIEGETURRET:
-					StructureRef->Purpose = STRUCTURE_PURPOSE_SIEGE;
-					break;
-				default:
-				{
-					Vector TeamStart = AITAC_GetTeamStartingLocation(StructureTeam);
-
-					if (vDist2DSq(StructureRef->Location, TeamStart) < sqrf(UTIL_MetresToGoldSrcUnits(15.0f)))
-					{
-						StructureRef->Purpose = STRUCTURE_PURPOSE_BASE;
-					}
-					else
-					{
-						AvHTeamNumber EnemyTeam = AIMGR_GetEnemyTeam(StructureTeam);
-
-						const AvHAIHiveDefinition* NearestHive = AITAC_GetHiveNearestLocation(StructureRef->Location);
-
-						if (NearestHive)
-						{
-							if (NearestHive->Status == HIVE_STATUS_UNBUILT && vDist2DSq(NearestHive->FloorLocation, StructureRef->Location) < sqrf(UTIL_MetresToGoldSrcUnits(15.0f)))
-							{
-								StructureRef->Purpose = STRUCTURE_PURPOSE_FORTIFY;
-							}
-							else if (NearestHive->Status != HIVE_STATUS_UNBUILT && vDist2DSq(NearestHive->FloorLocation, StructureRef->Location) < sqrf(UTIL_MetresToGoldSrcUnits(25.0f)))
-							{
-								StructureRef->Purpose = STRUCTURE_PURPOSE_SIEGE;
-							}
-							else
-							{
-								StructureRef->Purpose = STRUCTURE_PURPOSE_GENERAL;
-							}
-						}
-						else
-						{
-							StructureRef->Purpose = STRUCTURE_PURPOSE_GENERAL;
-						}
-					}
-
-				}
-				break;
-
-			}
+			EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_GHOST);
 		}
 		else
 		{
-			StructureRef->Purpose = STRUCTURE_PURPOSE_GENERAL;
+			EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARTIAL);
 		}
 	}
 
-	return StructureRef;
+	if (BaseBuildable->GetIsRecycling())
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING);
+	}
 
+	if (BaseBuildable->pev->iuser4 & MASK_UPGRADE_11)
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_ELECTRIFIED);
+	}
+
+	if (BaseBuildable->pev->iuser4 & MASK_PARASITED)
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARASITED);
+	}
+
+	if (BaseBuildable->GetIsResearching())
+	{
+		EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING);
+	}
+
+	if (Structure->StructureType == EAIStructureType::STRUCTURE_MARINE_TURRET)
+	{
+		AvHTurret* TurretRef = dynamic_cast<AvHTurret*>(BaseBuildable);
+
+		if (TurretRef && !TurretRef->GetEnabledState())
+		{
+			EnumAddFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_DISABLED);
+		}
+	}
+}
+
+AvHAIBuildableStructure	AITAC_RegisterNewBuildableStructure(CBaseEntity* NewStructure)
+{
+	if (!NewStructure) { return; }
+
+	edict_t* NewStructureEdict = NewStructure->edict();
+	int NewStructureIndex = ENTINDEX(NewStructureEdict);
+
+	AvHAIBuildableStructure NewStructureData;
+	NewStructureData.EntityRef = NewStructure;
+	NewStructureData.Edict = NewStructureEdict;
+	NewStructureData.StructureType = UTIL_IUSER3ToStructureType(NewStructure->pev->iuser3);
+	NewStructureData.Location = NewStructure->pev->origin;
+	NewStructureData.LastSeen = StructureRefreshFrame;
+	NewStructureData.Team = (AvHTeamNumber)NewStructure->pev->team;
+
+	AvHBaseBuildable* BaseBuildable = dynamic_cast<AvHBaseBuildable*>(NewStructure);
+
+	AITAC_UpdateBuildableStructureStatusFlags(&NewStructureData);
+	AITAC_AddStructureTemporaryObstacles(&NewStructureData);
+	AITAC_RefreshReachabilityForStructure(&NewStructureData);
+
+	return NewStructureData;
 }
 
 void AITAC_OnStructureCreated(AvHAIBuildableStructure* NewStructure)
@@ -2424,7 +2474,7 @@ bool AITAC_AlienHiveNeedsReinforcing(const AvHAIHiveDefinition* Hive)
 	if (!Hive) { return false; }
 
 	StructureSearchFilter SearchFilter;
-	SearchFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+	SearchFilter.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 	SearchFilter.IncludeStatusFlags = 0;
 	SearchFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
 	SearchFilter.DeployableTeam = Hive->OwningTeam;
@@ -2436,7 +2486,7 @@ bool AITAC_AlienHiveNeedsReinforcing(const AvHAIHiveDefinition* Hive)
 
 	if (AITAC_TeamHiveWithTechExists(Hive->OwningTeam, ALIEN_BUILD_DEFENSE_CHAMBER))
 	{
-		SearchFilter.DeployableTypes = STRUCTURE_ALIEN_DEFENCECHAMBER;
+		SearchFilter.DeployableTypes = STRUCTURE_ALIEN_DEFENSECHAMBER;
 		int NumDefenceChambers = AITAC_GetNumDeployablesNearLocation(Hive->FloorLocation, &SearchFilter);
 
 		if (NumDefenceChambers < 2) { return true; }
@@ -2510,115 +2560,180 @@ float AITAC_GetPhaseDistanceBetweenPoints(const Vector StartPoint, const Vector 
 	return fminf(DirectDist, PhaseDist);
 }
 
-AvHAIDeployableStructureType UTIL_IUSER3ToStructureType(const int inIUSER3)
+EAIStructureType UTIL_IUSER3ToStructureType(const int inIUSER3)
 {
-	if (inIUSER3 == AVH_USER3_COMMANDER_STATION) { return STRUCTURE_MARINE_COMMCHAIR; }
-	if (inIUSER3 == AVH_USER3_RESTOWER) { return STRUCTURE_MARINE_RESTOWER; }
-	if (inIUSER3 == AVH_USER3_INFANTRYPORTAL) { return STRUCTURE_MARINE_INFANTRYPORTAL; }
-	if (inIUSER3 == AVH_USER3_ARMORY) { return STRUCTURE_MARINE_ARMOURY; }
-	if (inIUSER3 == AVH_USER3_ADVANCED_ARMORY) { return STRUCTURE_MARINE_ADVARMOURY; }
-	if (inIUSER3 == AVH_USER3_TURRET_FACTORY) { return STRUCTURE_MARINE_TURRETFACTORY; }
-	if (inIUSER3 == AVH_USER3_ADVANCED_TURRET_FACTORY) { return STRUCTURE_MARINE_ADVTURRETFACTORY; }
-	if (inIUSER3 == AVH_USER3_TURRET) { return STRUCTURE_MARINE_TURRET; }
-	if (inIUSER3 == AVH_USER3_SIEGETURRET) { return STRUCTURE_MARINE_SIEGETURRET; }
-	if (inIUSER3 == AVH_USER3_ARMSLAB) { return STRUCTURE_MARINE_ARMSLAB; }
-	if (inIUSER3 == AVH_USER3_PROTOTYPE_LAB) { return STRUCTURE_MARINE_PROTOTYPELAB; }
-	if (inIUSER3 == AVH_USER3_OBSERVATORY) { return STRUCTURE_MARINE_OBSERVATORY; }
-	if (inIUSER3 == AVH_USER3_PHASEGATE) { return STRUCTURE_MARINE_PHASEGATE; }
-	if (inIUSER3 == AVH_USER3_MINE) { return STRUCTURE_MARINE_DEPLOYEDMINE; }
-
-	if (inIUSER3 == AVH_USER3_HIVE) { return STRUCTURE_ALIEN_HIVE; }
-	if (inIUSER3 == AVH_USER3_ALIENRESTOWER) { return STRUCTURE_ALIEN_RESTOWER; }
-	if (inIUSER3 == AVH_USER3_DEFENSE_CHAMBER) { return STRUCTURE_ALIEN_DEFENCECHAMBER; }
-	if (inIUSER3 == AVH_USER3_SENSORY_CHAMBER) { return STRUCTURE_ALIEN_SENSORYCHAMBER; }
-	if (inIUSER3 == AVH_USER3_MOVEMENT_CHAMBER) { return STRUCTURE_ALIEN_MOVEMENTCHAMBER; }
-	if (inIUSER3 == AVH_USER3_OFFENSE_CHAMBER) { return STRUCTURE_ALIEN_OFFENCECHAMBER; }
-
-	return STRUCTURE_NONE;
-
-}
-
-unsigned char UTIL_GetAreaForObstruction(AvHAIDeployableStructureType StructureType, const edict_t* BuildingEdict)
-{
-	if (StructureType == STRUCTURE_NONE) { return DT_TILECACHE_NULL_AREA; }
-
-	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
-	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
-
-	unsigned char TeamStructureArea = (BuildingEdict->v.team == TeamA) ? DT_TILECACHE_TEAM1STRUCTURE_AREA : DT_TILECACHE_TEAM2STRUCTURE_AREA;
-
-	switch (StructureType)
+	switch (inIUSER3)
 	{
-	case STRUCTURE_MARINE_COMMCHAIR:
-	case STRUCTURE_MARINE_ARMOURY:
-	case STRUCTURE_MARINE_ADVARMOURY:
-	case STRUCTURE_MARINE_OBSERVATORY:
-	case STRUCTURE_ALIEN_RESTOWER:
-	case STRUCTURE_MARINE_RESTOWER:
-	case STRUCTURE_ALIEN_HIVE:
-		return TeamStructureArea;
-	default:
-		return DT_TILECACHE_BLOCKED_AREA;
+		case AVH_USER3_COMMANDER_STATION:
+			return EAIStructureType::STRUCTURE_MARINE_COMMCHAIR;
+		case AVH_USER3_RESTOWER:
+			return EAIStructureType::STRUCTURE_MARINE_RESTOWER;
+		case AVH_USER3_INFANTRYPORTAL:
+			return EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL;
+		case AVH_USER3_ARMORY:
+			return EAIStructureType::STRUCTURE_MARINE_ARMORY;
+		case AVH_USER3_ADVANCED_ARMORY:
+			return EAIStructureType::STRUCTURE_MARINE_ADVARMORY;
+		case AVH_USER3_TURRET_FACTORY:
+			return EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY;
+		case AVH_USER3_ADVANCED_TURRET_FACTORY:
+			return EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY;
+		case AVH_USER3_TURRET:
+			return EAIStructureType::STRUCTURE_MARINE_TURRET;
+		case AVH_USER3_SIEGETURRET:
+			return EAIStructureType::STRUCTURE_MARINE_SIEGETURRET;
+		case AVH_USER3_ARMSLAB:
+			return EAIStructureType::STRUCTURE_MARINE_ARMSLAB;
+		case AVH_USER3_PROTOTYPE_LAB:
+			return EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB;
+		case AVH_USER3_OBSERVATORY:
+			return EAIStructureType::STRUCTURE_MARINE_OBSERVATORY;
+		case AVH_USER3_PHASEGATE:
+			return EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
+		case AVH_USER3_MINE:
+			return EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE;
+
+		case AVH_USER3_ALIENRESTOWER:
+			return EAIStructureType::STRUCTURE_ALIEN_RESTOWER;
+		case AVH_USER3_DEFENSE_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
+		case AVH_USER3_MOVEMENT_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
+		case AVH_USER3_SENSORY_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER;
+		case AVH_USER3_OFFENSE_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER;
+
+		default:
+			return EAIStructureType::STRUCTURE_NONE;
 	}
 
-	return DT_TILECACHE_BLOCKED_AREA;
+	return EAIStructureType::STRUCTURE_NONE;
 }
 
-float UTIL_GetStructureRadiusForObstruction(AvHAIDeployableStructureType StructureType)
+bool UTIL_ShouldStructureCollide(const AvHAIBuildableStructure* Structure)
 {
-	if (StructureType == STRUCTURE_NONE) { return 0.0f; }
+	if (!Structure || !Structure->IsValid()) { return false; }
 
-	switch (StructureType)
+	if (Structure->StructureType == EAIStructureType::STRUCTURE_NONE) { return false; }
+
+	switch (Structure->StructureType)
 	{
-	case STRUCTURE_MARINE_TURRETFACTORY:
-	case STRUCTURE_MARINE_COMMCHAIR:
-		return 60.0f;
-	case STRUCTURE_MARINE_TURRET:
-		return 30.0f;
-	case STRUCTURE_MARINE_DEPLOYEDMINE:
-		return 12.0f;
-	default:
-		return 40.0f;
-
-	}
-
-	return 40.0f;
-}
-
-bool UTIL_ShouldStructureCollide(AvHAIDeployableStructureType StructureType)
-{
-	if (StructureType == STRUCTURE_NONE) { return false; }
-
-	switch (StructureType)
-	{
-	case STRUCTURE_MARINE_INFANTRYPORTAL:
-	case STRUCTURE_MARINE_PHASEGATE:
-	case STRUCTURE_MARINE_DEPLOYEDMINE:
-		return false;
-	default:
-		return true;
-
+		case EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL:
+		case EAIStructureType::STRUCTURE_MARINE_PHASEGATE:
+		case EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE:
+			return false;
+		default:
+			return true;
 	}
 
 	return true;
 }
 
-bool UTIL_IsStructureElectrified(const AvHAIBuildableStructure* Structure)
+float UTIL_GetStructureRadiusForObstruction(const AvHAIBuildableStructure* Structure)
 {
-	if (!Structure || !Structure->IsValid()) { return false; }
+	if (!Structure || !Structure->IsValid()) { return 0.0f; }
 
-	if (EnumHasAnyFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING)) { return false; }
+	if (Structure->StructureType == EAIStructureType::STRUCTURE_NONE) { return 0.0f; }
 
-	return EnumHasAnyFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_ELECTRIFIED);
+	switch (Structure->StructureType)
+	{
+		case EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY:
+		case EAIStructureType::STRUCTURE_MARINE_COMMCHAIR:
+			return 60.0f;
+		case EAIStructureType::STRUCTURE_MARINE_TURRET:
+			return 30.0f;
+		case EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE:
+			return 12.0f;
+		default:
+			return 40.0f;
+	}
+
+	return 40.0f;
 }
 
-bool UTIL_StructureIsFullyBuilt(const AvHAIBuildableStructure* Structure)
+EAINavArea UTIL_GetAreaForStructuralObstruction(const AvHAIBuildableStructure* Structure)
 {
-	if (!Structure || !Structure->IsValid()) { return false; }
+	if (Structure->StructureType == EAIStructureType::STRUCTURE_NONE) { return EAINavArea::NAV_AREA_NULL; }
 
-	if (EnumHasAnyFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING)) { return false; }
+	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
+	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
 
-	return EnumHasAnyFlags(Structure->StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED);
+	const EAINavArea TeamStructureArea = (Structure->Team == TeamA) ? EAINavArea::NAV_AREA_BLOCKAGE_TEAM1 : EAINavArea::NAV_AREA_BLOCKAGE_TEAM2;
+
+	switch (Structure->StructureType)
+	{
+		case EAIStructureType::STRUCTURE_MARINE_COMMCHAIR:
+		case EAIStructureType::STRUCTURE_MARINE_ARMORY:
+		case EAIStructureType::STRUCTURE_MARINE_ADVARMORY:
+		case EAIStructureType::STRUCTURE_MARINE_OBSERVATORY:
+		case EAIStructureType::STRUCTURE_ALIEN_RESTOWER:
+		case EAIStructureType::STRUCTURE_MARINE_RESTOWER:
+		case EAIStructureType::STRUCTURE_ALIEN_HIVE:
+			return TeamStructureArea;
+		default:
+			return EAINavArea::NAV_AREA_OBSTRUCTED;
+	}
+
+	return EAINavArea::NAV_AREA_OBSTRUCTED;
+}
+
+void AITAC_ClearStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
+{
+	if (!Structure) { return; }
+
+	if (Structure->TempObstacles.empty()) { return; }
+
+	for (auto it = Structure->TempObstacles.begin(); it != Structure->TempObstacles.end(); it++)
+	{
+		NavTempObstacle* TempObstacle = (*it);
+
+		AIMESH_RemoveTemporaryObstacle(TempObstacle);
+	}
+
+	Structure->TempObstacles.clear();
+}
+
+void AITAC_AddStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
+{
+	if (!Structure || !Structure->IsValid()) { return; }
+
+	if (Structure->StructureType == EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE) { return; }
+
+	AITAC_ClearStructureTemporaryObstacles(Structure);
+
+	const bool bCollideWithPlayers = UTIL_ShouldStructureCollide(Structure);
+
+	const float Radius = UTIL_GetStructureRadiusForObstruction(Structure);
+
+	if (Radius <= 0.0f) { return; }
+
+	// Not all structures collide with players (e.g. phase gate)
+	if (bCollideWithPlayers)
+	{
+		const EAINavArea StructureObstacleArea = UTIL_GetAreaForStructuralObstruction(Structure);
+
+		NavTempObstacle* NewRegularMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_REGULAR, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, StructureObstacleArea);
+
+		if (NewRegularMeshObstacle)
+		{
+			Structure->TempObstacles.push_back(NewRegularMeshObstacle);
+		}
+
+		NavTempObstacle* NewOnosMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_ONOS, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, StructureObstacleArea);
+
+		if (NewOnosMeshObstacle)
+		{
+			Structure->TempObstacles.push_back(NewOnosMeshObstacle);
+		}
+	}
+
+	NavTempObstacle* NewBuildingMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_CONSTRUCTION, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, EAINavArea::NAV_AREA_NULL);
+
+	if (NewBuildingMeshObstacle)
+	{
+		Structure->TempObstacles.push_back(NewBuildingMeshObstacle);
+	}
 }
 
 bool AITAC_IsBuildableStructureStillReachable(AvHAIPlayer* pBot, const edict_t* Structure)
@@ -2679,15 +2794,6 @@ EAIWeaponId UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict)
 	return WEAPON_INVALID;
 }
 
-bool UTIL_StructureIsRecycling(edict_t* Structure)
-{
-	if (!Structure) { return false; }
-
-	AvHBaseBuildable* StructureRef = dynamic_cast<AvHBaseBuildable*>(CBaseEntity::Instance(Structure));
-
-	return (StructureRef && StructureRef->GetIsRecycling());
-}
-
 bool UTIL_StructureIsUpgrading(edict_t* Structure)
 {
 	if (!Structure) { return false; }
@@ -2734,7 +2840,7 @@ bool AITAC_ElectricalResearchIsAvailable(const AvHAIBuildableStructure* Structur
 	if (UTIL_IsStructureElectrified(Structure)) { return false; }
 
 	EAIStructureType StructureTypeToElectrify = Structure->StructureType;
-	EAIStructureType ElectrifyableStructureTypes = (EAIStructureType::STRUCTURE_MARINE_ARMOURY | EAIStructureType::STRUCTURE_MARINE_ADVARMOURY | EAIStructureType::STRUCTURE_MARINE_RESTOWER);
+	EAIStructureType ElectrifyableStructureTypes = (EAIStructureType::STRUCTURE_MARINE_ARMORY | EAIStructureType::STRUCTURE_MARINE_ADVARMORY | EAIStructureType::STRUCTURE_MARINE_RESTOWER);
 
 	if (!EnumHasAnyFlags(Structure->StructureType, ElectrifyableStructureTypes)) { return false; }
 
@@ -3206,21 +3312,6 @@ EAIDeployableItemType UTIL_GetItemTypeFromEdict(const edict_t* ItemEdict)
 	return FoundItem->ItemType;
 }
 
-bool UTIL_DeployedItemIsPrimaryWeapon(const EAIDeployableItemType ItemType)
-{
-	switch (ItemType)
-	{
-		case EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER:
-		case EAIDeployableItemType::DEPLOYABLE_ITEM_HMG:
-		case EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN:
-			return true;
-		default:
-			return false;
-	}
-
-	return false;
-}
-
 EAIWeaponId UTIL_GetWeaponTypeFromDroppedItem(const EAIDeployableItemType ItemType)
 {
 	switch (ItemType)
@@ -3357,7 +3448,7 @@ int UTIL_GetCostOfStructureType(EAIStructureType StructureType)
 {
 	switch (StructureType)
 	{
-		case EAIStructureType::STRUCTURE_MARINE_ARMOURY:
+		case EAIStructureType::STRUCTURE_MARINE_ARMORY:
 			return BALANCE_VAR(kArmoryCost);
 		case EAIStructureType::STRUCTURE_MARINE_ARMSLAB:
 			return BALANCE_VAR(kArmsLabCost);
@@ -3382,9 +3473,9 @@ int UTIL_GetCostOfStructureType(EAIStructureType StructureType)
 			return BALANCE_VAR(kTurretFactoryCost);
 		case EAIStructureType::STRUCTURE_ALIEN_HIVE:
 			return BALANCE_VAR(kHiveCost);
-		case EAIStructureType::STRUCTURE_ALIEN_OFFENCECHAMBER:
+		case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
 			return BALANCE_VAR(kOffenseChamberCost);
-		case EAIStructureType::STRUCTURE_ALIEN_DEFENCECHAMBER:
+		case EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER:
 			return BALANCE_VAR(kDefenseChamberCost);
 		case EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER:
 			return BALANCE_VAR(kMovementChamberCost);
@@ -3421,7 +3512,7 @@ AvHMessageID UTIL_StructureTypeToImpulseCommand(const EAIStructureType Structure
 {
 	switch (StructureType)
 	{
-	case EAIStructureType::STRUCTURE_MARINE_ARMOURY:
+	case EAIStructureType::STRUCTURE_MARINE_ARMORY:
 		return BUILD_ARMORY;
 	case EAIStructureType::STRUCTURE_MARINE_ARMSLAB:
 		return BUILD_ARMSLAB;
@@ -3444,13 +3535,13 @@ AvHMessageID UTIL_StructureTypeToImpulseCommand(const EAIStructureType Structure
 	case EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY:
 		return BUILD_TURRET_FACTORY;
 
-	case EAIStructureType::STRUCTURE_ALIEN_DEFENCECHAMBER:
+	case EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER:
 		return ALIEN_BUILD_DEFENSE_CHAMBER;
 	case EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER:
 		return ALIEN_BUILD_MOVEMENT_CHAMBER;
 	case EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER:
 		return ALIEN_BUILD_SENSORY_CHAMBER;
-	case EAIStructureType::STRUCTURE_ALIEN_OFFENCECHAMBER:
+	case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
 		return ALIEN_BUILD_OFFENSE_CHAMBER;
 	case EAIStructureType::STRUCTURE_ALIEN_RESTOWER:
 		return ALIEN_BUILD_RESOURCES;
@@ -3620,7 +3711,7 @@ bool AITAC_ShouldBotBeCautious(AvHAIPlayer* pBot)
 	{
 		StructureSearchFilter TurretFilter;
 		TurretFilter.DeployableTeam = EnemyTeam;
-		TurretFilter.DeployableTypes = (STRUCTURE_MARINE_TURRET | STRUCTURE_ALIEN_OFFENCECHAMBER);
+		TurretFilter.DeployableTypes = (STRUCTURE_MARINE_TURRET | STRUCTURE_ALIEN_OFFENSECHAMBER);
 		TurretFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
 		TurretFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 		TurretFilter.MaxSearchRadius = BALANCE_VAR(kTurretRange);
@@ -3718,7 +3809,7 @@ EAIStructureType UTIL_GetChamberTypeForHiveTech(AvHMessageID HiveTech)
 	switch (HiveTech)
 	{
 		case ALIEN_BUILD_DEFENSE_CHAMBER:
-			return EAIStructureType::STRUCTURE_ALIEN_DEFENCECHAMBER;
+			return EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
 		case ALIEN_BUILD_MOVEMENT_CHAMBER:
 			return EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
 		case ALIEN_BUILD_SENSORY_CHAMBER:
@@ -3761,22 +3852,6 @@ int AITAC_GetNumDeadPlayersOnTeam(const AvHTeamNumber Team)
 	if (!TeamRef) { return 0; }
 
 	return TeamRef->GetPlayerCount(true);
-}
-
-bool AITAC_StructureCanBeUpgraded(edict_t* Structure)
-{
-	// We can't upgrade a structure if it's not built, destroyed, or already doing something
-	if (FNullEnt(Structure)
-		|| Structure->v.deadflag != DEAD_NO
-		|| !UTIL_StructureIsFullyBuilt(Structure)
-		|| UTIL_StructureIsRecycling(Structure)
-		|| UTIL_StructureIsResearching(Structure)
-		|| UTIL_StructureIsUpgrading(Structure))
-	{
-		return false;
-	}
-
-	return (GetStructureTypeFromEdict(Structure) == STRUCTURE_MARINE_ARMOURY || GetStructureTypeFromEdict(Structure) == STRUCTURE_MARINE_TURRETFACTORY);
 }
 
 const AvHAIHiveDefinition* AITAC_GetNearestHiveUnderActiveSiege(AvHTeamNumber SiegingTeam, const Vector SearchLocation)
@@ -4128,7 +4203,7 @@ bool AITAC_ShouldBotBuildHive(AvHAIPlayer* pBot, AvHAIHiveDefinition** EligibleH
 		else
 		{
 			EnemyFortificationsFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
-			EnemyFortificationsFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENCECHAMBER);
+			EnemyFortificationsFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENSECHAMBER);
 		}
 
 		// Enemy have built some stuff, wait until it's clear before building
@@ -4399,7 +4474,7 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 		}
 		else
 		{
-			EnemyStructures.DeployableTypes = STRUCTURE_ALIEN_OFFENCECHAMBER;
+			EnemyStructures.DeployableTypes = STRUCTURE_ALIEN_OFFENSECHAMBER;
 		}
 
 		// Enemy have a foothold here, don't get involved
@@ -4426,10 +4501,10 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 		{
 			switch ((*it).StructureType)
 			{
-				case STRUCTURE_ALIEN_OFFENCECHAMBER:
+				case STRUCTURE_ALIEN_OFFENSECHAMBER:
 					NumOCs++;
 					break;
-				case STRUCTURE_ALIEN_DEFENCECHAMBER:
+				case STRUCTURE_ALIEN_DEFENSECHAMBER:
 					NumDCs++;
 					break;
 				case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
@@ -4500,10 +4575,10 @@ bool AITAC_IsAlienBuilderNeeded(AvHAIPlayer* pBot)
 		{
 			switch ((*it).StructureType)
 			{
-			case STRUCTURE_ALIEN_OFFENCECHAMBER:
+			case STRUCTURE_ALIEN_OFFENSECHAMBER:
 				NumOCs++;
 				break;
-			case STRUCTURE_ALIEN_DEFENCECHAMBER:
+			case STRUCTURE_ALIEN_DEFENSECHAMBER:
 				NumDCs++;
 				break;
 			case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
@@ -4626,7 +4701,7 @@ edict_t* AITAC_AlienFindNearestHealingSource(AvHTeamNumber Team, Vector SearchLo
 
 	StructureSearchFilter DCFilter;
 	DCFilter.DeployableTeam = Team;
-	DCFilter.DeployableTypes = STRUCTURE_ALIEN_DEFENCECHAMBER;
+	DCFilter.DeployableTypes = STRUCTURE_ALIEN_DEFENSECHAMBER;
 	DCFilter.MaxSearchRadius = (!FNullEnt(Result)) ? MinDist : 0.0f; // We should always have a result, unless we have no hives left. That's our benchmark: only look for DCs closer than the hive
 
 	vector<AvHAIBuildableStructure> AllDCs = AITAC_FindAllDeployables(SearchLocation, &DCFilter);
@@ -4675,7 +4750,7 @@ bool AITAC_IsAlienUpgradeAvailableForTeam(AvHTeamNumber Team, EAIHiveTechStatus 
 	switch (DesiredTech)
 	{
 		case EAIHiveTechStatus::HIVE_TECH_DEFENCE:
-			SearchType = EAIStructureType::STRUCTURE_ALIEN_DEFENCECHAMBER;
+			SearchType = EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
 			break;
 		case EAIHiveTechStatus::HIVE_TECH_MOVEMENT:
 			SearchType = EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
@@ -4727,7 +4802,7 @@ int AITAC_GetNumWeaponsInPlay(AvHTeamNumber Team, AvHAIWeapon WeaponType)
 		if (ReachabilityFlags != AI_REACHABILITY_UNREACHABLE)
 		{
 			StructureSearchFilter ArmouryFilter;
-			ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMOURY | STRUCTURE_MARINE_ADVARMOURY);
+			ArmouryFilter.DeployableTypes = (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY);
 			ArmouryFilter.DeployableTeam = Team;
 			ArmouryFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
 
@@ -5076,7 +5151,7 @@ Vector AITAC_FindNewTeamRelocationPoint(AvHTeamNumber Team)
 		EnemyStuff.DeployableTeam = EnemyTeam;
 		EnemyStuff.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 		EnemyStuff.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
-		EnemyStuff.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_ALIEN_OFFENCECHAMBER);
+		EnemyStuff.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_ALIEN_OFFENSECHAMBER);
 		EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 
 		if (AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStuff)) { continue; }
@@ -5133,7 +5208,7 @@ bool AITAC_IsRelocationPointStillValid(AvHTeamNumber RelocationTeam, Vector Relo
 	EnemyStuff.DeployableTeam = EnemyTeam;
 	EnemyStuff.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
 	EnemyStuff.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
-	EnemyStuff.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_ALIEN_OFFENCECHAMBER);
+	EnemyStuff.DeployableTypes = (STRUCTURE_MARINE_PHASEGATE | STRUCTURE_MARINE_COMMCHAIR | STRUCTURE_MARINE_INFANTRYPORTAL | STRUCTURE_MARINE_TURRETFACTORY | STRUCTURE_MARINE_ADVTURRETFACTORY | STRUCTURE_ALIEN_OFFENSECHAMBER);
 	EnemyStuff.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(15.0f);
 
 	if (AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStuff)) { return false; }
@@ -5332,11 +5407,11 @@ bool AITAC_CanBuildOutMainBase(const AvHAIMarineBase* Base)
 			case STRUCTURE_MARINE_INFANTRYPORTAL:
 				NumInfPortals++;
 				break;
-			case STRUCTURE_MARINE_ARMOURY:
+			case STRUCTURE_MARINE_ARMORY:
 				bArmouryCompleted = (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED);
 				bHasArmoury = true;
 				break;
-			case STRUCTURE_MARINE_ADVARMOURY:
+			case STRUCTURE_MARINE_ADVARMORY:
 				bArmouryCompleted = (StructureRef.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED);
 				bHasArmoury = true;
 				bHasAdvArmoury = true;
@@ -5395,8 +5470,8 @@ bool AITAC_CanBuildOutOutpost(const AvHAIMarineBase* Base)
 
 		switch (StructureRef.StructureType)
 		{
-		case STRUCTURE_MARINE_ARMOURY:
-		case STRUCTURE_MARINE_ADVARMOURY:
+		case STRUCTURE_MARINE_ARMORY:
+		case STRUCTURE_MARINE_ADVARMORY:
 			bHasArmoury = true;
 			break;
 		case STRUCTURE_MARINE_OBSERVATORY:
@@ -5441,8 +5516,8 @@ bool AITAC_CanBuildOutSiege(const AvHAIMarineBase* Base)
 
 		switch (StructureRef.StructureType)
 		{
-		case STRUCTURE_MARINE_ARMOURY:
-		case STRUCTURE_MARINE_ADVARMOURY:
+		case STRUCTURE_MARINE_ARMORY:
+		case STRUCTURE_MARINE_ADVARMORY:
 			bHasArmoury = true;
 			break;
 		case STRUCTURE_MARINE_OBSERVATORY:
@@ -5507,4 +5582,42 @@ bool AITAC_CanBuildOutGuardPost(const AvHAIMarineBase* Base)
 vector<AvHAIMarineBase>& AITAC_GetTeamBases(AvHTeamNumber Team)
 {
 	return (Team == AIMGR_GetTeamANumber()) ? ActiveTeamABases : ActiveTeamBBases;
+}
+
+void AvHAITeamStartingLocation::RemoveStructureFromMap(const AvHAIBuildableStructure* StructureToRemove)
+{
+	auto FoundReachabilityMap = StructureReachabilityMap.find(StructureToRemove);
+
+	if (FoundReachabilityMap != StructureReachabilityMap.end())
+	{
+		StructureReachabilityMap.erase(FoundReachabilityMap);
+	}
+}
+
+void AvHAITeamStartingLocation::RefreshReachabilityMap()
+{
+	if (Team == TEAM_IND) { return; }
+
+	for (auto ReachabilityMap : StructureReachabilityMap)
+	{
+		const AvHAIBuildableStructure* Structure = ReachabilityMap.first;
+
+		if (!Structure || !Structure->IsValid() || !Structure->bReachabilityMarkedDirty)
+		{
+			StructureReachabilityMap.erase(Structure);
+			continue;
+		}
+
+		if (TeamType == AVH_CLASS_TYPE_MARINE)
+		{
+			AINAV_CalculateMarineReachabilityFlags(StartingPoint, Structure->Location, ReachabilityMap.second);
+			continue;
+		}
+
+		if (TeamType == AVH_CLASS_TYPE_ALIEN)
+		{
+			AINAV_CalculateAlienReachabilityFlags(StartingPoint, Structure->Location, ReachabilityMap.second);
+			continue;
+		}
+	}
 }
