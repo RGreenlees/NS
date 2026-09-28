@@ -1388,7 +1388,7 @@ void BotProgressReinforceStructureTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 
-	Vector ReinforceLocation = UTIL_ProjectPointToNavmesh(UTIL_GetEntityGroundLocation(Task->TaskTarget), pBot->BotNavInfo.NavProfile);
+	Vector ReinforceLocation = UTIL_ProjectPointToNavmesh(UTIL_GetFloorUnderEntity(Task->TaskTarget), pBot->BotNavInfo.NavProfile);
 	float SearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
 
 	if (IsEdictHive(Task->TaskTarget))
@@ -1787,7 +1787,7 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	if (Task->bTargetIsPlayer)
 	{
 		// For now just move to the target, the combat code will take over once the enemy is sighted
-		MoveTo(pBot, UTIL_GetEntityGroundLocation(Task->TaskTarget), MOVESTYLE_AMBUSH);
+		MoveTo(pBot, UTIL_GetFloorUnderEntity(Task->TaskTarget), MOVESTYLE_AMBUSH);
 		return;
 	}
 
@@ -1948,7 +1948,7 @@ void BotProgressDefendTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		if (!FNullEnt(NearestAttacker))
 		{
-			MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestAttacker), MOVESTYLE_NORMAL);
+			MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestAttacker), MOVESTYLE_NORMAL);
 			return;
 		}
 
@@ -2119,18 +2119,18 @@ void BotProgressEvolveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 		else
 		{
-			if (vDist2DSq(pBot->Edict->v.origin, UTIL_GetEntityGroundLocation(Task->TaskTarget)) > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)) || UTIL_GetNavAreaAtLocation(BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE], pBot->Edict->v.origin) != SAMPLE_POLYAREA_GROUND)
+			if (vDist2DSq(pBot->Edict->v.origin, UTIL_GetFloorUnderEntity(Task->TaskTarget)) > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)) || UTIL_GetNavAreaAtLocation(BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE], pBot->Edict->v.origin) != SAMPLE_POLYAREA_GROUND)
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(Task->TaskTarget), MOVESTYLE_NORMAL, UTIL_MetresToGoldSrcUnits(10.0f));
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(Task->TaskTarget), MOVESTYLE_NORMAL, UTIL_MetresToGoldSrcUnits(10.0f));
 				return;
 			}
 			else
 			{
-				Task->TaskLocation = FindClosestNavigablePointToDestination(BaseNavProfiles[ONOS_BASE_NAV_PROFILE], AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), UTIL_GetEntityGroundLocation(Task->TaskTarget), UTIL_MetresToGoldSrcUnits(10.0f));
+				Task->TaskLocation = FindClosestNavigablePointToDestination(BaseNavProfiles[ONOS_BASE_NAV_PROFILE], AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), UTIL_GetFloorUnderEntity(Task->TaskTarget), UTIL_MetresToGoldSrcUnits(10.0f));
 
 				if (vIsZero(Task->TaskLocation))
 				{
-					Task->TaskLocation = UTIL_GetRandomPointOnNavmeshInRadius(BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE], UTIL_GetEntityGroundLocation(Task->TaskTarget), UTIL_MetresToGoldSrcUnits(10.0f));
+					Task->TaskLocation = UTIL_GetRandomPointOnNavmeshInRadius(BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE], UTIL_GetFloorUnderEntity(Task->TaskTarget), UTIL_MetresToGoldSrcUnits(10.0f));
 				}
 			}
 		}
@@ -2473,7 +2473,7 @@ void BotAlienHealTarget(AvHAIPlayer* pBot, edict_t* HealTarget)
 	}
 	else
 	{
-		MoveTo(pBot, UTIL_GetEntityGroundLocation(HealTarget), MOVESTYLE_NORMAL, MaxHealRange);
+		MoveTo(pBot, UTIL_GetFloorUnderEntity(HealTarget), MOVESTYLE_NORMAL, MaxHealRange);
 	}
 
 }
@@ -3753,7 +3753,7 @@ void AITASK_SetAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 	}
 
 	// Get as close as possible to the target
-	Vector AttackLocation = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetEntityGroundLocation(Target), UTIL_MetresToGoldSrcUnits(20.0f));
+	Vector AttackLocation = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetFloorUnderEntity(Target), UTIL_MetresToGoldSrcUnits(20.0f));
 
 	if (AttackLocation != g_vecZero)
 	{
@@ -3919,7 +3919,7 @@ void AITASK_SetDefendTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 	Task->TaskTarget = Target;
 	Task->bTaskIsUrgent = bIsUrgent;
 
-	Vector DefendPoint = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetEntityGroundLocation(Target), UTIL_MetresToGoldSrcUnits(10.0f));
+	Vector DefendPoint = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetFloorUnderEntity(Target), UTIL_MetresToGoldSrcUnits(10.0f));
 
 	if (DefendPoint != g_vecZero)
 	{
@@ -3927,7 +3927,7 @@ void AITASK_SetDefendTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 	}
 	else
 	{
-		Task->TaskLocation = UTIL_GetEntityGroundLocation(Target);
+		Task->TaskLocation = UTIL_GetFloorUnderEntity(Target);
 	}
 
 	

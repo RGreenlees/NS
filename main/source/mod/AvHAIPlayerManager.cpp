@@ -770,7 +770,6 @@ vector<AvHPlayer*> AIMGR_GetAllPlayersOnTeam(AvHTeamNumber Team)
 			{
 				Result.push_back(PlayerRef);
 			}
-
 		}
 	}
 

@@ -132,15 +132,15 @@ DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, cons
 
 bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObject, const Vector& ObjectPosition, const NavOffMeshConnection* Connection);
 
-DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile& NavProfile);
-Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile& NavProfile, const Vector UserLocation, edict_t* ButtonEdict);
+DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile* NavProfile);
+Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, edict_t* ButtonEdict);
 
-bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject);
+bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject);
 
 DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject);
 
 // Removes all temporary obstacles from the map
-void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, const int Area);
+void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area);
 void AIMAP_RemoveAllTempObstaclesFromObject(DynamicMapObject* Object);
 
 // Clear all stored map data for the AI

@@ -8,12 +8,12 @@
 int GetPlayerCurrentWeaponClipAmmo(const AvHPlayer* Player);
 int GetPlayerCurrentWeaponMaxClipAmmo(const AvHPlayer* Player);
 int GetPlayerCurrentWeaponReserveAmmo(const AvHPlayer* Player);
-AvHAIWeapon GetPlayerCurrentWeapon(const AvHPlayer* Player);
+EAIWeaponId GetPlayerCurrentWeapon(const AvHPlayer* Player);
 AvHBasePlayerWeapon* GetPlayerCurrentWeaponReference(const AvHPlayer* Player);
 
 
-AvHAIWeapon UTIL_GetPlayerPrimaryWeapon(const AvHPlayer* Player);
-AvHAIWeapon UTIL_GetPlayerSecondaryWeapon(const AvHPlayer* Player);
+EAIWeaponId UTIL_GetPlayerPrimaryWeapon(const AvHPlayer* Player);
+EAIWeaponId UTIL_GetPlayerSecondaryWeapon(const AvHPlayer* Player);
 
 int UTIL_GetPlayerPrimaryWeaponClipAmmo(const AvHPlayer* Player);
 int UTIL_GetPlayerPrimaryWeaponMaxClipSize(const AvHPlayer* Player);
@@ -25,58 +25,58 @@ int UTIL_GetPlayerSecondaryWeaponMaxClipSize(const AvHPlayer* Player);
 int UTIL_GetPlayerSecondaryAmmoReserve(AvHPlayer* Player);
 int UTIL_GetPlayerSecondaryMaxAmmoReserve(AvHPlayer* Player);
 
-AvHAIWeapon GetBotMarineSecondaryWeapon(const AvHAIPlayer* pBot);
+EAIWeaponId GetBotMarineSecondaryWeapon(const AvHAIPlayer* pBot);
 int BotGetSecondaryWeaponClipAmmo(const AvHAIPlayer* pBot);
 int BotGetSecondaryWeaponMaxClipSize(const AvHAIPlayer* pBot);
 int BotGetSecondaryWeaponAmmoReserve(AvHAIPlayer* pBot);
 int BotGetSecondaryWeaponMaxAmmoReserve(AvHAIPlayer* pBot);
 
-float GetEnergyCostForWeapon(const AvHAIWeapon Weapon);
-float GetProjectileVelocityForWeapon(const AvHAIWeapon Weapon);
+float GetEnergyCostForWeapon(const EAIWeaponId Weapon);
+float GetProjectileVelocityForWeapon(const EAIWeaponId Weapon);
 
-float GetMaxIdealWeaponRange(const AvHAIWeapon Weapon);
-float GetMinIdealWeaponRange(const AvHAIWeapon Weapon);
+float GetMaxIdealWeaponRange(const EAIWeaponId Weapon);
+float GetMinIdealWeaponRange(const EAIWeaponId Weapon);
 
-bool WeaponCanBeReloaded(const AvHAIWeapon CheckWeapon);
-bool IsMeleeWeapon(const AvHAIWeapon Weapon);
+bool WeaponCanBeReloaded(const EAIWeaponId CheckWeapon);
+bool IsMeleeWeapon(const EAIWeaponId Weapon);
 
 Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, const float ExplosionRadius, bool bPrecise);
 
-AvHAIWeapon BotMarineChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target);
-AvHAIWeapon MarineGetBestWeaponForPlayerTarget(AvHAIPlayer* pBot, AvHPlayer* Target);
-AvHAIWeapon BotAlienChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target);
+EAIWeaponId BotMarineChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target);
+EAIWeaponId MarineGetBestWeaponForPlayerTarget(AvHAIPlayer* pBot, AvHPlayer* Target);
+EAIWeaponId BotAlienChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target);
 
 bool BotAnyWeaponNeedsReloading(AvHAIPlayer* pBot);
 
 // Helper function to pick the best weapon for any given situation and target type.
-AvHAIWeapon BotMarineChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target);
-AvHAIWeapon BotAlienChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target);
+EAIWeaponId BotMarineChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target);
+EAIWeaponId BotAlienChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target);
 
-AvHAIWeapon FadeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
-AvHAIWeapon OnosGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
-AvHAIWeapon SkulkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
-AvHAIWeapon GorgeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
-AvHAIWeapon LerkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
+EAIWeaponId FadeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
+EAIWeaponId OnosGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
+EAIWeaponId SkulkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
+EAIWeaponId GorgeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
+EAIWeaponId LerkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
 
 void BotReloadCurrentWeapon(AvHAIPlayer* pBot);
 
-float GetReloadTimeForWeapon(AvHAIWeapon Weapon);
+float GetReloadTimeForWeapon(EAIWeaponId Weapon);
 
-bool CanInterruptWeaponReload(AvHAIWeapon Weapon);
+bool CanInterruptWeaponReload(EAIWeaponId Weapon);
 
 void InterruptReload(AvHAIPlayer* pBot);
 
-bool IsHitscanWeapon(AvHAIWeapon Weapon);
+bool IsHitscanWeapon(EAIWeaponId Weapon);
 float GetTimeUntilPlayerNextRefire(const AvHPlayer* Player);
 
-BotAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const AvHAIWeapon Weapon, const edict_t* Target);
-BotAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const AvHAIWeapon Weapon, const Vector TargetLocation);
-BotAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const AvHAIWeapon Weapon, const Vector TargetLocation, const edict_t* Target);
-BotAttackResult PerformAttackLOSCheck(const Vector Location, const AvHAIWeapon Weapon, const edict_t* Target);
+EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const edict_t* Target);
+EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const Vector TargetLocation);
+EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const Vector TargetLocation, const edict_t* Target);
+EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId Weapon, const edict_t* Target);
 
-float UTIL_GetProjectileVelocityForWeapon(const AvHAIWeapon Weapon);
+float UTIL_GetProjectileVelocityForWeapon(const EAIWeaponId Weapon);
 bool IsAreaAffectedBySpores(const Vector Location);
 
-char* UTIL_WeaponTypeToClassname(const AvHAIWeapon WeaponType);
+char* UTIL_WeaponTypeToClassname(const EAIWeaponId WeaponType);
 
 #endif

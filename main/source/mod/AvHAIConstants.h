@@ -11,6 +11,8 @@
 #ifndef AVH_AI_CONSTANTS_H
 #define AVH_AI_CONSTANTS_H
 
+#include <unordered_map>
+
 #include "DetourStatus.h"
 #include "DetourNavMeshQuery.h"
 
@@ -202,8 +204,9 @@ enum class EAIDeployableItemType : uint16
 	DEPLOYABLE_ITEM_MINES = 1u << 7,
 	DEPLOYABLE_ITEM_WELDER = 1u << 8,
 	DEPLOYABLE_ITEM_SHOTGUN = 1u << 9,
-	DEPLOYABLE_ITEM_HMG = 1u << 10,
-	DEPLOYABLE_ITEM_GRENADELAUNCHER = 1u << 11,
+	DEPLOYABLE_ITEM_LMG = 1u << 10,
+	DEPLOYABLE_ITEM_HMG = 1u << 11,
+	DEPLOYABLE_ITEM_GRENADELAUNCHER = 1u << 12,
 
 	DEPLOYABLE_ITEM_WEAPONS = 0xF80,
 	DEPLOYABLE_ITEM_EQUIPMENT = 0x6,
@@ -281,80 +284,6 @@ enum class EAICombatStrategy
 	COMBAT_STRATEGY_ATTACK		// Attack the enemy
 };
 
-// Data structure used to track resource nodes in the map
-struct AvHAIResourceNode
-{
-	AvHFuncResource* ResourceNodeEntity = nullptr;						// The func_resource edict reference
-	edict_t* Edict = nullptr;
-	Vector Location = g_vecZero;									// origin of the func_resource edict (not the tower itself)
-	AvHTeamNumber OwningTeam = TEAM_IND;							// The team that has currently capped this node (TEAM_IND if none)
-	bool bIsOccupied = false;
-	const AvHAIBuildableStructure* ActiveTowerEntity = nullptr;							// Reference to the resource tower edict (if capped)
-	bool bIsBaseNode = false;										// Is this a node in the marine base or active alien hive?
-	edict_t* ParentHive = nullptr;
-	bool bReachabilityMarkedDirty = false;							// Reachability needs to be recalculated
-	float NextReachabilityRefreshTime = 0.0f;
-
-	bool IsValid() const { return ResourceNodeEntity != nullptr && !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
-};
-
-// Data structure to hold information about each hive in the map
-struct AvHAIHiveDefinition
-{
-	AvHHive* HiveEntity = nullptr;					// Hive entity reference
-	edict_t* Edict = nullptr;					// Hive edict reference
-	Vector Location = g_vecZero;					// Origin of the hive
-	Vector FloorLocation = g_vecZero;				// Some hives are suspended in the air, this is the floor location directly beneath it
-	EAIHiveStatus Status = EAIHiveStatus::HIVE_STATUS_UNBUILT;	// Can be unbuilt, in progress, or fully built
-	EAIHiveTechStatus TechStatus = EAIHiveTechStatus::HIVE_TECH_NONE;			// What tech (if any) is assigned to this hive right now
-	bool bIsUnderAttack = false;					// Is the hive currently under attack? Becomes false if not taken damage for more than 10 seconds
-	float HealthPercent = 0.0f;						// If the hive is built and active, what its health currently is
-	AvHAIResourceNode* HiveResNodeRef = nullptr;	// Which resource node (indexes into ResourceNodes array) belongs to this hive?
-	std::vector<NavTempObstacle*> ObstacleRefs;		// When in progress or built, will place an obstacle so bots don't try to walk through it
-	float NextFloorLocationCheck = 0.0f;			// When should the closest navigable point to the hive be calculated? Used to delay the check after a hive is built
-	AvHTeamNumber OwningTeam = TEAM_IND;			// Which team owns this hive currently (TEAM_IND if empty)
-	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team A can reach this node?
-	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team B can reach this node?
-	char HiveName[64] = {'\0'};
-};
-
-struct StructureSearchFilter
-{
-	EAIStructureType DeployableTypes = EAIStructureType::ALL_STRUCTURES;
-	EAIStructureStatus IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIStructureStatus ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	float MinSearchRadius = 0.0f;
-	float MaxSearchRadius = 0.0f;
-	bool bConsiderPhaseDistance = false;
-	AvHTeamNumber DeployableTeam = TEAM_IND;
-	AvHTeamNumber ReachabilityTeam = TEAM_IND;
-	EAIStructurePurpose PurposeFlags = EAIStructurePurpose::STRUCTURE_PURPOSE_ANY;
-};
-
-struct DroppedItemSearchFilter
-{
-	EAIDeployableItemType DeployableTypes = EAIDeployableItemType::DEPLOYABLE_ITEM_ALL;
-	EAIStructureStatus IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIStructureStatus ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	float MinSearchRadius = 0.0f;
-	float MaxSearchRadius = 0.0f;
-	bool bConsiderPhaseDistance = false;
-	AvHTeamNumber DeployableTeam = TEAM_IND;
-	AvHTeamNumber ReachabilityTeam = TEAM_IND;
-};
-
-struct ResourceNodeSearchFilter
-{
-	int32 OwningTeam = -1;
-	AvHTeamNumber ReachabilityTeam = TEAM_IND;
-	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	float MinSearchRadius = 0.0f;
-	float MaxSearchRadius = 0.0f;
-	bool bConsiderPhaseDistance = false;
-};
-
 // Pending message a bot wants to say. Allows for a delay in sending a message to simulate typing, or prevent too many messages on the same frame
 struct AvHAIBotMsg
 {
@@ -375,80 +304,6 @@ struct AvHAIGuardInfo
 	float ThisGuardLookTime = 0.0f; // How long should we watch this area for?
 	float ThisGuardStandTime = 0.0f; // How long should we watch this area for?
 	float GuardStartStandTime = 0.0f; // How long should we watch this area for?
-};
-
-// Data structure to hold information on any kind of buildable structure (hive, resource tower, chamber, marine building etc)
-struct AvHAIBuildableStructure
-{
-	CBaseEntity* EntityRef = nullptr;
-	edict_t* Edict = nullptr; // Reference to structure edict
-	EAIStructureType StructureType = EAIStructureType::STRUCTURE_NONE; // Type of structure it is (e.g. hive, comm chair, infantry portal, defence chamber etc.)
-	Vector Location = g_vecZero; // origin of the structure edict
-	float HealthPercent = 1.0f; // Current health of the building
-	EAIStructureStatus StructureStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_NONE;
-	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the building has been removed from play
-	std::vector<NavTempObstacle*> TempObstacles;
-	vector<NavOffMeshConnection*> OffMeshConnections; // References to any off-mesh connections this structure is associated with
-	bool bReachabilityMarkedDirty = true; // If true, reachability flags will be recalculated for this structure
-	AvHTeamNumber Team = TEAM_IND;
-
-	bool IsValid() const { return EntityRef != nullptr && !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
-
-	bool IsGhost() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_GHOST); }
-
-	bool IsPartiallyBuilt() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARTIAL); }
-
-	bool IsParasited() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_PARASITED); }
-
-	bool IsCompleted() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_COMPLETED); }
-
-	bool IsRecycling() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RECYCLING); }
-
-	bool IsResearching() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_RESEARCHING); }
-
-	bool IsUpgrading() const { return (IsResearching() && (Edict->v.iuser2 == ARMORY_UPGRADE || Edict->v.iuser2 == TURRET_FACTORY_UPGRADE)); }
-
-	bool IsUnderAttack() const { return IsValid() && !IsRecycling() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_UNDERATTACK); }
-
-	bool IsElectrified() const { return IsValid() && !IsRecycling() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_ELECTRIFIED); }
-
-	bool IsIdle() const { return IsValid() && !IsResearching() && !IsRecycling(); }
-
-	bool CanBeUpgraded() const
-	{
-		return IsCompleted()
-			&& IsIdle()
-			&& EnumHasAnyFlags(StructureType, (EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY | EAIStructureType::STRUCTURE_MARINE_ARMORY));
-	}
-};
-
-// Any kind of pickup that has been dropped either by the commander or by a player
-struct AvHAIDroppedItem
-{
-	edict_t* Edict = nullptr; // Reference to the item edict
-	Vector Location = g_vecZero; // Origin of the entity
-	EAIDeployableItemType ItemType = EAIDeployableItemType::DEPLOYABLE_ITEM_NONE; // Is it a weapon, health pack, ammo pack etc?
-	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	bool bReachabilityMarkedDirty = false; // Reachability needs to be recalculated
-	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the item has been removed from play
-
-	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
-
-	bool IsPrimaryWeapon() const
-	{
-		switch (ItemType)
-		{
-			case EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER:
-			case EAIDeployableItemType::DEPLOYABLE_ITEM_HMG:
-			case EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN:
-				return true;
-			default:
-				return false;
-		}
-	}
 };
 
 // Affects the bot's pathfinding choices
@@ -515,42 +370,23 @@ enum class EAIMovementTaskType
 	MOVE_TASK_WELD
 };
 
-// The type of base a marine outpost could be. Used to help the AI establish and expand outposts across the map
-enum class EAIMarineBaseType
-{
-	MARINE_BASE_MAINBASE,   // The main marine base, where the CC, infantry portals and stuff like arms labs go
-	MARINE_BASE_OUTPOST,    // A permanent outpost designed to control an area of the map, but not the main marine base
-	MARINE_BASE_SIEGE,		// A siege base designed to take down an enemy base
-	MARINE_BASE_GUARDPOST	// A cut-down version of an outpost with just sentry turrets and an observatory
-};
-
-struct AvHAIMarineBase
-{
-	AvHTeamNumber BaseTeam = TEAM_IND;
-	EAIMarineBaseType BaseType = EAIMarineBaseType::MARINE_BASE_OUTPOST; // The purpose of the base. Determines what structures the commander will place
-	Vector BaseLocation = ZERO_VECTOR; // Where the base should be located. The base will be grown around this location
-	Vector SiegeTarget = ZERO_VECTOR; // For siege bases, this is where the siege base wants to blast stuff
-	vector<int> PlacedStructures; // Which structures are part of this base.
-	int NumBuilders = 0; // How many potential builders are there, able to construct stuff?
-	int NumEnemies = 0; // How many enemies are in and around the base?
-	bool bRecycleBase = false;  // Should the commander pack up and remove this base?
-	bool bIsActive = true;  // Should the commander actively build and maintain this base?
-	bool bBaseInitialised = false; // Has the commander started building this base? Will be true once a structure has been placed
-	bool bCanBeBuiltOut = false; // Can this base be built out currently?
-	bool bIsBaseEstablished = false; // Have enough key structures been placed to consider this "established", even if it's not finished yet?
-};
-
 // Bot path node. A path will be several of these strung together to lead the bot to its destination
 struct AvHAIPathNode
 {
 	Vector FromLocation = ZERO_VECTOR; // Location to move from
 	Vector ToLocation = ZERO_VECTOR; // Location to move to
 	float requiredZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
-	unsigned int flag = NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
-	unsigned char area = NAV_AREA_UNWALKABLE; // Is this a crouch area, normal walking area etc
+	EAINavMovementFlag flag = NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
+	EAINavArea area = NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
 	unsigned int poly = 0; // The nav mesh poly this point resides on
 	edict_t* Platform = nullptr;
+
+	bool IsValidMove() const
+	{
+		return !vEquals(FromLocation, ToLocation) && flag != EAINavMovementFlag::NAV_FLAG_DISABLED && area != EAINavArea::NAV_AREA_NULL;
+	}
 };
+typedef std::vector<AvHAIPathNode> AvHAIPath;
 
 // Represents a bot's current understanding of an enemy player's status
 struct AvHAIEnemyStatus
@@ -573,7 +409,6 @@ struct AvHAIEnemyStatus
 
 	Vector LastLOSPosition = g_vecZero;
 	Vector LastCoverPosition = g_vecZero;
-
 };
 
 // Tracks what orders have been given to which players
@@ -628,6 +463,7 @@ struct AvHAIMoveTask
 	edict_t* TriggerToActivate = nullptr;
 	bool bPathGenerated = false;
 };
+typedef std::vector<AvHAIMoveTask> AIMoveTaskList;
 
 struct AvHAIStuckTracker
 {
@@ -635,13 +471,12 @@ struct AvHAIStuckTracker
 	Vector MoveDestination = g_vecZero;
 	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
 	bool bPathFollowFailed = false;
-
 };
 
 // Contains the bot's current navigation info, such as current path
 struct AvHAINavStatus
 {
-	std::vector<AvHAIPathNode> CurrentPath; // Bot's path nodes
+	AvHAIPath CurrentPath; // Bot's path nodes
 	unsigned int CurrentPathPoint = 0;
 
 	Vector TargetDestination = ZERO_VECTOR; // Desired destination
@@ -686,7 +521,7 @@ struct AvHAINavStatus
 
 	unsigned int SpecialMovementFlags = 0; // Any special movement flags required for the current path (e.g. needs to pick up an item)
 
-	std::vector<AvHAIMoveTask> MovementTasks;
+	AIMoveTaskList MovementTasks;
 	AvHAIMoveTask UnstuckTask;
 };
 
@@ -759,8 +594,6 @@ struct AvHAIPlayer
 	EAICombatStrategy CurrentCombatStrategy = EAICombatStrategy::COMBAT_STRATEGY_ATTACK;
 	edict_t* CurrentEnemyRef = nullptr;
 
-	vector<AvHAIBuildableStructure> DangerTurrets;
-
 	AvHAIPlayerTask PrimaryBotTask;
 	AvHAIPlayerTask SecondaryBotTask;
 	AvHAIPlayerTask WantsAndNeedsTask;
@@ -776,7 +609,6 @@ struct AvHAIPlayer
 
 	AvHAINavStatus BotNavInfo; // Bot's movement information, their current path, where in the path they are etc.
 
-	vector<AvHAICommanderRequest> ActiveRequests;
 	vector<AvHAICommanderOrder> ActiveOrders;
 
 	float next_commander_action_time = 0.0f;
@@ -822,10 +654,9 @@ struct AvHAIPlayer
 
 	int DebugValue = 0; // Used for debugging the bot
 
-	Vector RelocationSpot = ZERO_VECTOR; // If the bot is commanding and wants to relocate, then this is where they plan to go
-
-	vector<AvHAIMarineBase> Bases;
-
+	bool HasValidPath() const;
+	const AvHAIPathNode* GetCurrentPathNode() const;
+	bool HasNextPathPoint() const;
 };
 
 struct AvHAISquad

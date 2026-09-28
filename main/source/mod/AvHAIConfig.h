@@ -56,11 +56,11 @@ int CONFIG_GetTeamASizeForMap(const char* MapName);
 int CONFIG_GetTeamBSizeForMap(const char* MapName);
 
 // Returns the configured hive tech at that index (chamber build sequence)
-AvHMessageID CONFIG_GetHiveTechAtIndex(const int Index);
+EAIHiveTechStatus CONFIG_GetHiveTechAtIndex(const int Index);
 
-bot_skill CONFIG_GetBotSkillLevel();
+AvHAISkillLevel CONFIG_GetBotSkillLevel();
 
-BotFillTiming CONFIG_GetBotFillTiming();
+EAIFillTiming CONFIG_GetBotFillTiming();
 
 void CONFIG_RegenerateIniFile();
 

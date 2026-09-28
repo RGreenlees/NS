@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <random>
 
-BotFillTiming CurrentBotFillTiming = FILLTIMING_ALLHUMANS;
+EAIFillTiming CurrentBotFillTiming = EAIFillTiming::FILLTIMING_ALLHUMANS;
 
 float MaxAIMatchTimeMinutes = 90.0f;
 
@@ -16,9 +16,9 @@ float RelocationChance = 0.1f;
 
 std::unordered_map<std::string, TeamSizeDefinitions> TeamSizeMap;
 
-bot_skill BotSkillLevels[4];
+AvHAISkillLevel BotSkillLevels[4];
 
-std::vector<AvHMessageID> ChamberSequence;
+std::vector<EAIHiveTechStatus> ChamberSequence;
 
 std::default_random_engine rng;
 bool bRNGSeeded = false;
@@ -150,14 +150,14 @@ int CONFIG_GetTeamBSizeForMap(const char* MapName)
     }
 }
 
-AvHMessageID CONFIG_GetHiveTechAtIndex(const int Index)
+EAIHiveTechStatus CONFIG_GetHiveTechAtIndex(const int Index)
 {
-    if (Index < 0 || Index > 2) { return MESSAGE_NULL; }
+    if (Index < 0 || Index > 2) { return EAIHiveTechStatus::HIVE_TECH_NONE; }
 
     return ChamberSequence[Index];
 }
 
-bot_skill CONFIG_GetBotSkillLevel()
+AvHAISkillLevel CONFIG_GetBotSkillLevel()
 {
     int index = clampi((int)avh_botskill.value, 0, 3);
 
@@ -206,7 +206,7 @@ void CONFIG_PopulateBotNames()
     BotNames.insert(BotNames.end(), DefaultNames.begin(), DefaultNames.end());
 
     CurrentNameIndex = 0;
-    
+
 }
 
 string CONFIG_GetNextBotName()
@@ -235,7 +235,7 @@ void CONFIG_ParseConfigFile()
 
     BotSkillLevels[0].alien_bot_reaction_time = 0.4f;
     BotSkillLevels[0].alien_bot_aim_skill = 0.2f;
-    BotSkillLevels[0].alien_bot_motion_tracking_skill = 0.2f;    
+    BotSkillLevels[0].alien_bot_motion_tracking_skill = 0.2f;
     BotSkillLevels[0].alien_bot_view_speed = 0.75f;
 
     BotSkillLevels[1].marine_bot_reaction_time = 0.2f;
@@ -269,9 +269,9 @@ void CONFIG_ParseConfigFile()
     BotSkillLevels[3].alien_bot_view_speed = 2.0f;
 
     ChamberSequence.clear();
-    ChamberSequence.push_back(ALIEN_BUILD_DEFENSE_CHAMBER);
-    ChamberSequence.push_back(ALIEN_BUILD_MOVEMENT_CHAMBER);
-    ChamberSequence.push_back(ALIEN_BUILD_SENSORY_CHAMBER);
+    ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_DEFENCE);
+    ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_MOVEMENT);
+    ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_SENSORY);
 
     if (!bRNGSeeded)
     {
@@ -360,11 +360,11 @@ void CONFIG_ParseConfigFile()
             }
 
             if (!stricmp(keyChar, "BotFillTiming"))
-            {                
+            {
                 int FillSetting = atoi(value.c_str());
                 FillSetting = clampi(FillSetting, 0, 2);
-                CurrentBotFillTiming = (BotFillTiming)FillSetting;
-                
+                CurrentBotFillTiming = static_cast<EAIFillTiming>(FillSetting);
+
                 continue;
             }
 

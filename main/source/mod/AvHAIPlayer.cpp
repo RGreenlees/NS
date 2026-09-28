@@ -16,14 +16,42 @@
 #include "AvHMessage.h"
 #include "AvHTurret.h"
 
-extern nav_mesh NavMeshes[MAX_NAV_MESHES]; // Array of nav meshes. Currently only 3 are used (building, onos, and regular)
-extern nav_profile BaseNavProfiles[MAX_NAV_PROFILES]; // Array of nav profiles
 
 extern cvar_t avh_botdebugmode;
 
 #ifdef BOTDEBUG
 extern edict_t* DebugBots[MAX_PLAYERS];
 #endif
+
+const AvHAIPathNode* AvHAIPlayer::GetCurrentPathNode() const
+{
+	if (BotNavInfo.CurrentPath.empty()) { return nullptr; }
+
+	if (BotNavInfo.CurrentPathPoint >= BotNavInfo.CurrentPath.size()) { return nullptr; }
+
+	return &BotNavInfo.CurrentPath[BotNavInfo.CurrentPathPoint];
+}
+
+bool AvHAIPlayer::HasValidPath() const
+{
+	const AvHAIPathNode* CurrentPathNode = GetCurrentPathNode();
+
+	return (CurrentPathNode && CurrentPathNode->IsValidMove());
+}
+
+bool AvHAIPlayer::HasNextPathPoint() const
+{
+	if (BotNavInfo.CurrentPath.empty()) { return false; }
+
+	return (BotNavInfo.CurrentPathPoint + 1) < BotNavInfo.CurrentPath.size();
+}
+
+
+
+
+
+
+
 
 void BotJump(AvHAIPlayer* pBot)
 {
@@ -529,7 +557,7 @@ void BotAlienAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target)
 
 			if (vIsZero(pBot->BotNavInfo.ActualMoveDestination))
 			{
-				NewAttackLocation = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetEntityGroundLocation(Target), WeaponRange);
+				NewAttackLocation = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetFloorUnderEntity(Target), WeaponRange);
 			}
 			else
 			{
@@ -626,7 +654,7 @@ void BotMarineAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target)
 
 			if (vIsZero(pBot->BotNavInfo.ActualMoveDestination))
 			{
-				NewAttackLocation = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetEntityGroundLocation(Target), WeaponRange);
+				NewAttackLocation = FindClosestNavigablePointToDestination(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, UTIL_GetFloorUnderEntity(Target), WeaponRange);
 			}
 			else
 			{
@@ -686,11 +714,11 @@ void BotAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target)
 
 }
 
-void BotShootTarget(AvHAIPlayer* pBot, AvHAIWeapon AttackWeapon, edict_t* Target)
+void BotShootTarget(AvHAIPlayer* pBot, EAIWeaponId AttackWeapon, edict_t* Target)
 {
 	if (FNullEnt(Target) || (Target->v.deadflag != DEAD_NO)) { return; }
 
-	AvHAIWeapon CurrentWeapon = GetPlayerCurrentWeapon(pBot->Player);
+	EAIWeaponId CurrentWeapon = GetPlayerCurrentWeapon(pBot->Player);
 
 	pBot->DesiredCombatWeapon = AttackWeapon;
 
@@ -888,11 +916,11 @@ void BombardierAttackTarget(AvHAIPlayer* pBot, edict_t* Target)
 	}
 }
 
-void BotShootLocation(AvHAIPlayer* pBot, AvHAIWeapon AttackWeapon, const Vector TargetLocation)
+void BotShootLocation(AvHAIPlayer* pBot, EAIWeaponId AttackWeapon, const Vector TargetLocation)
 {
 	if (vIsZero(TargetLocation)) { return; }
 
-	AvHAIWeapon CurrentWeapon = GetPlayerCurrentWeapon(pBot->Player);
+	EAIWeaponId CurrentWeapon = GetPlayerCurrentWeapon(pBot->Player);
 
 	pBot->DesiredCombatWeapon = AttackWeapon;
 
@@ -1033,7 +1061,7 @@ void BotShootLocation(AvHAIPlayer* pBot, AvHAIWeapon AttackWeapon, const Vector 
 			}
 		}
 
-		
+
 	}
 }
 
@@ -1141,7 +1169,7 @@ void BotUpdateDesiredViewRotation(AvHAIPlayer* pBot)
 	if (isnan(pBot->DesiredLookDirection.x))
 	{
 		pBot->DesiredLookDirection = ZERO_VECTOR;
-	} 
+	}
 
 	// Clamp the pitch and yaw to valid ranges
 
@@ -1417,7 +1445,7 @@ void BotUpdateView(AvHAIPlayer* pBot)
 
 		TrackingInfo->PlayerRef = PlayerRef;
 		TrackingInfo->PlayerEdict = PlayerEdict;
-		
+
 		TrackingInfo->AwarenessOfPlayer -= (ViewUpdateDelta * 0.1f);
 		TrackingInfo->AwarenessOfPlayer = clampf(TrackingInfo->AwarenessOfPlayer, 0.0f, 1.0f);
 
@@ -1473,7 +1501,7 @@ void BotUpdateView(AvHAIPlayer* pBot)
 			TrackingInfo->LastDetectedTime = gpGlobals->time;
 			TrackingInfo->LastDetectedLocation = PlayerEdict->v.origin;
 			TrackingInfo->AwarenessOfPlayer = 1.0f;
-			
+
 			if (bHasLOS && !bIsPlayerInvisible)
 			{
 				TrackingInfo->LastVisibleLocation = PlayerEdict->v.origin;
@@ -1538,14 +1566,14 @@ void BotUpdateView(AvHAIPlayer* pBot)
 			pBot->DangerTurrets.push_back(ThisTurret);
 		}
 
-	}	
+	}
 
 	if (!bEnemyHasLOSToBot && !bIsInRangeOfEnemyTurret)
 	{
 		pBot->LastSafeLocation = pBot->CurrentFloorPosition;
 	}
 
-	
+
 }
 
 bool UTIL_IsCloakedPlayerInvisible(edict_t* Observer, AvHPlayer* Player)
@@ -1728,7 +1756,7 @@ void StartNewBotFrame(AvHAIPlayer* pBot)
 	ClearBotInputs(pBot);
 	pBot->CurrentEyePosition = GetPlayerEyePosition(pEdict);
 
-	Vector NewFloorPosition = UTIL_GetEntityGroundLocation(pEdict);
+	Vector NewFloorPosition = UTIL_GetFloorUnderEntity(pEdict);
 
 	if (vDist2DSq(NewFloorPosition, pBot->CurrentFloorPosition) > sqrf(UTIL_MetresToGoldSrcUnits(3.0f)))
 	{
@@ -1742,11 +1770,11 @@ void StartNewBotFrame(AvHAIPlayer* pBot)
 	if (UTIL_IsTileCacheUpToDate() && vDist3DSq(pBot->BotNavInfo.LastNavMeshCheckPosition, ProjectPoint) > sqrf(16.0f))
 	{
 		if (UTIL_PointIsReachable(pBot->BotNavInfo.NavProfile, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), ProjectPoint, 16.0f))
-		{			
+		{
 			Vector NavPoint = UTIL_ProjectPointToNavmesh(ProjectPoint);
 			UTIL_AdjustPointAwayFromNavWall(NavPoint, 8.0f);
 
-			pBot->BotNavInfo.LastNavMeshPosition = NavPoint;			
+			pBot->BotNavInfo.LastNavMeshPosition = NavPoint;
 
 			if (pBot->BotNavInfo.IsOnGround || IsPlayerLerk(pBot->Edict))
 			{
@@ -2021,7 +2049,7 @@ void UpdateAIPlayerCORole(AvHAIPlayer* pBot)
 	}
 
 	SetNewAIPlayerRole(pBot, BOT_ROLE_ASSAULT);
-		
+
 }
 
 void UpdateAIPlayerDMRole(AvHAIPlayer* pBot)
@@ -2036,7 +2064,7 @@ void AIPlayerHearEnemy(AvHAIPlayer* pBot, edict_t* HeardEnemy, float SoundVolume
 	if (heardIndex < 0 || heardIndex >= 32 || HeardEnemy->v.team == pBot->Edict->v.team) { return; }
 
 	enemy_status* HeardEnemyStatus = &pBot->TrackedEnemies[heardIndex];
-	
+
 	HeardEnemyStatus->AwarenessOfPlayer += SoundVolume;
 
 	HeardEnemyStatus->AwarenessOfPlayer = clampf(HeardEnemyStatus->AwarenessOfPlayer, 0.0f, 1.0f);
@@ -2255,12 +2283,12 @@ void UpdateAIMarinePlayerNSRole(AvHAIPlayer* pBot)
 	AvHTeamNumber BotTeamNumber = pBot->Player->GetTeam();
 
 	if (BotTeamNumber == TEAM_IND)
-	{ 
+	{
 		SetNewAIPlayerRole(pBot, BOT_ROLE_NONE);
-		
+
 		return;
 	}
-		
+
 	if (ShouldAIPlayerTakeCommand(pBot))
 	{
 		// We're going to go commander!
@@ -2552,7 +2580,7 @@ AvHAICombatStrategy GetGorgeCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_sta
 			{
 				bHasBackup = true;
 			}
-		}		
+		}
 	}
 
 	if (bHasBackup)
@@ -2659,7 +2687,7 @@ AvHAICombatStrategy GetLerkCombatStrategyForTarget(AvHAIPlayer* pBot, enemy_stat
 		else
 		{
 			return COMBAT_STRATEGY_SKIRMISH;
-		}		
+		}
 	}
 
 	// We are in good shape and the enemy doesn't have a nasty weapon that could hurt us. Go for the kill if they're low on health and are alone
@@ -3278,7 +3306,7 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 							pBot->DesiredCombatWeapon = UTIL_GetPlayerSecondaryWeapon(pBot->Player);
 						}
 						BotUseObject(pBot, NearestArmouryRef.edict, true);
-						BotReloadWeapons(pBot);						
+						BotReloadWeapons(pBot);
 
 						return true;
 					}
@@ -3341,11 +3369,11 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 			if (TimeSinceLastSeenEnemy < 3.0f && !vIsZero(TrackedEnemyRef->LastVisibleLocation))
 			{
 				BotLookAt(pBot, TrackedEnemyRef->LastVisibleLocation);
-				
+
 			}
 		}
-		
-		
+
+
 		return true;
 	}
 
@@ -3389,7 +3417,7 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 			{
 				MoveTo(pBot, pBot->LastSafeLocation, MOVESTYLE_NORMAL);
 			}
-			
+
 			if (PlayerHasWeapon(pBot->Player, WEAPON_MARINE_GRENADE) || (PlayerHasWeapon(pBot->Player, WEAPON_MARINE_GL) && UTIL_GetPlayerPrimaryWeaponClipAmmo(pBot->Player) > 0))
 			{
 				int NumViableTargets = AITAC_GetNumPlayersOnTeamWithLOS(EnemyTeam, CurrentEnemy->v.origin, BALANCE_VAR(kGrenadeRadius), CurrentEnemy);
@@ -3463,7 +3491,7 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 					BotThrowGrenadeAtTarget(pBot, GrenadeTarget);
 					return true;
 				}
-			}			
+			}
 
 			if (UTIL_PlayerHasLOSToLocation(pBot->Edict, TrackedEnemyRef->LastVisibleLocation, UTIL_MetresToGoldSrcUnits(30.0f)))
 			{
@@ -3630,8 +3658,8 @@ bool RegularMarineCombatThink(AvHAIPlayer* pBot)
 		else
 		{
 			BotGuardLocation(pBot, TrackedEnemyRef->LastDetectedLocation);
-		}		
-		
+		}
+
 		return true;
 	}
 
@@ -3809,7 +3837,7 @@ void AIPlayerSetMarineCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	float MinDist = 0.0f;
 
 	vector<AvHAIResourceNode*> UnclaimedResourceNodes = AITAC_GetAllMatchingResourceNodes(pBot->Edict->v.origin, &NodeFilter);
-	
+
 	for (auto it = UnclaimedResourceNodes.begin(); it != UnclaimedResourceNodes.end(); it++)
 	{
 		AvHAIResourceNode* ResNode = (*it);
@@ -3955,11 +3983,11 @@ void AIPlayerSetMarineAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Tas
 					Task->TaskStartedTime = 0.0f;
 					return;
 				}
-				
+
 			}
 
 			return;
-			
+
 		}
 	}
 
@@ -4139,7 +4167,7 @@ void AIPlayerSetWantsAndNeedsMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 				}
 			}
 		}
-	}	
+	}
 
 	if (!PlayerHasEquipment(pBot->Edict))
 	{
@@ -4458,7 +4486,7 @@ void AIPlayerSetSecondaryMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		{
 			AvHPlayer* ThisPlayer = (*it);
 			edict_t* PlayerEdict = ThisPlayer->edict();
-			
+
 			float ArmourPercent = PlayerEdict->v.armorvalue / (float)GetPlayerMaxArmour(PlayerEdict);
 
 			if (ArmourPercent < 1.0f)
@@ -4564,7 +4592,7 @@ void AIPlayerSetSecondaryMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				}
 			}
 		}
-		
+
 		if (StructureToMine.IsValid())
 		{
 			AITASK_SetMineStructureTask(pBot, Task, StructureToMine.edict, true);
@@ -4610,7 +4638,7 @@ bool AIPlayerMustFinishCurrentTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	if (GetPlayerActiveClass(pBot->Player) == AVH_USER3_ALIEN_PLAYER2)
 	{
 		AvHTeamNumber BotTeam = pBot->Player->GetTeam();
-		
+
 		// If we just tried placing a structure, then let it play out first
 		if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return true; }
 
@@ -4748,7 +4776,7 @@ AvHMessageID AlienGetDesiredUpgrade(AvHAIPlayer* pBot, HiveTechStatus DesiredTec
 		{
 		case AVH_USER3_ALIEN_PLAYER1:
 		{
-			
+
 			if (randbool() || GetHasUpgrade(pBot->Player->pev->iuser4, MASK_UPGRADE_7))
 			{
 				return ALIEN_EVOLUTION_NINE;
@@ -4958,7 +4986,7 @@ AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
 		return MESSAGE_NULL;
 	}
 
-	
+
 	if (pBot->BotRole == BOT_ROLE_SWEEPER)
 	{
 		// If we are a sweeper, always ensure we have enough resources to go gorge in case we want to heal the hive
@@ -5063,7 +5091,7 @@ AvHMessageID GetNextAIPlayerCOAlienUpgrade(AvHAIPlayer* pBot)
 		}
 	}
 
-	return MESSAGE_NULL;	
+	return MESSAGE_NULL;
 }
 
 void AIPlayerCOThink(AvHAIPlayer* pBot)
@@ -5239,7 +5267,7 @@ void AIPlayerSetPrimaryCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		if (!FNullEnt(TargetPlayer))
 		{
-			MoveTo(pBot, UTIL_GetEntityGroundLocation(TargetPlayer), MOVESTYLE_NORMAL);
+			MoveTo(pBot, UTIL_GetFloorUnderEntity(TargetPlayer), MOVESTYLE_NORMAL);
 		}
 
 		return;
@@ -5259,7 +5287,7 @@ void AIPlayerSetPrimaryCOMarineTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	if (randbool())
 	{
-		Vector RandomVisitPoint = UTIL_GetRandomPointOnNavmeshInDonut(pBot->BotNavInfo.NavProfile, UTIL_GetEntityGroundLocation(StructureToAttack), UTIL_MetresToGoldSrcUnits(20.0f), UTIL_MetresToGoldSrcUnits(40.0f));
+		Vector RandomVisitPoint = UTIL_GetRandomPointOnNavmeshInDonut(pBot->BotNavInfo.NavProfile, UTIL_GetFloorUnderEntity(StructureToAttack), UTIL_MetresToGoldSrcUnits(20.0f), UTIL_MetresToGoldSrcUnits(40.0f));
 
 		if (!vIsZero(RandomVisitPoint))
 		{
@@ -5470,7 +5498,7 @@ void AIPlayerSetPrimaryCOAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				if (NearestHive)
 				{
 					AITASK_SetEvolveTask(pBot, Task, NearestHive->HiveEdict, ALIEN_LIFEFORM_THREE, true);
-					
+
 				}
 			}
 
@@ -5582,7 +5610,7 @@ void AIPlayerSetPrimaryCOAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 		if (!FNullEnt(TargetPlayer))
 		{
-			MoveTo(pBot, UTIL_GetEntityGroundLocation(TargetPlayer), MOVESTYLE_NORMAL);
+			MoveTo(pBot, UTIL_GetFloorUnderEntity(TargetPlayer), MOVESTYLE_NORMAL);
 		}
 
 		return;
@@ -5612,7 +5640,7 @@ void AIPlayerSetPrimaryCOAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	}
 
 	AITASK_SetAttackTask(pBot, Task, StructureToAttack, false);
-	
+
 }
 
 void AIPlayerSetSecondaryCOAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -5698,7 +5726,7 @@ void AIPlayerSetSecondaryCOAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 void AIPlayerEndMatchThink(AvHAIPlayer* pBot)
 {
-	
+
 	pBot->CurrentEnemy = BotGetNextEnemyTarget(pBot);
 
 	if (pBot->CurrentEnemy > -1)
@@ -5744,7 +5772,7 @@ void AIPlayerEndMatchThink(AvHAIPlayer* pBot)
 	{
 		AIPlayerDMThink(pBot);
 	}
-	
+
 }
 
 void AIPlayerDMThink(AvHAIPlayer* pBot)
@@ -5820,7 +5848,7 @@ void AIPlayerThink(AvHAIPlayer* pBot)
 		ClearBotInputs(pBot);
 		pBot->bIsInactive = true;
 		return;
-	}	
+	}
 
 	if (avh_botdebugmode.value == 1)
 	{
@@ -5848,7 +5876,7 @@ void AIPlayerThink(AvHAIPlayer* pBot)
 			{
 				AIPlayerNSThink(pBot);
 			}
-		}			
+		}
 		break;
 		case MAP_MODE_CO:
 			AIPlayerCOThink(pBot);
@@ -6070,13 +6098,13 @@ void AIPlayerReceiveMoveOrder(AvHAIPlayer* pBot, Vector Destination)
 				pBot->CommanderTask.bIssuedByCommander = true;
 				return;
 			}
-		}		
+		}
 	}
 
 	// Otherwise, treat as a normal move order. Go there and wait a bit to see what the commander wants to do next
 	AITASK_SetMoveTask(pBot, &pBot->CommanderTask, ActualMoveLocation, true);
 	pBot->CommanderTask.bIssuedByCommander = true;
-	
+
 }
 
 void BotStopCommanderMode(AvHAIPlayer* pBot)
@@ -6141,7 +6169,7 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 		vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
 		vector<AvHAIResourceNode*> AllNodes = AITAC_GetAllResourceNodes();
-		
+
 		StructureSearchFilter ResNodeFilter;
 		ResNodeFilter.DeployableTeam = BotTeam;
 		ResNodeFilter.ReachabilityTeam = BotTeam;
@@ -6307,7 +6335,7 @@ void AIPlayerSetAlienBuilderPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 					MinDist = ThisDist;
 				}
 			}
-			
+
 		}
 	}
 
@@ -6436,7 +6464,7 @@ void AIPlayerSetAlienCapperPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 						return;
 					}
 				}
-			}			
+			}
 		}
 	}
 
@@ -6858,7 +6886,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 		bool bEnemyIsSecuring = AITAC_DeployableExistsAtLocation(ThisHive->FloorLocation, &EnemyStuffFilter);
 
-		if (bEnemyIsSecuring) { continue; }			
+		if (bEnemyIsSecuring) { continue; }
 
 		StructureSearchFilter FriendlyStuffFilter;
 		FriendlyStuffFilter.DeployableTeam = BotTeam;
@@ -6896,7 +6924,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 			{
 				if (ThisGuard->GetUser3() >= AVH_USER3_ALIEN_PLAYER3) { bNeedsExtraGuards = false; }
 				NumGuards++;
-			}				
+			}
 		}
 
 		bNeedsExtraGuards = bNeedsExtraGuards && NumGuards < 2;
@@ -6941,7 +6969,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 		AvHAIHiveDefinition* ThisHive = (*it);
 
 		if (ThisHive->OwningTeam == BotTeam) { continue; }
-		
+
 		vector<AvHAIBuildableStructure> EnemyStructures = AITAC_FindAllDeployables(ThisHive->FloorLocation, &EnemyStuffFilter);
 
 		bool bIsRelocationHive = false; // If true, the marines have relocated here so don't try to retake it: requires a base attack task instead
@@ -7007,9 +7035,9 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 			{
 				AITASK_SetAssaultMarineBaseTask(pBot, Task, EnemyBaseLocation, false);
 				return;
-			}			
+			}
 		}
-	}	
+	}
 
 	// FIND ANY LAST ENEMIES TO KILL AND END GAME
 
@@ -7039,7 +7067,7 @@ void AIPlayerSetAlienAssaultPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 
 	if (!FNullEnt(TargetPlayer))
 	{
-		MoveTo(pBot, UTIL_GetEntityGroundLocation(TargetPlayer), MOVESTYLE_NORMAL);
+		MoveTo(pBot, UTIL_GetFloorUnderEntity(TargetPlayer), MOVESTYLE_NORMAL);
 	}
 
 }
@@ -7168,7 +7196,7 @@ void AIPlayerSetAlienHarasserPrimaryTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Tas
 
 	if (!FNullEnt(TargetPlayer))
 	{
-		MoveTo(pBot, UTIL_GetEntityGroundLocation(TargetPlayer), MOVESTYLE_NORMAL);
+		MoveTo(pBot, UTIL_GetFloorUnderEntity(TargetPlayer), MOVESTYLE_NORMAL);
 	}
 
 
@@ -7213,7 +7241,7 @@ void AIPlayerSetSecondaryAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				{
 					EnemyTFFilter.ExcludeStatusFlags |= STRUCTURE_STATUS_ELECTRIFIED;
 				}
-				
+
 				EnemyTFFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
 				EnemyTFFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 				EnemyTFFilter.ReachabilityTeam = BotTeam;
@@ -7329,7 +7357,7 @@ void AIPlayerSetSecondaryAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			int DefenderStrength = 0;
 
 			vector<AvHPlayer*> AttackingPlayers = AITAC_GetAllPlayersOfTeamInArea(EnemyTeam, ThisHive->FloorLocation, UTIL_MetresToGoldSrcUnits(20.0f), false, nullptr, AVH_USER3_NONE);
-			
+
 			for (auto AttackerIt = AttackingPlayers.begin(); AttackerIt != AttackingPlayers.end(); AttackerIt++)
 			{
 				AvHPlayer* ThisPlayer = (*AttackerIt);
@@ -7366,7 +7394,7 @@ void AIPlayerSetSecondaryAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 				// This potential defender is further than us, don't count them in the strength measurements
 				if (ThisPlayerDist > DistToHive) { continue; }
-				
+
 				int ThisDefenderStrength = 1;
 
 				if (IsPlayerFade(ThisPlayerEdict))
@@ -7567,7 +7595,7 @@ void AIPlayerSetWantsAndNeedsAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 			return;
 		}
-		
+
 	}
 
 	if (Task->TaskType == TASK_GET_HEALTH)
@@ -7680,7 +7708,7 @@ void AIPlayerSetWantsAndNeedsAlienTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				return;
 			}
 		}
-	}	
+	}
 
 	if (CurrentHealth < GetHealthThreshold)
 	{
@@ -7726,7 +7754,7 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 
 	enemy_status* TrackedEnemyRef = &pBot->TrackedEnemies[pBot->CurrentEnemy];
 	AvHPlayer* EnemyPlayer = TrackedEnemyRef->PlayerRef;
-	edict_t* CurrentEnemy = TrackedEnemyRef->PlayerEdict;	
+	edict_t* CurrentEnemy = TrackedEnemyRef->PlayerEdict;
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = EnemyPlayer->GetTeam();
@@ -7752,7 +7780,7 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 
 			if (!bInHealingRange)
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				return true;
 			}
 
@@ -7764,15 +7792,15 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 				}
 				else
 				{
-					MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+					MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				}
 
 				return true;
 			}
 
-			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetEntityGroundLocation(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
+			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetFloorUnderEntity(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				return true;
 			}
 
@@ -7789,7 +7817,7 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 	}
 
 	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_ATTACK || bShouldBreakRetreat || (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_AMBUSH && bShouldBreakAmbush))
-	{	
+	{
 
 		bool bIsCloaked = (UTIL_IsCloakedPlayerInvisible(CurrentEnemy, pBot->Player) || pBot->Player->GetOpacity() < 0.5f);
 
@@ -7837,7 +7865,7 @@ bool SkulkCombatThink(AvHAIPlayer* pBot)
 		}
 
 		BotAttackResult LOSCheck = PerformAttackLOSCheck(pBot, DesiredWeapon, CurrentEnemy);
-		Vector MoveTarget = UTIL_GetEntityGroundLocation(CurrentEnemy);
+		Vector MoveTarget = UTIL_GetFloorUnderEntity(CurrentEnemy);
 
 		if (LOSCheck == ATTACK_SUCCESS)
 		{
@@ -8010,7 +8038,7 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 			{
 				pBot->BotNavInfo.bShouldWalk = bPlayerCloaked && TrackedEnemyRef->bEnemyHasLOS;
 
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 
 				if (!bPlayerCloaked)
 				{
@@ -8072,7 +8100,7 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 				}
 				else
 				{
-					MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+					MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				}
 
 				pBot->DesiredCombatWeapon = WEAPON_GORGE_HEALINGSPRAY;
@@ -8085,9 +8113,9 @@ bool GorgeCombatThink(AvHAIPlayer* pBot)
 				return true;
 			}
 
-			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetEntityGroundLocation(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
+			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetFloorUnderEntity(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 
 				if (CurrentHealthPercent > 0.5f && AttackResult == ATTACK_SUCCESS)
 				{
@@ -8309,7 +8337,7 @@ bool LerkCombatThink(AvHAIPlayer* pBot)
 
 			if (!bInHealingRange)
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 
 				if (bCanSpore)
 				{
@@ -8332,7 +8360,7 @@ bool LerkCombatThink(AvHAIPlayer* pBot)
 				}
 				else
 				{
-					MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+					MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 
 					if (bCanSpore)
 					{
@@ -8343,9 +8371,9 @@ bool LerkCombatThink(AvHAIPlayer* pBot)
 				return true;
 			}
 
-			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetEntityGroundLocation(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
+			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetFloorUnderEntity(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				return true;
 			}
 
@@ -8387,7 +8415,7 @@ bool LerkCombatThink(AvHAIPlayer* pBot)
 			BotShootTarget(pBot, DesiredWeapon, CurrentEnemy);
 		}
 
-		return true;		
+		return true;
 	}
 
 	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_SKIRMISH)
@@ -8462,7 +8490,7 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 	enemy_status* TrackedEnemyRef = &pBot->TrackedEnemies[pBot->CurrentEnemy];
 	AvHPlayer* EnemyPlayer = TrackedEnemyRef->PlayerRef;
 	edict_t* CurrentEnemy = TrackedEnemyRef->PlayerEdict;
-	
+
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = EnemyPlayer->GetTeam();
@@ -8488,7 +8516,7 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 
 			if (!bInHealingRange && GetPlayerOverallHealthPercent(pBot->Edict) < 0.5f)
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 
 				// If we're still in danger while retreating, do extra leaping to get the hell out
 				if (TrackedEnemyRef->bHasLOS)
@@ -8498,10 +8526,10 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 						bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
 
 						if (CurrentPathNode.flag != SAMPLE_POLYFLAGS_WALLCLIMB && CurrentPathNode.flag != SAMPLE_POLYFLAGS_LIFT)
-						{							
+						{
 							BotLeap(pBot, CurrentPathNode.Location);
 						}
-						
+
 					}
 				}
 				else
@@ -8536,9 +8564,9 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 				return true;
 			}
 
-			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetEntityGroundLocation(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
+			if (!UTIL_PlayerHasLOSToLocation(TrackedEnemyRef->PlayerEdict, UTIL_GetFloorUnderEntity(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 
 				if (PlayerHasWeapon(pBot->Player, WEAPON_FADE_METABOLIZE))
 				{
@@ -8569,7 +8597,7 @@ bool FadeCombatThink(AvHAIPlayer* pBot)
 		AvHAIWeapon DesiredWeapon = WEAPON_FADE_SWIPE;
 
 		BotAttackResult LOSCheck = PerformAttackLOSCheck(pBot, DesiredWeapon, CurrentEnemy);
-		Vector MoveTarget = UTIL_GetEntityGroundLocation(CurrentEnemy);
+		Vector MoveTarget = UTIL_GetFloorUnderEntity(CurrentEnemy);
 
 		float EnemySpeed = vSize2D(CurrentEnemy->v.velocity);
 
@@ -8728,7 +8756,7 @@ bool OnosCombatThink(AvHAIPlayer* pBot)
 	enemy_status* TrackedEnemyRef = &pBot->TrackedEnemies[pBot->CurrentEnemy];
 	AvHPlayer* EnemyPlayer = TrackedEnemyRef->PlayerRef;
 	edict_t* CurrentEnemy = TrackedEnemyRef->PlayerEdict;
-	
+
 
 	AvHTeamNumber BotTeam = pBot->Player->GetTeam();
 	AvHTeamNumber EnemyTeam = EnemyPlayer->GetTeam();
@@ -8754,7 +8782,7 @@ bool OnosCombatThink(AvHAIPlayer* pBot)
 
 			if (!bInHealingRange)
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				return true;
 			}
 
@@ -8764,9 +8792,9 @@ bool OnosCombatThink(AvHAIPlayer* pBot)
 				return true;
 			}
 
-			if (!UTIL_PlayerHasLOSToLocation(CurrentEnemy, UTIL_GetEntityGroundLocation(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
+			if (!UTIL_PlayerHasLOSToLocation(CurrentEnemy, UTIL_GetFloorUnderEntity(NearestHealingSource) + Vector(0.0f, 0.0f, 16.0f), UTIL_MetresToGoldSrcUnits(30.0f)))
 			{
-				MoveTo(pBot, UTIL_GetEntityGroundLocation(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
+				MoveTo(pBot, UTIL_GetFloorUnderEntity(NearestHealingSource), MOVESTYLE_NORMAL, DesiredDistFromHealingSource);
 				return true;
 			}
 		}
@@ -8777,7 +8805,7 @@ bool OnosCombatThink(AvHAIPlayer* pBot)
 
 	if (pBot->CurrentCombatStrategy == COMBAT_STRATEGY_ATTACK || bShouldBreakRetreat)
 	{
-		Vector MoveTarget = UTIL_GetEntityGroundLocation(CurrentEnemy);
+		Vector MoveTarget = UTIL_GetFloorUnderEntity(CurrentEnemy);
 
 		MoveTarget = MoveTarget + (UTIL_GetVectorNormal2D(CurrentEnemy->v.velocity) * 0.1f);
 
@@ -8879,7 +8907,7 @@ void DEBUG_PrintCombatInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot)
 	{
 		sprintf(interbuf, "Main Threat: %s\n\n", STRING(pBot->TrackedEnemies[TrackedEnemy].PlayerEdict->v.netname));
 	}
-		
+
 	strcat(buf, interbuf);
 
 	if (TrackedEnemy < 0)

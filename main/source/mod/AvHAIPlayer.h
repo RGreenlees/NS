@@ -50,8 +50,8 @@ void BotAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target);
 void BotMarineAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target);
 void BotAlienAttackNonPlayerTarget(AvHAIPlayer* pBot, edict_t* Target);
 
-void BotShootTarget(AvHAIPlayer* pBot, AvHAIWeapon AttackWeapon, edict_t* Target);
-void BotShootLocation(AvHAIPlayer* pBot, AvHAIWeapon AttackWeapon, const Vector TargetLocation);
+void BotShootTarget(AvHAIPlayer* pBot, EAIWeaponId AttackWeapon, edict_t* Target);
+void BotShootLocation(AvHAIPlayer* pBot, EAIWeaponId AttackWeapon, const Vector TargetLocation);
 void BombardierAttackTarget(AvHAIPlayer* pBot, edict_t* Target);
 
 void BotEvolveLifeform(AvHAIPlayer* pBot, Vector DesiredEvolveLocation, AvHMessageID TargetLifeform);

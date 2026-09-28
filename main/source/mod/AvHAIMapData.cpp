@@ -882,7 +882,7 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 	// Object will not move again, so block off all connections permanently, and place null obstacles to block nav mesh
 	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_STATIC)
 	{
-		AIMAP_ApplyTempObstaclesToObject(Object, DT_AREA_NULL);
+		AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_NULL);
 
 		int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
@@ -890,7 +890,7 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 		{
 			NavOffMeshConnection* ThisConnection = (*it);
 
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, NAV_FLAG_DISABLED);
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_DISABLED);
 		}
 
 		return;
@@ -912,7 +912,7 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 		TestProfile.MeshIndex = ThisConnection->NavMeshIndex;
 
-		DynamicMapObject* ThisTrigger = AIMAP_GetBestTriggerForObject(Object, ThisConnection->FromLocation, TestProfile);
+		DynamicMapObject* ThisTrigger = AIMAP_GetBestTriggerForObject(Object, ThisConnection->FromLocation, &TestProfile);
 
 		if (!ThisTrigger)
 		{
@@ -1065,7 +1065,7 @@ void AIMAP_SetTrainStartPoints()
 	}
 }
 
-bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject)
+bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject)
 {
 	if (UTIL_IsPointInSwimArea(StartLoc) && UTIL_IsPointInSwimArea(EndLoc))
 	{
@@ -1075,7 +1075,7 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector
 		}
 	}
 
-	Vector ValidNavmeshPoint = AIMESH_ProjectPointToNavmesh(NavProfile.MeshIndex, EndLoc, NavProfile);
+	Vector ValidNavmeshPoint = AIMESH_ProjectPointToNavmesh(NavProfile->MeshIndex, EndLoc, NavProfile);
 
 	if (UTIL_IsPointInSwimArea(EndLoc))
 	{
@@ -1084,7 +1084,7 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile& NavProfile, const Vector
 
 		if (Hit.flFraction < 1.0f)
 		{
-			ValidNavmeshPoint = AIMESH_ProjectPointToNavmesh(NavProfile.MeshIndex, Hit.vecEndPos, NavProfile);
+			ValidNavmeshPoint = AIMESH_ProjectPointToNavmesh(NavProfile->MeshIndex, Hit.vecEndPos, NavProfile);
 		}
 	}
 
@@ -1242,7 +1242,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 	return nullptr;
 }
 
-DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile& NavProfile)
+DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile* NavProfile)
 {
 	if (!ObjectToActivate || ObjectToActivate->Triggers.size() == 0 || vIsZero(ActivateLocation)) { return nullptr; }
 
@@ -1336,7 +1336,7 @@ DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActiva
 	return WinningTrigger;
 }
 
-Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile& NavProfile, const Vector UserLocation, edict_t* ButtonEdict)
+Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, edict_t* ButtonEdict)
 {
 	if (UTIL_IsPointInSwimArea(UserLocation))
 	{
@@ -1368,7 +1368,7 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile& NavProfile, const Vec
 		return ClosestPoint;
 	}
 
-	Vector ButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile.MeshIndex, ClosestPoint, NavProfile, Vector(100.0f, 100.0f, 100.0f));
+	Vector ButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile->MeshIndex, ClosestPoint, NavProfile, Vector(100.0f, 100.0f, 100.0f));
 
 	if (vIsZero(ButtonAccessPoint))
 	{
@@ -1402,7 +1402,7 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile& NavProfile, const Vec
 		NewProjection = ClosestPoint + Vector(0.0f, 0.0f, 100.0f);
 	}
 
-	Vector NewButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile.MeshIndex, NewProjection, NavProfile);
+	Vector NewButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile->MeshIndex, NewProjection, NavProfile);
 
 	if (vIsZero(NewButtonAccessPoint))
 	{
@@ -1701,7 +1701,7 @@ DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict)
 	return nullptr;
 }
 
-void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, const int Area)
+void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
 {
 	if (!Object) { return; }
 

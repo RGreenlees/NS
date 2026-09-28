@@ -8,6 +8,7 @@
 #include "AvHGamerules.h"
 
 #include <unordered_map>
+#include "AvHSharedUtil.h"
 
 int m_spriteTexture;
 
@@ -98,57 +99,6 @@ Vector UTIL_GetGroundLocation(const Vector CheckLocation)
 	return CheckLocation;
 }
 
-Vector UTIL_GetEntityGroundLocation(const edict_t* pEntity)
-{
-
-	if (FNullEnt(pEntity)) { return g_vecZero; }
-
-	bool bIsPlayer = IsEdictPlayer(pEntity);
-
-	if (bIsPlayer)
-	{
-		if (IsPlayerOnLadder(pEntity))
-		{
-			return UTIL_GetFloorUnderEntity(pEntity);
-		}
-
-		if (pEntity->v.flags & FL_ONGROUND)
-		{
-			if (FNullEnt(pEntity->v.groundentity))
-			{
-				return GetPlayerBottomOfCollisionHull(pEntity);
-			}
-
-			if (!IsEdictPlayer(pEntity->v.groundentity) && GetDeployableObjectTypeFromEdict(pEntity->v.groundentity) == STRUCTURE_NONE)
-			{
-				return GetPlayerBottomOfCollisionHull(pEntity);
-			}
-		}
-
-		return UTIL_GetFloorUnderEntity(pEntity);
-	}
-
-	if (GetDeployableObjectTypeFromEdict(pEntity) == STRUCTURE_ALIEN_HIVE)
-	{
-		const AvHAIHiveDefinition* Hive = AITAC_GetHiveFromEdict(pEntity);
-
-		if (Hive)
-		{
-			return Hive->FloorLocation;
-		}
-		else
-		{
-			return UTIL_GetFloorUnderEntity(pEntity);
-		}
-
-	}
-
-	Vector Centre = UTIL_GetCentreOfEntity(pEntity);
-	Centre.z = pEntity->v.absmin.z + 1.0f;
-
-	return Centre;
-}
-
 Vector UTIL_GetCentreOfEntity(const edict_t* Entity)
 {
 	if (!Entity) { return g_vecZero; }
@@ -161,17 +111,43 @@ Vector UTIL_GetFloorUnderEntity(const edict_t* Edict)
 
 	TraceResult hit;
 
-	Vector EntityCentre = UTIL_GetCentreOfEntity(Edict) + Vector(0.0f, 0.0f, 1.0f);
-	Vector TraceEnd = (EntityCentre - Vector(0.0f, 0.0f, 1000.0f));
+	Vector TraceStart = UTIL_GetCentreOfEntity(Edict) + Vector(0.0f, 0.0f, 1.0f);
+	Vector TraceEnd = (TraceStart - Vector(0.0f, 0.0f, 1000.0f));
 
-	UTIL_TraceHull(EntityCentre, TraceEnd, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
+	UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
 
-	if (hit.flFraction < 1.0f)
+	const edict_t* HitEntity = Edict;
+
+	while (hit.flFraction < 1.0f)
 	{
-		return (hit.vecEndPos + Vector(0.0f, 0.0f, 1.0f));
+		if (IsEdictPlayer(hit.pHit) || IsEdictStructure(hit.pHit) || IsEdictHive(hit.pHit))
+		{
+			HitEntity = hit.pHit;
+			TraceStart.z = hit.pHit->v.origin.z;
+			TraceEnd = (TraceStart - Vector(0.0f, 0.0f, 1000.0f));
+			UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, hit.pHit->v.pContainingEntity, &hit);
+		}
+		else
+		{
+			return (hit.vecEndPos + Vector(0.0f, 0.0f, 1.0f));
+		}
 	}
 
-	return Edict->v.origin;
+	return HitEntity->v.origin;
+}
+
+string UTIL_GetLocationName(Vector Location)
+{
+	string Result;
+
+	string theLocationName;
+	if (AvHSHUGetNameOfLocation(GetGameRules()->GetInfoLocations(), Location, theLocationName))
+	{
+		UTIL_LocalizeText(theLocationName.c_str(), theLocationName);
+		Result = theLocationName;
+	}
+
+	return Result;
 }
 
 Vector UTIL_GetClosestPointOnEntityToLocation(const Vector Location, const edict_t* Entity)
@@ -187,44 +163,68 @@ Vector UTIL_GetClosestPointOnEntityToLocation(const Vector Location, const edict
 	return Vector(clampf(Location.x, MinVec.x, MaxVec.x), clampf(Location.y, MinVec.y, MaxVec.y), clampf(Location.z, MinVec.z, MaxVec.z));
 }
 
-AvHAIDeployableStructureType IUSER3ToStructureType(const int inIUSER3)
+EAIStructureType IUSER3ToStructureType(const int inIUSER3)
 {
-	if (inIUSER3 == AVH_USER3_COMMANDER_STATION) { return STRUCTURE_MARINE_COMMCHAIR; }
-	if (inIUSER3 == AVH_USER3_RESTOWER) { return STRUCTURE_MARINE_RESTOWER; }
-	if (inIUSER3 == AVH_USER3_INFANTRYPORTAL) { return STRUCTURE_MARINE_INFANTRYPORTAL; }
-	if (inIUSER3 == AVH_USER3_ARMORY) { return STRUCTURE_MARINE_ARMORY; }
-	if (inIUSER3 == AVH_USER3_ADVANCED_ARMORY) { return STRUCTURE_MARINE_ADVARMORY; }
-	if (inIUSER3 == AVH_USER3_TURRET_FACTORY) { return STRUCTURE_MARINE_TURRETFACTORY; }
-	if (inIUSER3 == AVH_USER3_ADVANCED_TURRET_FACTORY) { return STRUCTURE_MARINE_ADVTURRETFACTORY; }
-	if (inIUSER3 == AVH_USER3_TURRET) { return STRUCTURE_MARINE_TURRET; }
-	if (inIUSER3 == AVH_USER3_SIEGETURRET) { return STRUCTURE_MARINE_SIEGETURRET; }
-	if (inIUSER3 == AVH_USER3_ARMSLAB) { return STRUCTURE_MARINE_ARMSLAB; }
-	if (inIUSER3 == AVH_USER3_PROTOTYPE_LAB) { return STRUCTURE_MARINE_PROTOTYPELAB; }
-	if (inIUSER3 == AVH_USER3_OBSERVATORY) { return STRUCTURE_MARINE_OBSERVATORY; }
-	if (inIUSER3 == AVH_USER3_PHASEGATE) { return STRUCTURE_MARINE_PHASEGATE; }
-	if (inIUSER3 == AVH_USER3_MINE) { return STRUCTURE_MARINE_DEPLOYEDMINE; }
+	switch (inIUSER3)
+	{
+		case AVH_USER3_COMMANDER_STATION:
+			return EAIStructureType::STRUCTURE_MARINE_COMMCHAIR;
+		case AVH_USER3_RESTOWER:
+			return EAIStructureType::STRUCTURE_MARINE_RESTOWER;
+		case AVH_USER3_INFANTRYPORTAL:
+			return EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL;
+		case AVH_USER3_ARMORY:
+			return EAIStructureType::STRUCTURE_MARINE_ARMORY;
+		case AVH_USER3_ADVANCED_ARMORY:
+			return EAIStructureType::STRUCTURE_MARINE_ADVARMORY;
+		case AVH_USER3_TURRET_FACTORY:
+			return EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY;
+		case AVH_USER3_ADVANCED_TURRET_FACTORY:
+			return EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY;
+		case AVH_USER3_TURRET:
+			return EAIStructureType::STRUCTURE_MARINE_TURRET;
+		case AVH_USER3_SIEGETURRET:
+			return EAIStructureType::STRUCTURE_MARINE_SIEGETURRET;
+		case AVH_USER3_ARMSLAB:
+			return EAIStructureType::STRUCTURE_MARINE_ARMSLAB;
+		case AVH_USER3_PROTOTYPE_LAB:
+			return EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB;
+		case AVH_USER3_OBSERVATORY:
+			return EAIStructureType::STRUCTURE_MARINE_OBSERVATORY;
+		case AVH_USER3_PHASEGATE:
+			return EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
+		case AVH_USER3_MINE:
+			return EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE;
 
-	if (inIUSER3 == AVH_USER3_HIVE) { return STRUCTURE_ALIEN_HIVE; }
-	if (inIUSER3 == AVH_USER3_ALIENRESTOWER) { return STRUCTURE_ALIEN_RESTOWER; }
-	if (inIUSER3 == AVH_USER3_DEFENSE_CHAMBER) { return STRUCTURE_ALIEN_DEFENSECHAMBER; }
-	if (inIUSER3 == AVH_USER3_SENSORY_CHAMBER) { return STRUCTURE_ALIEN_SENSORYCHAMBER; }
-	if (inIUSER3 == AVH_USER3_MOVEMENT_CHAMBER) { return STRUCTURE_ALIEN_MOVEMENTCHAMBER; }
-	if (inIUSER3 == AVH_USER3_OFFENSE_CHAMBER) { return STRUCTURE_ALIEN_OFFENSECHAMBER; }
+		case AVH_USER3_HIVE:
+			return EAIStructureType::STRUCTURE_ALIEN_HIVE;
+		case AVH_USER3_ALIENRESTOWER:
+			return EAIStructureType::STRUCTURE_ALIEN_RESTOWER;
+		case AVH_USER3_DEFENSE_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
+		case AVH_USER3_SENSORY_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER;
+		case AVH_USER3_MOVEMENT_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
+		case AVH_USER3_OFFENSE_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER;
+		default:
+			return EAIStructureType::STRUCTURE_NONE;
+	}
 
-	return STRUCTURE_NONE;
-
+	return EAIStructureType::STRUCTURE_NONE;
 }
 
-AvHAIDeployableStructureType GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict)
+EAIStructureType GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict)
 {
-	if (FNullEnt(StructureEdict)) { return STRUCTURE_NONE; }
+	if (FNullEnt(StructureEdict)) { return EAIStructureType::STRUCTURE_NONE; }
 
 	return IUSER3ToStructureType(StructureEdict->v.iuser3);
 }
 
 bool IsEdictStructure(const edict_t* edict)
 {
-	return (GetDeployableObjectTypeFromEdict(edict) != STRUCTURE_NONE);
+	return (GetDeployableObjectTypeFromEdict(edict) != EAIStructureType::STRUCTURE_NONE);
 }
 
 bool IsEdictHive(const edict_t* edict)
@@ -238,12 +238,12 @@ bool IsDamagingStructure(const edict_t* StructureEdict)
 	return IsDamagingStructure(GetStructureTypeFromEdict(StructureEdict));
 }
 
-bool IsDamagingStructure(AvHAIDeployableStructureType StructureType)
+bool IsDamagingStructure(EAIStructureType StructureType)
 {
 	switch (StructureType)
 	{
-		case STRUCTURE_ALIEN_OFFENSECHAMBER:
-		case STRUCTURE_MARINE_TURRET:
+		case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
+		case EAIStructureType::STRUCTURE_MARINE_TURRET:
 			return true;
 		default:
 			return false;
@@ -252,9 +252,9 @@ bool IsDamagingStructure(AvHAIDeployableStructureType StructureType)
 	return false;
 }
 
-AvHAIDeployableStructureType GetStructureTypeFromEdict(const edict_t* StructureEdict)
+EAIStructureType GetStructureTypeFromEdict(const edict_t* StructureEdict)
 {
-	if (FNullEnt(StructureEdict)) { return STRUCTURE_NONE; }
+	if (FNullEnt(StructureEdict)) { return EAIStructureType::STRUCTURE_NONE; }
 
 	return IUSER3ToStructureType(StructureEdict->v.iuser3);
 }
@@ -306,53 +306,22 @@ void AIDEBUG_DrawBotPath(edict_t* OutputPlayer, AvHAIPlayer* pBot, float DrawTim
 	AIDEBUG_DrawPath(OutputPlayer, pBot->BotNavInfo.CurrentPath, DrawTime);
 }
 
-void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<bot_path_node>& path, float DrawTime)
+void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<AvHAIPathNode>& path, float DrawTime)
 {
 	if (path.size() == 0) { return; }
 
 	for (auto it = path.begin(); it != path.end(); it++)
 	{
 		Vector FromLoc = it->FromLocation;
-		Vector ToLoc = it->Location;
+		Vector ToLoc = it->ToLocation;
 
-		switch (it->flag)
-		{
-			case SAMPLE_POLYFLAGS_WELD:
-			case SAMPLE_POLYFLAGS_DOOR:
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 0, 0);
-				break;
-			case SAMPLE_POLYFLAGS_JUMP:
-			case SAMPLE_POLYFLAGS_DUCKJUMP:
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 255, 0);
-				break;
-			case SAMPLE_POLYFLAGS_LADDER:
-			case SAMPLE_POLYFLAGS_LIFT:
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 0, 0, 255);
-				break;
-			case SAMPLE_POLYFLAGS_WALLCLIMB:
-				UTIL_DrawLine(OutputPlayer, FromLoc, Vector(FromLoc.x, FromLoc.y, it->requiredZ), DrawTime, 0, 128, 0);
-				UTIL_DrawLine(OutputPlayer, Vector(FromLoc.x, FromLoc.y, it->requiredZ), ToLoc, DrawTime, 0, 128, 0);
-				break;
-			case SAMPLE_POLYFLAGS_BLOCKED:
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 128, 128, 128);
-				break;
-			case SAMPLE_POLYFLAGS_TEAM1PHASEGATE:
-			case SAMPLE_POLYFLAGS_TEAM2PHASEGATE:
-				UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 128, 128);
-				break;
-			default:
-			{
-				if (it->area == SAMPLE_POLYAREA_CROUCH)
-				{
-					UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, 255, 150, 150);
-				}
-				else
-				{
-					UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime);
-				}
-			}
-			break;
-		}
+		unsigned char r;
+		unsigned char g;
+		unsigned char b;
+
+		GetDebugColorForFlag(it->flag, r, g, b);
+
+		UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, r, g, b);
 	}
 }
 
@@ -671,130 +640,129 @@ void UTIL_LocalizeText(const char* InputText, string& OutputText)
 
 }
 
-char* UTIL_StructTypeToChar(const AvHAIDeployableStructureType StructureType)
+char* UTIL_StructTypeToChar(const EAIStructureType StructureType)
 {
 	switch (StructureType)
 	{
-	case STRUCTURE_MARINE_RESTOWER:
-		return "RT";
-	case STRUCTURE_MARINE_INFANTRYPORTAL:
-		return "IP";
-	case STRUCTURE_MARINE_TURRETFACTORY:
-		return "TF";
-	case STRUCTURE_MARINE_ADVTURRETFACTORY:
-		return "Adv TF";
-	case STRUCTURE_MARINE_ARMORY:
-		return "Armoury";
-	case STRUCTURE_MARINE_ADVARMORY:
-		return "Adv Armoury";
-	case STRUCTURE_MARINE_ARMSLAB:
-		return "Armslab";
-	case STRUCTURE_MARINE_PROTOTYPELAB:
-		return "ProtoLab";
-	case STRUCTURE_MARINE_OBSERVATORY:
-		return "Obs";
-	case STRUCTURE_MARINE_PHASEGATE:
-		return "PG";
-	case STRUCTURE_MARINE_TURRET:
-		return "Sentry";
-	case STRUCTURE_MARINE_SIEGETURRET:
-		return "Siege T";
-	case STRUCTURE_MARINE_COMMCHAIR:
-		return "CC";
-	case STRUCTURE_MARINE_DEPLOYEDMINE:
-		return "Mine";
+		case EAIStructureType::STRUCTURE_MARINE_RESTOWER:
+			return "RT";
+		case EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL:
+			return "IP";
+		case EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY:
+			return "TF";
+		case EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY:
+			return "Adv TF";
+		case EAIStructureType::STRUCTURE_MARINE_ARMORY:
+			return "Armoury";
+		case EAIStructureType::STRUCTURE_MARINE_ADVARMORY:
+			return "Adv Armoury";
+		case EAIStructureType::STRUCTURE_MARINE_ARMSLAB:
+			return "Armslab";
+		case EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB:
+			return "ProtoLab";
+		case EAIStructureType::STRUCTURE_MARINE_OBSERVATORY:
+			return "Obs";
+		case EAIStructureType::STRUCTURE_MARINE_PHASEGATE:
+			return "PG";
+		case EAIStructureType::STRUCTURE_MARINE_TURRET:
+			return "Sentry";
+		case EAIStructureType::STRUCTURE_MARINE_SIEGETURRET:
+			return "Siege T";
+		case EAIStructureType::STRUCTURE_MARINE_COMMCHAIR:
+			return "CC";
+		case EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE:
+			return "Mine";
 
-	case STRUCTURE_ALIEN_HIVE:
-		return "Hive";
-	case STRUCTURE_ALIEN_RESTOWER:
-		return "RT";
-	case STRUCTURE_ALIEN_DEFENSECHAMBER:
-		return "DC";
-	case STRUCTURE_ALIEN_SENSORYCHAMBER:
-		return "SC";
-	case STRUCTURE_ALIEN_MOVEMENTCHAMBER:
-		return "MC";
-	case STRUCTURE_ALIEN_OFFENSECHAMBER:
-		return "OC";
-	default:
-		return "None";
+		case EAIStructureType::STRUCTURE_ALIEN_HIVE:
+			return "Hive";
+		case EAIStructureType::STRUCTURE_ALIEN_RESTOWER:
+			return "RT";
+		case EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER:
+			return "DC";
+		case EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER:
+			return "SC";
+		case EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER:
+			return "MC";
+		case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
+			return "OC";
+		default:
+			return "None";
 	}
 
 	return "None";
 }
 
-char* UTIL_TaskTypeToChar(const BotTaskType TaskType)
+char* UTIL_TaskTypeToChar(const EAITaskType TaskType)
 {
 	switch (TaskType)
 	{
-	case TASK_ATTACK:
-
-		return "Attack";
-	case TASK_BUILD:
-		return "Build";
-	case TASK_CAP_RESNODE:
-		return "Cap Res Node";
-	case TASK_COMMAND:
-		return "Take Command";
-	case TASK_DEFEND:
-		return "Defend Structure";
-	case TASK_EVOLVE:
-		return "Evolve";
-	case TASK_GET_AMMO:
-		return "Get Ammo Pack";
-	case TASK_GET_EQUIPMENT:
-		return "Get Equipment";
-	case TASK_GET_HEALTH:
-		return "Get Health Pack";
-	case TASK_GET_WEAPON:
-		return "Get Weapon";
-	case TASK_GUARD:
-		return "Guard";
-	case TASK_HEAL:
-		return "Heal Target";
-	case TASK_MOVE:
-		return "Move to Location";
-	case TASK_PLACE_MINE:
-		return "Place Mine";
-	case TASK_REINFORCE_STRUCTURE:
-		return "Reinforce Structure";
-	case TASK_RESUPPLY:
-		return "Resupply";
-	case TASK_SECURE_HIVE:
-		return "Secure Hive";
-	case TASK_TOUCH:
-		return "Touch Trigger";
-	case TASK_WELD:
-		return "Weld Target";
-	case TASK_ASSAULT_MARINE_BASE:
-		return "Assault Marine Base";
-	default:
-		return "None";
+		case EAITaskType::TASK_ATTACK:
+			return "Attack";
+		case EAITaskType::TASK_BUILD:
+			return "Build";
+		case EAITaskType::TASK_CAP_RESNODE:
+			return "Cap Res Node";
+		case EAITaskType::TASK_COMMAND:
+			return "Take Command";
+		case EAITaskType::TASK_DEFEND:
+			return "Defend Structure";
+		case EAITaskType::TASK_EVOLVE:
+			return "Evolve";
+		case EAITaskType::TASK_GET_AMMO:
+			return "Get Ammo Pack";
+		case EAITaskType::TASK_GET_EQUIPMENT:
+			return "Get Equipment";
+		case EAITaskType::TASK_GET_HEALTH:
+			return "Get Health Pack";
+		case EAITaskType::TASK_GET_WEAPON:
+			return "Get Weapon";
+		case EAITaskType::TASK_GUARD:
+			return "Guard";
+		case EAITaskType::TASK_HEAL:
+			return "Heal Target";
+		case EAITaskType::TASK_MOVE:
+			return "Move to Location";
+		case EAITaskType::TASK_PLACE_MINE:
+			return "Place Mine";
+		case EAITaskType::TASK_REINFORCE_STRUCTURE:
+			return "Reinforce Structure";
+		case EAITaskType::TASK_RESUPPLY:
+			return "Resupply";
+		case EAITaskType::TASK_SECURE_HIVE:
+			return "Secure Hive";
+		case EAITaskType::TASK_TOUCH:
+			return "Touch Trigger";
+		case EAITaskType::TASK_WELD:
+			return "Weld Target";
+		case EAITaskType::TASK_ASSAULT_MARINE_BASE:
+			return "Assault Marine Base";
+		default:
+			return "None";
 	}
 
 	return "None";
 }
 
-char* UTIL_BotRoleToChar(const AvHAIBotRole Role)
+char* UTIL_BotRoleToChar(const EAIPlayerRole Role)
 {
 	switch (Role)
 	{
-	case BOT_ROLE_ASSAULT:
-		return "Assault";
-	case BOT_ROLE_BOMBARDIER:
-		return "Bombardier";
-	case BOT_ROLE_BUILDER:
-		return "Builder";
-	case BOT_ROLE_COMMAND:
-		return "Commander";
-	case BOT_ROLE_FIND_RESOURCES:
-		return "Res Capper";
-	case BOT_ROLE_HARASS:
-		return "Harrasser";
-	case BOT_ROLE_SWEEPER:
-		return "Sweeper";
-	default:
-		return "None";
+		case EAIPlayerRole::BOT_ROLE_ASSAULT:
+			return "Assault";
+		case EAIPlayerRole::BOT_ROLE_BOMBARDIER:
+			return "Bombardier";
+		case EAIPlayerRole::BOT_ROLE_BUILDER:
+			return "Builder";
+		case EAIPlayerRole::BOT_ROLE_COMMAND:
+			return "Commander";
+		case EAIPlayerRole::BOT_ROLE_FIND_RESOURCES:
+			return "Res Capper";
+		case EAIPlayerRole::BOT_ROLE_HARASS:
+			return "Harrasser";
+		case EAIPlayerRole::BOT_ROLE_SWEEPER:
+			return "Sweeper";
+		default:
+			return "None";
 	}
 
 	return "None";

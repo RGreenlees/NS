@@ -2,7 +2,7 @@
 // EvoBot - Neoptolemus' Natural Selection bot, based on Botman's HPB bot template
 //
 // bot_math.cpp
-// 
+//
 // Contains all useful math functions for bot stuff
 //
 
@@ -66,8 +66,8 @@ bool vBBOverlaps2D(const Vector MinBBA, const Vector MaxBBA, const Vector MinBBB
 		&&	 (MinBBA.y < MaxBBB.y && MaxBBA.y > MinBBB.y));
 }
 
-// Given three collinear points p, q, r, the function checks if 
-// point q lies on line segment 'pr' 
+// Given three collinear points p, q, r, the function checks if
+// point q lies on line segment 'pr'
 bool onSegment(Vector p, Vector q, Vector r)
 {
 	if (q.x <= fmaxf(p.x, r.x) && q.x >= fminf(p.x, r.x) &&
@@ -77,21 +77,21 @@ bool onSegment(Vector p, Vector q, Vector r)
 	return false;
 }
 
-// To find orientation of ordered triplet (p, q, r). 
-// The function returns following values 
-// 0 --> p, q and r are collinear 
-// 1 --> Clockwise 
-// 2 --> Counterclockwise 
+// To find orientation of ordered triplet (p, q, r).
+// The function returns following values
+// 0 --> p, q and r are collinear
+// 1 --> Clockwise
+// 2 --> Counterclockwise
 int orientation(Vector p, Vector q, Vector r)
 {
-	// See https://www.geeksforgeeks.org/orientation-3-ordered-points/ 
-	// for details of below formula. 
+	// See https://www.geeksforgeeks.org/orientation-3-ordered-points/
+	// for details of below formula.
 	int val = (q.y - p.y) * (r.x - q.x) -
 		(q.x - p.x) * (r.y - q.y);
 
-	if (val == 0) return 0;  // collinear 
+	if (val == 0) return 0;  // collinear
 
-	return (val > 0) ? 1 : 2; // clock or counterclock wise 
+	return (val > 0) ? 1 : 2; // clock or counterclock wise
 }
 
 bool vIntersects2D(const Vector LineAStart, const Vector LineAEnd, const Vector LineBStart, const Vector LineBEnd)
@@ -101,24 +101,24 @@ bool vIntersects2D(const Vector LineAStart, const Vector LineAEnd, const Vector 
 	int o3 = orientation(LineBStart, LineBEnd, LineAStart);
 	int o4 = orientation(LineBStart, LineBEnd, LineAEnd);
 
-	// General case 
+	// General case
 	if (o1 != o2 && o3 != o4)
 		return true;
 
-	// Special Cases 
-	// p1, q1 and p2 are collinear and p2 lies on segment p1q1 
+	// Special Cases
+	// p1, q1 and p2 are collinear and p2 lies on segment p1q1
 	if (o1 == 0 && onSegment(LineAStart, LineBStart, LineAEnd)) return true;
 
-	// p1, q1 and q2 are collinear and q2 lies on segment p1q1 
+	// p1, q1 and q2 are collinear and q2 lies on segment p1q1
 	if (o2 == 0 && onSegment(LineAStart, LineBEnd, LineAEnd)) return true;
 
-	// p2, q2 and p1 are collinear and p1 lies on segment p2q2 
+	// p2, q2 and p1 are collinear and p1 lies on segment p2q2
 	if (o3 == 0 && onSegment(LineBStart, LineAStart, LineBEnd)) return true;
 
-	// p2, q2 and q1 are collinear and q1 lies on segment p2q2 
+	// p2, q2 and q1 are collinear and q1 lies on segment p2q2
 	if (o4 == 0 && onSegment(LineBStart, LineAEnd, LineBEnd)) return true;
 
-	return false; // Doesn't fall in any of the above cases 
+	return false; // Doesn't fall in any of the above cases
 }
 
 Vector vClosestPointOnBB(const Vector Point, const Vector MinBB, const Vector MaxBB)
@@ -414,13 +414,13 @@ Vector UTIL_RandomPointOnCircle(const Vector origin, const float radius)
 }
 
 // For given plane, determine if the given point sits within the plane or not
-bool UTIL_PointInsidePlane(const frustum_plane_t* plane, const Vector point)
+bool UTIL_PointInsidePlane(const AvHBotViewFrustumPlane* plane, const Vector point)
 {
 	float distance = plane->d + (plane->normal.x * point.x + plane->normal.y * point.y + plane->normal.z * point.z);
 	return distance >= 0.0f;
 }
 
-bool UTIL_CylinderInsidePlane(const frustum_plane_t* plane, const Vector centre, float height, float radius)
+bool UTIL_CylinderInsidePlane(const AvHBotViewFrustumPlane* plane, const Vector centre, float height, float radius)
 {
 	Vector testNormal = plane->normal;
 	testNormal.z = 0;
@@ -431,9 +431,8 @@ bool UTIL_CylinderInsidePlane(const frustum_plane_t* plane, const Vector centre,
 	return (UTIL_PointInsidePlane(plane, topPoint) || UTIL_PointInsidePlane(plane, bottomPoint));
 }
 
-void UTIL_SetFrustumPlane(frustum_plane_t* plane, Vector v1, Vector v2, Vector v3)
+void UTIL_SetFrustumPlane(AvHBotViewFrustumPlane* plane, Vector v1, Vector v2, Vector v3)
 {
-
 	Vector normal = UTIL_GetSurfaceNormal(v1, v2, v3);
 
 	plane->normal.x = normal.x;
@@ -539,12 +538,12 @@ Vector UTIL_WrapAngles(Vector angles)
 		angles.x -= 360;
 	else if (angles.x < -180)
 		angles.x += 360;
-	
+
 	if (angles.y > 180)
 		angles.y -= 360;
 	else if (angles.y < -180)
 		angles.y += 360;
-	
+
 	if (angles.z > 180)
 		angles.z -= 360;
 	else if (angles.z < -180)

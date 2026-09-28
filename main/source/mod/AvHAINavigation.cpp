@@ -37,9 +37,6 @@
 
 #include <cfloat>
 
-std::vector<AvHAITeamStartingLocation> TeamAStartingLocations;
-std::vector<AvHAITeamStartingLocation> TeamBStartingLocations;
-
 bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance)
 {
 	if (!NavProfile) { return false; }
@@ -88,29 +85,29 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 
 	dtStatus status;
 	dtPolyRef StartPoly;
-	float StartNearest[3];
+	float dtStartNearest[3];
 	dtPolyRef EndPoly;
-	float EndNearest[3];
+	float dtEndNearest[3];
 	dtPolyRef PolyPath[MAX_PATH_POLY];
 	int nPathCount = 0;
 
 	float searchExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
 
 	// find the start polygon
-	status = m_navQuery->findNearestPoly(pStartPos, searchExtents, m_navFilter, &StartPoly, StartNearest);
+	status = FoundMesh->NavQuery->findNearestPoly(dtStartPos, searchExtents, m_navFilter, &StartPoly, dtStartNearest);
 	if (!dtStatusSucceed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	// find the end polygon
-	status = m_navQuery->findNearestPoly(pEndPos, searchExtents, m_navFilter, &EndPoly, EndNearest);
+	status = FoundMesh->NavQuery->findNearestPoly(dtEndPos, searchExtents, m_navFilter, &EndPoly, dtEndNearest);
 	if (!dtStatusSucceed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
-	status = m_navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
+	status = FoundMesh->NavQuery->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
 
 	if (nPathCount == 0)
 	{
@@ -119,20 +116,22 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 
 	if (PolyPath[nPathCount - 1] != EndPoly)
 	{
-		float epos[3];
-		dtVcopy(epos, EndNearest);
+		float dtEndPoint[3];
+		dtVcopy(dtEndPoint, dtEndNearest);
 
-		m_navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
+		FoundMesh->NavQuery->closestPointOnPoly(PolyPath[nPathCount - 1], dtEndNearest, dtEndPoint, 0);
 
-		if (dtVdistSqr(EndNearest, epos) <= sqrf(MaxAcceptableDistance))
+		if (dtVdistSqr(dtEndNearest, dtEndPoint) <= sqrf(MaxAcceptableDistance))
 		{
 			return true;
 		}
 		else
 		{
-			if (UTIL_IsPointInSwimArea(epos) && UTIL_IsPointInSwimArea(ToLocation))
+			Vector FinalEndPosition = UTIL_VecDetourToGoldSrc(dtEndPoint);
+
+			if (UTIL_IsPointInSwimArea(FinalEndPosition) && UTIL_IsPointInSwimArea(ToLocation))
 			{
-				return true;
+				return UTIL_QuickHullTrace(nullptr, FinalEndPosition, ToLocation);
 			}
 		}
 	}
@@ -140,1002 +139,91 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 	return true;
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-bool UTIL_UpdateTileCache()
+Vector AINAV_FindClosestNavigablePointTo(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation)
 {
-	bool bNewTileCacheUpToDate = true;
+	if (!NavProfile) { return FromLocation; }
 
-	for (int i = 0; i < MAX_NAV_MESHES; i++)
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return FromLocation; }
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
+
+	bool bStartInWater = UTIL_IsPointInSwimArea(FromLocation);
+	bool bEndInWater = UTIL_IsPointInSwimArea(ToLocation);
+
+	if (bStartInWater && bEndInWater)
 	{
-		if (NavMeshes[i].tileCache)
+		if (UTIL_QuickHullTrace(nullptr, FromLocation, ToLocation)) { return ToLocation; }
+	}
+
+	float dtStartPos[3];
+	float dtEndPos[3];
+
+	UTIL_VecGoldSrcToDetour(FromLocation, dtStartPos);
+	UTIL_VecGoldSrcToDetour(ToLocation, dtEndPos);
+
+	if (bStartInWater)
+	{
+		TraceResult Hit;
+		UTIL_TraceLine(FromLocation, FromLocation - Vector(0.0f, 0.0f, 1000.0f), ignore_monsters, nullptr, &Hit);
+
+		if (Hit.flFraction < 1.0f)
 		{
-			bool bUpToDate;
-			NavMeshes[i].tileCache->update(0.0f, NavMeshes[i].navMesh, &bUpToDate);
-			if (i != BUILDING_NAV_MESH && !bUpToDate) { bNewTileCacheUpToDate = false; }
+			UTIL_VecGoldSrcToDetour(Hit.vecEndPos, dtStartPos);
 		}
 	}
 
-	if (!bTileCacheUpToDate && bNewTileCacheUpToDate)
+	if (bEndInWater)
 	{
-		bNavMeshModified = true;
+		TraceResult Hit;
+		UTIL_TraceLine(ToLocation, ToLocation - Vector(0.0f, 0.0f, 1000.0f), ignore_monsters, nullptr, &Hit);
+
+		if (Hit.flFraction < 1.0f)
+		{
+			UTIL_VecGoldSrcToDetour(Hit.vecEndPos, dtEndPos);
+		}
 	}
 
-	bTileCacheUpToDate = bNewTileCacheUpToDate;
+	dtStatus status;
+	dtPolyRef StartPoly;
+	float dtStartNearest[3];
+	dtPolyRef EndPoly;
+	float dtEndNearest[3];
+	dtPolyRef PolyPath[MAX_PATH_POLY];
+	int nPathCount = 0;
 
-	return bTileCacheUpToDate;
+	float dtSearchExtents[3] = { 400.0f, 400.0f, 400.0f };
+
+	// find the start polygon
+	status = FoundMesh->NavQuery->findNearestPoly(dtStartPos, dtSearchExtents, m_navFilter, &StartPoly, dtStartNearest);
+	if (!dtStatusSucceed(status))
+	{
+		return FromLocation; // couldn't find a polygon
+	}
+
+	// find the end polygon
+	status = FoundMesh->NavQuery->findNearestPoly(dtEndPos, dtSearchExtents, m_navFilter, &EndPoly, dtEndNearest);
+	if (!dtStatusSucceed(status))
+	{
+		return FromLocation; // couldn't find a polygon
+	}
+
+	status = FoundMesh->NavQuery->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
+
+	if (nPathCount == 0)
+	{
+		return FromLocation; // couldn't find a path
+	}
+
+	return UTIL_VecDetourToGoldSrc(dtEndNearest);
 }
 
-bool UTIL_IsTileCacheUpToDate()
+Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const Vector& Point)
 {
-	return bTileCacheUpToDate;
-}
+	const Vector ProjectedPoint = AIMESH_ProjectPointToNavmesh(NavProfile, Point);
 
-Vector UTIL_AdjustPointAwayFromNavWall(const Vector Location, const float MaxDistanceFromWall)
-{
-
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[SKULK_BASE_NAV_PROFILE]);
-	const dtQueryFilter* m_navFilter = &BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters;
-
-	float Pos[3] = { Location.x, Location.z, -Location.y };
-
-	float HitDist = 0.0f;
-	float HitPos[3] = { 0.0f, 0.0f, 0.0f };
-	float HitNorm[3] = { 0.0f, 0.0f, 0.0f };
-
-	dtPolyRef StartPoly = UTIL_GetNearestPolyRefForLocation(Location);
-
-	dtStatus Result = m_navQuery->findDistanceToWall(StartPoly, Pos, MaxDistanceFromWall, m_navFilter, &HitDist, HitPos, HitNorm);
-
-	if (dtStatusSucceed(Result))
-	{
-		float AdjustDistance = MaxDistanceFromWall - HitDist;
-
-		Vector HitPosVector = Vector(HitPos[0], -HitPos[2], HitPos[1]);
-
-		Vector AdjustDir = (HitDist > 0.1f) ? UTIL_GetVectorNormal2D(Location - HitPosVector) : Vector(HitNorm[0], -HitNorm[2], HitNorm[1]);
-
-		Vector AdjustLocation = Location + (AdjustDir * AdjustDistance);
-
-		float AdjustLoc[3] = { AdjustLocation.x, AdjustLocation.z, -AdjustLocation.y };
-
-		if (UTIL_TraceNav(BaseNavProfiles[ALL_NAV_PROFILE], Location, AdjustLocation, 0.1f))
-		{
-			return AdjustLocation;
-		}
-		else
-		{
-			return Location;
-		}
-	}
-
-	return Location;
-}
-
-Vector UTIL_GetNearestPointOnNavWall(AvHAIPlayer* pBot, const float MaxRadius)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(pBot->BotNavInfo.NavProfile);
-	const dtQueryFilter* m_navFilter = &pBot->BotNavInfo.NavProfile.Filters;
-
-	Vector Location = pBot->CurrentFloorPosition;
-
-	float Pos[3] = { Location.x, Location.z, -Location.y };
-
-	float HitDist = 0.0f;
-	float HitPos[3] = { 0.0f, 0.0f, 0.0f };
-	float HitNorm[3] = { 0.0f, 0.0f, 0.0f };
-
-	dtStatus Result = m_navQuery->findDistanceToWall(pBot->BotNavInfo.CurrentPoly, Pos, MaxRadius, m_navFilter, &HitDist, HitPos, HitNorm);
-
-	if (dtStatusSucceed(Result) && HitDist > 0.0f)
-	{
-		Vector HitResult = Vector(HitPos[0], -HitPos[2], HitPos[1]);
-		return HitResult;
-	}
-
-	return g_vecZero;
-}
-
-Vector UTIL_GetNearestPointOnNavWall(const nav_profile &NavProfile, const Vector Location, const float MaxRadius)
-{
-
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	// Invalid nav profile
-	if (!m_navQuery) { return g_vecZero; }
-
-	dtPolyRef StartPoly = UTIL_GetNearestPolyRefForLocation(NavProfile, Location);
-
-	// Not on the nav mesh
-	if (StartPoly == 0) { return Location; }
-
-	float Pos[3] = { Location.x, Location.z, -Location.y };
-
-	float HitDist = 0.0f;
-	float HitPos[3] = { 0.0f, 0.0f, 0.0f };
-	float HitNorm[3] = { 0.0f, 0.0f, 0.0f };
-
-	dtStatus Result = m_navQuery->findDistanceToWall(StartPoly, Pos, MaxRadius, m_navFilter, &HitDist, HitPos, HitNorm);
-
-	// We hit something
-	if (dtStatusSucceed(Result) && HitDist < MaxRadius)
-	{
-		Vector HitResult = Vector(HitPos[0], -HitPos[2], HitPos[1]);
-		return HitResult;
-	}
-
-	// Didn't hit anything
-	return g_vecZero;
-}
-
-unsigned int UTIL_AddTemporaryObstacle(unsigned int NavMeshIndex, const Vector Location, float Radius, float Height, int area)
-{
-	unsigned int ObstacleNum = 0;
-
-	if (NavMeshes[NavMeshIndex].tileCache)
-	{
-		float Pos[3] = { Location.x, Location.z - (Height * 0.5f), -Location.y };
-
-		dtObstacleRef ObsRef = 0;
-		NavMeshes[NavMeshIndex].tileCache->addObstacle(Pos, Radius, Height, area, &ObsRef);
-
-		ObstacleNum = (unsigned int)ObsRef;
-	}
-
-	return ObstacleNum;
-}
-
-void UTIL_RemoveStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
-{
-	for (auto it = Structure->Obstacles.begin(); it != Structure->Obstacles.end();)
-	{
-		int NavMeshIndex = it->NavMeshIndex;
-
-		if (NavMeshes[NavMeshIndex].tileCache)
-		{
-			const dtTileCacheObstacle* ObstacleToRemove = NavMeshes[NavMeshIndex].tileCache->getObstacleByRef((dtObstacleRef)it->ObstacleRef);
-
-			if (ObstacleToRemove)
-			{
-				dtStatus RemovalStatus = NavMeshes[NavMeshIndex].tileCache->removeObstacle((dtObstacleRef)it->ObstacleRef);
-			}
-		}
-
-		it = Structure->Obstacles.erase(it);
-	}
-
-}
-
-void UTIL_AddTemporaryObstacles(const Vector Location, float Radius, float Height, int area, unsigned int* ObstacleRefArray)
-{
-
-	float Pos[3] = { Location.x, Location.z - (Height * 0.5f), -Location.y };
-
-	for (int i = 0; i < MAX_NAV_MESHES; i++)
-	{
-		ObstacleRefArray[i] = 0;
-
-		if (NavMeshes[i].tileCache)
-		{
-			dtObstacleRef ObsRef = 0;
-			NavMeshes[i].tileCache->addObstacle(Pos, Radius, Height, area, &ObsRef);
-
-			ObstacleRefArray[i] = (unsigned int)ObsRef;
-		}
-	}
-}
-
-unsigned int UTIL_AddTemporaryBoxObstacle(const Vector bMin, const Vector bMax, int area)
-{
-	unsigned int ObstacleNum = 0;
-
-	float bMinf[3] = { bMin.x, bMin.z, -bMin.y };
-	float bMaxf[3] = { bMax.x, bMax.z, -bMax.y };
-
-	for (int i = 0; i < MAX_NAV_MESHES; i++)
-	{
-		if (NavMeshes[i].tileCache)
-		{
-			dtObstacleRef ObsRef = 0;
-			NavMeshes[i].tileCache->addBoxObstacle(bMinf, bMaxf, area, &ObsRef);
-
-			ObstacleNum = (unsigned int)ObsRef;
-		}
-	}
-
-	return ObstacleNum;
-}
-
-void UTIL_RemoveTemporaryObstacle(unsigned int ObstacleRef)
-{
-	if (ObstacleRef == 0) { return; }
-
-	for (int i = 0; i < MAX_NAV_MESHES; i++)
-	{
-		if (NavMeshes[i].tileCache)
-		{
-			const dtTileCacheObstacle* ObstacleToRemove = NavMeshes[i].tileCache->getObstacleByRef((dtObstacleRef)ObstacleRef);
-
-			NavMeshes[i].tileCache->removeObstacle((dtObstacleRef)ObstacleRef);
-		}
-	}
-}
-
-void UTIL_RemoveTemporaryObstacles(unsigned int* ObstacleRefs)
-{
-
-	for (int i = 0; i < MAX_NAV_MESHES; i++)
-	{
-		if (NavMeshes[i].tileCache)
-		{
-			const dtTileCacheObstacle* ObstacleToRemove = NavMeshes[i].tileCache->getObstacleByRef((dtObstacleRef)ObstacleRefs[i]);
-
-			NavMeshes[i].tileCache->removeObstacle((dtObstacleRef)ObstacleRefs[i]);
-
-		}
-
-		ObstacleRefs[i] = 0;
-	}
-}
-
-void GetFullFilePath(char* buffer, const char* mapname)
-{
-	string theMapName = mapname;
-	string navPath = string(getModDirectory()) + "/navmeshes/" + mapname + ".nav";
-	strcpy(buffer, navPath.c_str());
-}
-
-
-void ReloadNavMeshes()
-{
-	vector<AvHAIPlayer*> AllBots = AIMGR_GetAllAIPlayers();
-
-	for (auto it = AllBots.begin(); it != AllBots.end(); it++)
-	{
-		AvHAIPlayer* ThisPlayer = (*it);
-
-		ClearBotMovement(ThisPlayer);
-	}
-
-	AITAC_ClearMapAIData(false);
-	UnloadNavMeshes();
-	bool bSuccess = LoadNavMesh(STRING(gpGlobals->mapname));
-
-	if (bSuccess)
-	{
-		UTIL_PopulateDoors();
-		UTIL_PopulateWeldableObstacles();
-
-		UTIL_UpdateDoors(true);
-
-		bool bTileCacheFullyUpdated = UTIL_UpdateTileCache();
-
-		int NumAttempts = 0;
-
-		while (!bTileCacheFullyUpdated && NumAttempts < 30)
-		{
-			bTileCacheFullyUpdated = UTIL_UpdateTileCache();
-			NumAttempts++;
-		}
-	}
-}
-
-void UnloadNavMeshes()
-{
-	for (int i = 0; i < MAX_NAV_MESHES; i++)
-	{
-		if (NavMeshes[i].navMesh)
-		{
-			dtFreeNavMesh(NavMeshes[i].navMesh);
-			NavMeshes[i].navMesh = nullptr;
-		}
-
-		if (NavMeshes[i].navQuery)
-		{
-			dtFreeNavMeshQuery(NavMeshes[i].navQuery);
-			NavMeshes[i].navQuery = nullptr;
-		}
-
-		if (NavMeshes[i].tileCache)
-		{
-			dtFreeTileCache(NavMeshes[i].tileCache);
-			NavMeshes[i].tileCache = nullptr;
-		}
-	}
-
-	BaseMapConnections.clear();
-	MapNavHints.clear();
-
-	NavmeshStatus = NAVMESH_STATUS_PENDING;
-}
-
-bool LoadNavMesh(const char* mapname)
-{
-	memset(NavMeshes, 0, sizeof(NavMeshes));
-	BaseMapConnections.clear();
-	MapNavHints.clear();
-
-	char filename[256]; // Full path to BSP file
-
-	GetFullFilePath(filename, mapname);
-
-	FILE* savedFile = fopen(filename, "rb");
-
-	if (!savedFile)
-	{
-		char ErrMsg[256];
-		sprintf(ErrMsg, "No nav file found for %s in the navmeshes folder\n", mapname);
-		g_engfuncs.pfnServerPrint(ErrMsg);
-		g_engfuncs.pfnServerPrint("You will need to create one using the Nav Editor tool in the navmeshes folder, or download one\n");
-		return false;
-	}
-
-	LinearAllocator* m_talloc = new LinearAllocator(32000);
-	FastLZCompressor* m_tcomp = new FastLZCompressor;
-	MeshProcess* m_tmproc = new MeshProcess;
-
-	// Read header.
-	TileCacheBuildHeader header;
-	size_t headerReadReturnCode = fread(&header, sizeof(TileCacheBuildHeader), 1, savedFile);
-	if (headerReadReturnCode != 1)
-	{
-		// Error or early EOF
-		fclose(savedFile);
-		UnloadNavigationData();
-		char ErrMsg[256];
-		sprintf(ErrMsg, "The nav file found for %s is a different version to the current bot version. Use the Nav Editor to regenerate it\n", mapname);
-		g_engfuncs.pfnServerPrint(ErrMsg);
-		return false;
-	}
-
-	if (header.magic != TILECACHESET_MAGIC || header.version != TILECACHESET_VERSION)
-	{
-		fclose(savedFile);
-		UnloadNavigationData();
-		char ErrMsg[256];
-		sprintf(ErrMsg, "The nav file found for %s is a different version to the current bot version. Use the Nav Editor to regenerate it\n", mapname);
-		g_engfuncs.pfnServerPrint(ErrMsg);
-		return false;
-	}
-
-	dtNavMeshParams* NavMeshParams[3] = { &header.regularMeshParams, &header.onosMeshParams, &header.buildingMeshParams };
-	dtTileCacheParams* TileCacheParams[3] = { &header.regularCacheParams, &header.onosCacheParams, &header.buildingCacheParams };
-
-	for (int i = 0; i <= BUILDING_NAV_MESH; i++)
-	{
-		NavMeshes[i].navMesh = dtAllocNavMesh();
-
-		if (!NavMeshes[i].navMesh)
-		{
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("Unable to allocate memory for the nav mesh\n");
-			return false;
-		}
-
-		dtStatus status = NavMeshes[i].navMesh->init(NavMeshParams[i]);
-		if (dtStatusFailed(status))
-		{
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-
-		NavMeshes[i].tileCache = dtAllocTileCache();
-		if (!NavMeshes[i].tileCache)
-		{
-			fclose(savedFile);
-			UnloadNavigationData();
-			return false;
-		}
-
-		status = NavMeshes[i].tileCache->init(TileCacheParams[i], m_talloc, m_tcomp, m_tmproc);
-		if (dtStatusFailed(status))
-		{
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			fclose(savedFile);
-			UnloadNavigationData();
-			return false;
-		}
-	}
-
-	// Read tiles.
-	for (int i = 0; i < header.numRegularTiles; ++i)
-	{
-		TileCacheTileHeader tileHeader;
-		size_t tileHeaderReadReturnCode = fread(&tileHeader, sizeof(tileHeader), 1, savedFile);
-		if (tileHeaderReadReturnCode != 1)
-		{
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-		if (!tileHeader.tileRef || !tileHeader.dataSize)
-			break;
-
-		unsigned char* data = (unsigned char*)dtAlloc(tileHeader.dataSize, DT_ALLOC_PERM);
-		if (!data) break;
-		memset(data, 0, tileHeader.dataSize);
-		size_t tileDataReadReturnCode = fread(data, tileHeader.dataSize, 1, savedFile);
-		if (tileDataReadReturnCode != 1)
-		{
-			dtFree(data);
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-
-		dtCompressedTileRef tile = 0;
-		dtStatus addTileStatus = NavMeshes[REGULAR_NAV_MESH].tileCache->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
-		if (dtStatusFailed(addTileStatus))
-		{
-			dtFree(data);
-		}
-
-		if (tile)
-			NavMeshes[REGULAR_NAV_MESH].tileCache->buildNavMeshTile(tile, NavMeshes[REGULAR_NAV_MESH].navMesh);
-	}
-
-	for (int i = 0; i < header.numOnosTiles; ++i)
-	{
-		TileCacheTileHeader tileHeader;
-		size_t tileHeaderReadReturnCode = fread(&tileHeader, sizeof(tileHeader), 1, savedFile);
-		if (tileHeaderReadReturnCode != 1)
-		{
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-		if (!tileHeader.tileRef || !tileHeader.dataSize)
-			break;
-
-		unsigned char* data = (unsigned char*)dtAlloc(tileHeader.dataSize, DT_ALLOC_PERM);
-		if (!data) break;
-		memset(data, 0, tileHeader.dataSize);
-		size_t tileDataReadReturnCode = fread(data, tileHeader.dataSize, 1, savedFile);
-		if (tileDataReadReturnCode != 1)
-		{
-			dtFree(data);
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-
-		dtCompressedTileRef tile = 0;
-		dtStatus addTileStatus = NavMeshes[ONOS_NAV_MESH].tileCache->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
-		if (dtStatusFailed(addTileStatus))
-		{
-			dtFree(data);
-		}
-
-		if (tile)
-			NavMeshes[ONOS_NAV_MESH].tileCache->buildNavMeshTile(tile, NavMeshes[ONOS_NAV_MESH].navMesh);
-	}
-
-	for (int i = 0; i < header.numBuildingTiles; ++i)
-	{
-		TileCacheTileHeader tileHeader;
-		size_t tileHeaderReadReturnCode = fread(&tileHeader, sizeof(tileHeader), 1, savedFile);
-		if (tileHeaderReadReturnCode != 1)
-		{
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-		if (!tileHeader.tileRef || !tileHeader.dataSize)
-			break;
-
-		unsigned char* data = (unsigned char*)dtAlloc(tileHeader.dataSize, DT_ALLOC_PERM);
-		if (!data) break;
-		memset(data, 0, tileHeader.dataSize);
-		size_t tileDataReadReturnCode = fread(data, tileHeader.dataSize, 1, savedFile);
-		if (tileDataReadReturnCode != 1)
-		{
-			dtFree(data);
-			fclose(savedFile);
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-
-		dtCompressedTileRef tile = 0;
-		dtStatus addTileStatus = NavMeshes[BUILDING_NAV_MESH].tileCache->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
-		if (dtStatusFailed(addTileStatus))
-		{
-			dtFree(data);
-		}
-
-		if (tile)
-			NavMeshes[BUILDING_NAV_MESH].tileCache->buildNavMeshTile(tile, NavMeshes[BUILDING_NAV_MESH].navMesh);
-	}
-
-	fseek(savedFile, header.OffMeshConsOffset, SEEK_SET);
-
-	for (int i = 0; i < header.NumOffMeshCons; i++)
-	{
-		dtOffMeshConnection def;
-
-		fread(&def, sizeof(dtOffMeshConnection), 1, savedFile);
-
-		unsigned char area = def.area;
-
-		if (def.flags & SAMPLE_POLYFLAGS_WALLCLIMB)
-		{
-			area = SAMPLE_POLYAREA_WALLCLIMB;
-		}
-
-		if (def.flags & SAMPLE_POLYFLAGS_LADDER)
-		{
-			area = SAMPLE_POLYAREA_LADDER;
-		}
-
-		if (def.flags & SAMPLE_POLYFLAGS_LIFT)
-		{
-			area = SAMPLE_POLYAREA_LIFT;
-		}
-
-		AvHAIOffMeshConnection NewMapConnection;
-		NewMapConnection.ConnectionFlags = def.flags;
-		NewMapConnection.DefaultConnectionFlags = def.flags;
-		NewMapConnection.TargetObject = nullptr;
-		NewMapConnection.FromLocation = Vector(def.pos[0], -def.pos[2], def.pos[1]);
-		NewMapConnection.ToLocation = Vector(def.pos[3], -def.pos[5], def.pos[4]);
-		NewMapConnection.bBiDirectional = def.bBiDir;
-
-		for (int ii = 0; ii < BUILDING_NAV_MESH; ii++)
-		{
-			dtOffMeshConnectionRef ref = 0;
-
-			NavMeshes[ii].tileCache->addOffMeshConnection(&def.pos[0], &def.pos[3], 10.0f, area, def.flags, def.bBiDir, &ref);
-
-			NewMapConnection.ConnectionRefs[ii] = (unsigned int)ref;
-		}
-
-		BaseMapConnections.push_back(NewMapConnection);
-	}
-
-	fseek(savedFile, header.NavHintOffset, SEEK_SET);
-
-	for (int i = 0; i < header.NumNavHints; i++)
-	{
-		LoadNavHint LoadedHint;
-		fread(&LoadedHint, sizeof(LoadNavHint), 1, savedFile);
-
-		NavHint NewHint;
-		NewHint.hintType = LoadedHint.hintType;
-		NewHint.Position = Vector(LoadedHint.position[0], -LoadedHint.position[2], LoadedHint.position[1]);
-		NewHint.OccupyingBuilding = nullptr;
-
-		MapNavHints.push_back(NewHint);
-	}
-
-	fclose(savedFile);
-
-	for (int i = 0; i <= BUILDING_NAV_MESH; i++)
-	{
-		NavMeshes[i].navQuery = dtAllocNavMeshQuery();
-
-		dtStatus initStatus = NavMeshes[i].navQuery->init(NavMeshes[i].navMesh, 65535);
-
-		if (dtStatusFailed(initStatus))
-		{
-			UnloadNavigationData();
-			g_engfuncs.pfnServerPrint("The nav file has been corrupted or is out of date. Use the Nav Editor to regenerate it\n");
-			return false;
-		}
-	}
-
-	char SuccMsg[128];
-	sprintf(SuccMsg, "Navigation data for %s loaded successfully\n", mapname);
-	g_engfuncs.pfnServerPrint(SuccMsg);
-
-
-	return true;
-}
-
-void OnOffMeshConnectionAdded(dtOffMeshConnection* NewConnection)
-{
-	for (int i = 0; i <= BUILDING_NAV_MESH; i++)
-	{
-		if (NavMeshes[i].navMesh && NavMeshes[i].tileCache)
-		{
-			NavMeshes[i].navMesh->LinkOffMeshConnectionToTiles(NewConnection);
-
-			dtCompressedTile* ModifiedTile = NavMeshes[i].tileCache->getTileAt(NewConnection->FromTileX, NewConnection->FromTileY, NewConnection->FromTileLayer);
-			NavMeshes[i].tileCache->buildNavMeshTile(NavMeshes[i].tileCache->getTileRef(ModifiedTile), NavMeshes[i].navMesh);
-		}
-	}
-}
-
-void UTIL_PopulateBaseNavProfiles()
-{
-	memset(BaseNavProfiles, 0, sizeof(BaseNavProfiles));
-
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_MARINE;
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_OBSTRUCTION, 2.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 2.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 10.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_FLY | SAMPLE_POLYFLAGS_WALLCLIMB | SAMPLE_POLYFLAGS_WELD);
-	BaseNavProfiles[MARINE_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-
-
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_SKULK;
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 1.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_OBSTRUCTION, 2.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_WALLCLIMB, 1.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 1.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY);
-	BaseNavProfiles[SKULK_BASE_NAV_PROFILE].Filters.addExcludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY);
-
-
-
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_GORGE;
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 1.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_OBSTRUCTION, 2.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 10.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY | SAMPLE_POLYFLAGS_WALLCLIMB);
-	BaseNavProfiles[GORGE_BASE_NAV_PROFILE].Filters.addExcludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY | SAMPLE_POLYFLAGS_WALLCLIMB);
-
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].bFlyingProfile = true;
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_SKULK;
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 1.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_OBSTRUCTION, 2.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 1.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_WELD);
-	BaseNavProfiles[LERK_BASE_NAV_PROFILE].Filters.addExcludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_WELD);
-
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_SKULK;
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 1.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_OBSTRUCTION, 2.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 1.5f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 20.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 1.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY);
-	BaseNavProfiles[FADE_BASE_NAV_PROFILE].Filters.addExcludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY);
-
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].NavMeshIndex = ONOS_NAV_MESH;
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_ONOS;
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_GROUND, 1.0f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_OBSTRUCTION, 2.0f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_CROUCH, 2.0f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_FALLDAMAGE, 10.0f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_BLOCKED, 2.0f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_STRUCTUREBLOCK, 5.0f); // Onos is a wrecking machine, structures shouldn't be such an obstacle for them!
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LADDER, 1.5f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setAreaCost(SAMPLE_POLYAREA_LIFT, 3.0f);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.removeIncludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY | SAMPLE_POLYFLAGS_WALLCLIMB | SAMPLE_POLYFLAGS_NOONOS);
-	BaseNavProfiles[ONOS_BASE_NAV_PROFILE].Filters.addExcludeFlags(SAMPLE_POLYFLAGS_TEAM1PHASEGATE | SAMPLE_POLYFLAGS_TEAM2PHASEGATE | SAMPLE_POLYFLAGS_DUCKJUMP | SAMPLE_POLYFLAGS_WELD | SAMPLE_POLYFLAGS_FLY | SAMPLE_POLYFLAGS_WALLCLIMB | SAMPLE_POLYFLAGS_NOONOS);
-
-	BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE].NavMeshIndex = BUILDING_NAV_MESH;
-	BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[STRUCTURE_BASE_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_MARINE;
-
-	BaseNavProfiles[ALL_NAV_PROFILE].NavMeshIndex = REGULAR_NAV_MESH;
-	BaseNavProfiles[ALL_NAV_PROFILE].Filters.setIncludeFlags(SAMPLE_POLYFLAGS_ALL);
-	BaseNavProfiles[ALL_NAV_PROFILE].Filters.setExcludeFlags(SAMPLE_POLYFLAGS_DISABLED);
-	BaseNavProfiles[ALL_NAV_PROFILE].bFlyingProfile = false;
-	BaseNavProfiles[ALL_NAV_PROFILE].ReachabilityFlag = AI_REACHABILITY_SKULK;
-}
-
-bool loadNavigationData(const char* mapname)
-{
-
-	UnloadNavigationData();
-
-	if (!LoadNavMesh(mapname))
-	{
-		NavmeshStatus = NAVMESH_STATUS_FAILED;
-		return false;
-	}
-
-	NavmeshStatus = NAVMESH_STATUS_SUCCESS;
-
-	UTIL_PopulateBaseNavProfiles();
-
-	return true;
-}
-
-AvHAINavMeshStatus NAV_GetNavMeshStatus()
-{
-	return NavmeshStatus;
-}
-
-Vector UTIL_GetRandomPointOnNavmesh(const AvHAIPlayer* pBot)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(pBot->BotNavInfo.NavProfile);
-	const dtQueryFilter* m_navFilter = &pBot->BotNavInfo.NavProfile.Filters;
-
-	if (!m_navQuery)
-	{
-		return g_vecZero;
-	}
-
-	Vector Result;
-
-	dtPolyRef refPoly;
-
-	float result[3];
-	memset(result, 0, sizeof(result));
-
-	dtStatus status = m_navQuery->findRandomPoint(m_navFilter, frand, &refPoly, result);
-
-	if (dtStatusFailed(status))
-	{
-		return g_vecZero;
-	}
-
-	Result.x = result[0];
-	Result.y = -result[2];
-	Result.z = result[1];
-
-	return Result;
-}
-
-Vector UTIL_GetRandomPointOnNavmeshInRadiusOfAreaType(SamplePolyFlags Flag, const Vector origin, const float MaxRadius)
-{
-	const dtNavMeshQuery* m_NavQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-
-	if (!m_NavQuery) { return g_vecZero; }
-
-	dtQueryFilter filter;
-	filter.setExcludeFlags(0);
-	filter.setIncludeFlags(Flag);
-
-	Vector Result = g_vecZero;
-
-	float pCheckLoc[3] = { origin.x, origin.z, -origin.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	dtStatus foundPolyResult = m_NavQuery->findNearestPoly(pCheckLoc, pExtents, &filter, &FoundPoly, NavNearest);
-
-	if (dtStatusFailed(foundPolyResult))
-	{
-		return g_vecZero;
-	}
-
-	dtPolyRef RandomPoly;
-	float RandomPoint[3];
-
-	dtStatus foundRandomPointResult = m_NavQuery->findRandomPointAroundCircle(FoundPoly, NavNearest, MaxRadius, &filter, frand, &RandomPoly, RandomPoint);
-
-
-	if (dtStatusFailed(foundRandomPointResult))
-	{
-		return g_vecZero;
-	}
-
-	Result.x = RandomPoint[0];
-	Result.y = -RandomPoint[2];
-	Result.z = RandomPoint[1];
-
-	return Result;
-}
-
-Vector UTIL_GetRandomPointOnNavmeshInRadius(const nav_profile &NavProfile, const Vector origin, const float MaxRadius)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return g_vecZero; }
-
-	Vector Result = g_vecZero;
-
-	float pCheckLoc[3] = { origin.x, origin.z, -origin.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	dtStatus foundPolyResult = m_navQuery->findNearestPoly(pCheckLoc, pExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (dtStatusFailed(foundPolyResult))
-	{
-		return g_vecZero;
-	}
-
-	dtPolyRef RandomPoly;
-	float RandomPoint[3];
-
-	dtStatus foundRandomPointResult = m_navQuery->findRandomPointAroundCircle(FoundPoly, NavNearest, MaxRadius, m_navFilter, frand, &RandomPoly, RandomPoint);
-
-
-	if (dtStatusFailed(foundRandomPointResult))
-	{
-		return g_vecZero;
-	}
-
-	Result.x = RandomPoint[0];
-	Result.y = -RandomPoint[2];
-	Result.z = RandomPoint[1];
-
-	return Result;
-}
-
-Vector UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(const nav_profile& NavProfile, const Vector origin, const float MaxRadius)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return g_vecZero; }
-
-	Vector Result = g_vecZero;
-
-	float pCheckLoc[3] = { origin.x, origin.z, -origin.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	dtStatus foundPolyResult = m_navQuery->findNearestPoly(pCheckLoc, pExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (dtStatusFailed(foundPolyResult))
-	{
-		return g_vecZero;
-	}
-
-	dtPolyRef RandomPoly;
-	float RandomPoint[3];
-
-	dtStatus foundRandomPointResult = m_navQuery->findRandomPointAroundCircleIgnoreReachability(FoundPoly, NavNearest, MaxRadius, m_navFilter, frand, &RandomPoly, RandomPoint);
-
-
-	if (dtStatusFailed(foundRandomPointResult))
-	{
-		return g_vecZero;
-	}
-
-	Result.x = RandomPoint[0];
-	Result.y = -RandomPoint[2];
-	Result.z = RandomPoint[1];
-
-	return Result;
-}
-
-Vector UTIL_GetRandomPointOnNavmeshInDonut(const nav_profile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius)
-{
-	int maxIterations = 0;
-	float MinRadiusSq = sqrf(MinRadius);
-
-	while (maxIterations < 100)
-	{
-		Vector StartPoint = UTIL_GetRandomPointOnNavmeshInRadius(NavProfile, origin, MaxRadius);
-
-		if (vDist2DSq(StartPoint, origin) > MinRadiusSq)
-		{
-			return StartPoint;
-		}
-
-		maxIterations++;
-	}
-
-	return g_vecZero;
-}
-
-Vector UTIL_GetRandomPointOnNavmeshInDonutIgnoreReachability(const nav_profile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius)
-{
-	int maxIterations = 0;
-	float MinRadiusSq = sqrf(MinRadius);
-
-	while (maxIterations < 100)
-	{
-		Vector StartPoint = UTIL_GetRandomPointOnNavmeshInRadiusIgnoreReachability(NavProfile, origin, MaxRadius);
-
-		if (vDist2DSq(StartPoint, origin) > MinRadiusSq)
-		{
-			return StartPoint;
-		}
-
-		maxIterations++;
-	}
-
-	return g_vecZero;
-}
-
-static float frand()
-{
-	return (float)rand() / (float)RAND_MAX;
-}
-
-Vector AdjustPointForPathfinding(const Vector Point)
-{
-	Vector ProjectedPoint = UTIL_ProjectPointToNavmesh(Point);
-
-	int PointContents = UTIL_PointContents(ProjectedPoint);
-
-	if (PointContents == CONTENTS_SOLID)
-	{
-		int PointContents = UTIL_PointContents(ProjectedPoint + Vector(0.0f, 0.0f, 32.0f));
-
-		if (PointContents != CONTENTS_SOLID && PointContents != CONTENTS_LADDER)
-		{
-			Vector TraceStart = ProjectedPoint + Vector(0.0f, 0.0f, 32.0f);
-			Vector TraceEnd = TraceStart - Vector(0.0f, 0.0f, 50.0f);
-			Vector NewPoint = UTIL_GetHullTraceHitLocation(TraceStart, TraceEnd, point_hull);
-
-			if (!vIsZero(NewPoint)) { return NewPoint; }
-		}
-	}
-	else
-	{
-		Vector TraceStart = ProjectedPoint + Vector(0.0f, 0.0f, 5.0f);
-		Vector TraceEnd = TraceStart - Vector(0.0f, 0.0f, 32.0f);
-		Vector NewPoint = UTIL_GetHullTraceHitLocation(TraceStart, TraceEnd, point_hull);
-
-		if (!vIsZero(NewPoint)) { return NewPoint; }
-	}
-
-	return ProjectedPoint;
-
-}
-
-Vector AdjustPointForPathfinding(const Vector Point, const nav_profile& NavProfile)
-{
-	Vector ProjectedPoint = UTIL_ProjectPointToNavmesh(Point, Vector(400.0f, 100.0f, 400.0f), NavProfile);
+	if (vIsZero(ProjectedPoint)) { return Point; }
 
 	int PointContents = UTIL_PointContents(ProjectedPoint);
 
@@ -1164,901 +252,405 @@ Vector AdjustPointForPathfinding(const Vector Point, const nav_profile& NavProfi
 	return ProjectedPoint;
 }
 
-// Special path finding that takes flight movement into account
-dtStatus FindFlightPathToPoint(const nav_profile &NavProfile, Vector FromLocation, Vector ToLocation, vector<bot_path_node>& path, float MaxAcceptableDistance)
+bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, vector<AvHAIPathNode>& ResultPath, float MaxAcceptableDistance)
 {
-	TraceResult directHit;
-
-	if (UTIL_QuickHullTrace(nullptr, FromLocation, ToLocation, head_hull, false))
+	if (NavProfile->bFlyingProfile)
 	{
-		path.clear();
-
-		bot_path_node NewPathNode;
-		NewPathNode.FromLocation = FromLocation;
-		NewPathNode.Location = ToLocation;
-		NewPathNode.area = SAMPLE_POLYAREA_GROUND;
-		NewPathNode.flag = SAMPLE_POLYFLAGS_WALK;
-		NewPathNode.poly = 0;
-		NewPathNode.requiredZ = ToLocation.z;
-
-		path.push_back(NewPathNode);
-
-		return DT_SUCCESS;
+		return AINAV_FindFlightPathToPoint(NavProfile, FromLocation, ToLocation, ResultPath, MaxAcceptableDistance);
 	}
 
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
+	ResultPath.clear();
 
-	if (!m_navQuery || !m_navMesh || !m_navFilter || vIsZero(FromLocation) || vIsZero(ToLocation))
-	{
-		return DT_FAILURE;
-	}
-
-	vector<bot_path_node> BaseFlightPath;
-
-	Vector FromFloorLocation = AdjustPointForPathfinding(FromLocation);
-	Vector ToFloorLocation = AdjustPointForPathfinding(ToLocation);
-
-	float pStartPos[3] = { FromFloorLocation.x, FromFloorLocation.z, -FromFloorLocation.y };
-	float pEndPos[3] = { ToFloorLocation.x, ToFloorLocation.z, -ToFloorLocation.y };
-
-	dtStatus status;
-	dtPolyRef StartPoly = 0;
-	float StartNearest[3] = { 0.0f, 0.0f, 0.0f };
-	dtPolyRef EndPoly = 0;
-	float EndNearest[3] = { 0.0f, 0.0f, 0.0f };
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	dtPolyRef StraightPolyPath[MAX_AI_PATH_SIZE];
-	int nPathCount = 0;
-	float StraightPath[MAX_AI_PATH_SIZE * 3];
-	unsigned char straightPathFlags[MAX_AI_PATH_SIZE];
-	memset(straightPathFlags, 0, sizeof(straightPathFlags));
-	int nVertCount = 0;
-
-	// find the start polygon
-	status = m_navQuery->findNearestPoly(pStartPos, pExtents, m_navFilter, &StartPoly, StartNearest);
-	if (!StartPoly || (status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		//BotSay(pBot, "findNearestPoly start failed!");
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't find a polygon
-	}
-
-	// find the end polygon
-	status = m_navQuery->findNearestPoly(pEndPos, pExtents, m_navFilter, &EndPoly, EndNearest);
-	if (!EndPoly || (status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		//BotSay(pBot, "findNearestPoly end failed!");
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't find a polygon
-	}
-
-	status = m_navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
-
-	if (nPathCount == 0) { return DT_FAILURE; }
-
-	if (PolyPath[nPathCount - 1] != EndPoly)
-	{
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxAcceptableDistance))
-		{
-			return DT_FAILURE;
-		}
-		else
-		{
-			dtVcopy(EndNearest, epos);
-		}
-	}
-
-	status = m_navQuery->findStraightPath(StartNearest, EndNearest, PolyPath, nPathCount, StraightPath, straightPathFlags, StraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_ALL_CROSSINGS);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't create a path
-	}
-
-	if (nVertCount == 0)
-	{
-		return DT_FAILURE; // couldn't find a path
-	}
-
-	BaseFlightPath.clear();
-
-	//vector<bot_path_node> InitialPath;
-	//InitialPath.clear();
-
-	unsigned char CurrArea;
-	unsigned char ThisArea;
-
-	unsigned int CurrFlags;
-	unsigned int ThisFlags;
-
-	m_navMesh->getPolyArea(StraightPolyPath[0], &CurrArea);
-	m_navMesh->getPolyFlags(StraightPolyPath[0], &CurrFlags);
-
-	CurrFlags &= ~(SAMPLE_POLYFLAGS_NOONOS);
-
-	// At this point we have our path.  Copy it to the path store
-	int nIndex = 0;
-	TraceResult hit;
-	Vector TraceStart;
-
-	for (int nVert = 0; nVert < nVertCount; nVert++)
-	{
-		Vector NextPathPoint = g_vecZero;
-		Vector PrevPoint = (BaseFlightPath.size() > 0) ? BaseFlightPath.back().Location : FromLocation;
-
-		// The path point output by Detour uses the OpenGL, right-handed coordinate system. Convert to Goldsrc coordinates
-		NextPathPoint.x = StraightPath[nIndex++];
-		NextPathPoint.z = StraightPath[nIndex++];
-		NextPathPoint.y = -StraightPath[nIndex++];
-
-		m_navMesh->getPolyArea(StraightPolyPath[nVert], &ThisArea);
-		m_navMesh->getPolyFlags(StraightPolyPath[nVert], &ThisFlags);
-
-		ThisFlags &= ~(SAMPLE_POLYFLAGS_NOONOS);
-
-		if (ThisArea == SAMPLE_POLYAREA_GROUND || ThisArea == SAMPLE_POLYAREA_CROUCH)
-		{
-			NextPathPoint = UTIL_AdjustPointAwayFromNavWall(NextPathPoint, 16.0f);
-		}
-
-		AdjustPointForPathfinding(NextPathPoint);
-
-		NextPathPoint.z += 20.0f;
-
-		float NewRequiredZ = NextPathPoint.z;
-
-		bot_path_node NextPathNode;
-
-		NextPathNode.flag = CurrFlags;
-
-		NextPathNode.area = CurrArea;
-		NextPathNode.poly = StraightPolyPath[nVert];
-
-
-		if (CurrFlags == SAMPLE_POLYFLAGS_WALLCLIMB || CurrFlags == SAMPLE_POLYFLAGS_FLY)
-		{
-			float MaxHeight = UTIL_FindZHeightForWallClimb(PrevPoint, NextPathPoint, head_hull);
-
-			Vector PotentialNextPoint = PrevPoint + (UTIL_GetVectorNormal2D(NextPathPoint - PrevPoint) * 2.0f);;
-			PotentialNextPoint.z = MaxHeight;
-
-			if (UTIL_QuickTrace(nullptr, PrevPoint, PotentialNextPoint))
-			{
-				NextPathNode.requiredZ = MaxHeight;
-				NextPathNode.Location = PotentialNextPoint;
-				NextPathNode.FromLocation = PrevPoint;
-
-				PrevPoint = NextPathNode.Location;
-
-				BaseFlightPath.push_back(NextPathNode);
-
-			}
-
-			NextPathNode.requiredZ = MaxHeight;
-			NextPathNode.Location = NextPathPoint - (UTIL_GetVectorNormal2D(NextPathPoint - PrevPoint) * 2.0f);
-			NextPathNode.Location.z = MaxHeight;
-			NextPathNode.FromLocation = PrevPoint;
-
-			PrevPoint = NextPathNode.Location;
-
-			BaseFlightPath.push_back(NextPathNode);
-		}
-		else if (CurrFlags == SAMPLE_POLYFLAGS_JUMP)
-		{
-			Vector MoveDir = UTIL_GetVectorNormal2D(NextPathPoint - PrevPoint);
-
-			float MaxHeight = (PrevPoint.z > NextPathPoint.z) ? UTIL_FindZHeightForWallClimb(NextPathPoint, PrevPoint, head_hull) : UTIL_FindZHeightForWallClimb(PrevPoint, NextPathPoint, head_hull);
-
-			NextPathNode.requiredZ = MaxHeight;
-			NextPathNode.Location = PrevPoint + (MoveDir * 4.0f);
-			NextPathNode.Location.z = MaxHeight;
-			NextPathNode.FromLocation = PrevPoint;
-
-			PrevPoint = NextPathNode.Location;
-
-			BaseFlightPath.push_back(NextPathNode);
-
-			NextPathNode.requiredZ = MaxHeight;
-			NextPathNode.Location = NextPathPoint - (MoveDir * 4.0f);
-			NextPathNode.Location.z = MaxHeight;
-			NextPathNode.FromLocation = PrevPoint;
-
-			PrevPoint = NextPathNode.Location;
-
-			BaseFlightPath.push_back(NextPathNode);
-
-			NextPathNode.requiredZ = NextPathPoint.z;
-			NextPathNode.Location = NextPathPoint;
-			NextPathNode.FromLocation = PrevPoint;
-
-			PrevPoint = NextPathNode.Location;
-
-			BaseFlightPath.push_back(NextPathNode);
-		}
-		else if (CurrFlags == SAMPLE_POLYFLAGS_FALL)
-		{
-			Vector MoveDir = UTIL_GetVectorNormal2D(NextPathPoint - PrevPoint);
-
-			float MaxHeight = fmaxf(PrevPoint.z, NextPathPoint.z);
-
-			NextPathNode.requiredZ = MaxHeight;
-			NextPathNode.Location = NextPathPoint - (MoveDir * 8.0f);
-			NextPathNode.Location.z = PrevPoint.z;
-			NextPathNode.FromLocation = PrevPoint;
-
-			PrevPoint = NextPathNode.Location;
-
-			BaseFlightPath.push_back(NextPathNode);
-		}
-		else if (CurrFlags == SAMPLE_POLYFLAGS_LADDER)
-		{
-			float MaxHeight = fmaxf(PrevPoint.z, NextPathPoint.z);
-
-			NextPathNode.requiredZ = MaxHeight;
-			NextPathNode.Location = (PrevPoint.z < NextPathPoint.z) ? (PrevPoint + (UTIL_GetVectorNormal2D(NextPathPoint - PrevPoint) * 2.0f)) : NextPathPoint;
-			NextPathNode.Location.z = MaxHeight;
-			NextPathNode.FromLocation = PrevPoint;
-
-			PrevPoint = NextPathNode.Location;
-
-			BaseFlightPath.push_back(NextPathNode);
-		}
-
-		NextPathNode.requiredZ = NextPathPoint.z;
-		NextPathNode.Location = NextPathPoint;
-		NextPathNode.FromLocation = PrevPoint;
-
-		BaseFlightPath.push_back(NextPathNode);
-
-		CurrArea = ThisArea;
-		CurrFlags = ThisFlags;
-
-	}
-
-	bot_path_node FinalInitialPathNode;
-	FinalInitialPathNode.FromLocation = (path.size() > 0) ? path.back().Location : FromLocation;
-	FinalInitialPathNode.Location = ToLocation;
-	FinalInitialPathNode.area = SAMPLE_POLYAREA_GROUND;
-	FinalInitialPathNode.flag = SAMPLE_POLYFLAGS_WALLCLIMB;
-	FinalInitialPathNode.poly = 0;
-	FinalInitialPathNode.requiredZ = ToLocation.z;
-
-	BaseFlightPath.push_back(FinalInitialPathNode);
-
-	path.clear();
-
-	RefineFlightPath(BaseFlightPath, path);
-
-	return DT_SUCCESS;
-}
-
-Vector UTIL_FindHighestSuccessfulTracePoint(const Vector TraceFrom, const Vector TargetPoint, const Vector NextPoint, const float IterationStep, const float MinIdealHeight, const float MaxHeight)
-{
-	Vector OriginTrace = TraceFrom;
-	float AddedHeight = 0.0f;
-
-	bool bFoundInitialPoint = false;
-	Vector CurrentHighest = ZERO_VECTOR;
-
-	int NumIterations = (int)ceilf(MaxHeight / IterationStep);
-
-	Vector CurrentTarget = TargetPoint;
-
-	for (int i = 0; i <= NumIterations; i++)
-	{
-		if (!UTIL_QuickTrace(nullptr, TargetPoint, CurrentTarget)) { return CurrentHighest; }
-
-		if (!UTIL_QuickHullTrace(nullptr, OriginTrace, CurrentTarget, head_hull, false))
-		{
-			if (bFoundInitialPoint) { break; }
-		}
-		else
-		{
-			bFoundInitialPoint = true;
-			if (AddedHeight >= MinIdealHeight)
-			{
-				return CurrentTarget;
-			}
-			else
-			{
-				if (!vIsZero(NextPoint) && UTIL_QuickHullTrace(nullptr, CurrentTarget, NextPoint, head_hull, false))
-				{
-					CurrentHighest = CurrentTarget;
-				}
-
-			}
-
-		}
-
-		CurrentTarget.z += IterationStep;
-		AddedHeight += IterationStep;
-	}
-
-	return CurrentHighest;
-}
-
-dtStatus FindPathClosestToPoint(const nav_profile& NavProfile, const Vector FromLocation, const Vector ToLocation, vector<bot_path_node>& path, float MaxAcceptableDistance)
-{
-	if (NavProfile.bFlyingProfile)
-	{
-		return FindFlightPathToPoint(NavProfile, FromLocation, ToLocation, path, MaxAcceptableDistance);
-	}
-
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery || !m_navMesh || !m_navFilter || vIsZero(FromLocation) || vIsZero(ToLocation))
-	{
-		return DT_FAILURE;
-	}
-
-	Vector FromFloorLocation = AdjustPointForPathfinding(FromLocation);
-	Vector ToFloorLocation = AdjustPointForPathfinding(ToLocation);
-
-	float pStartPos[3] = { FromFloorLocation.x, FromFloorLocation.z, -FromFloorLocation.y };
-	float pEndPos[3] = { ToFloorLocation.x, ToFloorLocation.z, -ToFloorLocation.y };
-
-	dtStatus status;
-	dtPolyRef StartPoly;
-	float StartNearest[3];
-	dtPolyRef EndPoly;
-	float EndNearest[3];
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	dtPolyRef StraightPolyPath[MAX_AI_PATH_SIZE];
-	int nPathCount = 0;
-	float StraightPath[MAX_AI_PATH_SIZE * 3];
-	unsigned char straightPathFlags[MAX_AI_PATH_SIZE];
-	memset(straightPathFlags, 0, sizeof(straightPathFlags));
-	int nVertCount = 0;
-
-	// find the start polygon
-	status = m_navQuery->findNearestPoly(pStartPos, pExtents, m_navFilter, &StartPoly, StartNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't find a polygon
-	}
-
-	// find the end polygon
-	status = m_navQuery->findNearestPoly(pEndPos, pExtents, m_navFilter, &EndPoly, EndNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't find a polygon
-	}
-
-	status = m_navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
-
-	if (PolyPath[nPathCount - 1] != EndPoly)
-	{
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxAcceptableDistance))
-		{
-			return DT_FAILURE;
-		}
-		else
-		{
-			dtVcopy(EndNearest, epos);
-		}
-	}
-
-	status = m_navQuery->findStraightPath(StartNearest, EndNearest, PolyPath, nPathCount, StraightPath, straightPathFlags, StraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_AREA_CROSSINGS);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't create a path
-	}
-
-	if (nVertCount == 0)
-	{
-		return DT_FAILURE; // couldn't find a path
-	}
-
-	path.clear();
-
-	unsigned int CurrFlags;
-	unsigned char CurrArea;
-	unsigned char ThisArea;
-	unsigned int ThisFlags;
-
-	m_navMesh->getPolyFlags(StraightPolyPath[0], &CurrFlags);
-	m_navMesh->getPolyArea(StraightPolyPath[0], &CurrArea);
-
-	CurrFlags &= ~(SAMPLE_POLYFLAGS_NOONOS);
-
-	// At this point we have our path.  Copy it to the path store
-	int nIndex = 0;
-	TraceResult hit;
-	Vector TraceStart;
-
-	Vector NodeFromLocation = FromFloorLocation;
-
-	for (int nVert = 0; nVert < nVertCount; nVert++)
-	{
-		bot_path_node NextPathNode;
-
-		NextPathNode.FromLocation = NodeFromLocation;
-
-		NextPathNode.Location.x = StraightPath[nIndex++];
-		NextPathNode.Location.z = StraightPath[nIndex++];
-		NextPathNode.Location.y = -StraightPath[nIndex++];
-
-		m_navMesh->getPolyArea(StraightPolyPath[nVert], &ThisArea);
-		m_navMesh->getPolyFlags(StraightPolyPath[nVert], &ThisFlags);
-
-		ThisFlags &= ~(SAMPLE_POLYFLAGS_NOONOS);
-
-		if (ThisArea == SAMPLE_POLYAREA_GROUND || ThisArea == SAMPLE_POLYAREA_CROUCH)
-		{
-			NextPathNode.Location = UTIL_AdjustPointAwayFromNavWall(NextPathNode.Location, 16.0f);
-		}
-
-		TraceStart.x = NextPathNode.Location.x;
-		TraceStart.y = NextPathNode.Location.y;
-		TraceStart.z = NextPathNode.Location.z;
-
-		UTIL_TraceLine(TraceStart, (TraceStart - Vector(0.0f, 0.0f, 100.0f)), ignore_monsters, ignore_glass, nullptr, &hit);
-
-		if (hit.flFraction < 1.0f)
-		{
-			NextPathNode.Location = hit.vecEndPos;
-
-			if (CurrFlags != SAMPLE_POLYFLAGS_JUMP && CurrFlags != SAMPLE_POLYFLAGS_WALLCLIMB)
-			{
-				NextPathNode.Location.z += 20.0f;
-			}
-		}
-
-		NextPathNode.requiredZ = NextPathNode.Location.z;
-
-		if (CurrFlags == SAMPLE_POLYFLAGS_WALLCLIMB || CurrFlags == SAMPLE_POLYFLAGS_LADDER)
-		{
-			float NewRequiredZ = UTIL_FindZHeightForWallClimb(NextPathNode.FromLocation, NextPathNode.Location, head_hull);
-			//NextPathNode.requiredZ = fmaxf(NewRequiredZ, NextPathNode.Location.z);
-			NextPathNode.requiredZ = NewRequiredZ;
-
-			if (CurrFlags == SAMPLE_POLYFLAGS_LADDER)
-			{
-				NextPathNode.requiredZ += 5.0f;
-			}
-
-		}
-		else
-		{
-			NextPathNode.requiredZ = NextPathNode.Location.z;
-		}
-
-		NextPathNode.flag = CurrFlags;
-		NextPathNode.area = CurrArea;
-		NextPathNode.poly = StraightPolyPath[nVert];
-
-		CurrArea = ThisArea;
-		CurrFlags = ThisFlags;
-
-		NodeFromLocation = NextPathNode.Location;
-
-		path.push_back(NextPathNode);
-	}
-
-	return DT_SUCCESS;
-}
-
-Vector NAV_GetNearestLiftDisembarkPoint(nav_door* LiftReference)
-{
-	AvHAIOffMeshConnection* NearestConnection = UTIL_GetOffMeshConnectionForLift(LiftReference);
-
-	if (!NearestConnection) { return ZERO_VECTOR; }
-
-	Vector DesiredStartStop = ZERO_VECTOR;
-	Vector DesiredEndStop = ZERO_VECTOR;
-	float minStartDist = 0.0f;
-	float minEndDist = 0.0f;
-
-	// Find the desired stop point for us to get onto the lift
-	for (auto it = LiftReference->StopPoints.begin(); it != LiftReference->StopPoints.end(); it++)
-	{
-		Vector LiftStopPoint = (*it) + Vector(0.0f, 0.0f, LiftReference->DoorEdict->v.size.z * 0.5f);
-
-		float thisStartDist = vDist3DSq(LiftStopPoint, NearestConnection->FromLocation);
-		float thisEndDist = vDist3DSq(LiftStopPoint, NearestConnection->ToLocation);
-		if (vIsZero(DesiredStartStop) || thisStartDist < minStartDist)
-		{
-			DesiredStartStop = *it;
-			minStartDist = thisStartDist;
-		}
-
-		if (vIsZero(DesiredEndStop) || thisEndDist < minEndDist)
-		{
-			DesiredEndStop = *it;
-			minEndDist = thisEndDist;
-		}
-	}
-
-	Vector LiftPosition = UTIL_GetCentreOfEntity(LiftReference->DoorEdict);
-
-	bool bIsLiftMoving = (LiftReference->DoorEdict->v.velocity.Length() > 0.0f);
-	bool bIsLiftMovingToStart = bIsLiftMoving && (vDist3DSq(LiftReference->DoorEntity->m_vecFinalDest, DesiredStartStop) < sqrf(50.0f));
-	bool bIsLiftMovingToEnd = bIsLiftMoving && (vDist3DSq(LiftReference->DoorEntity->m_vecFinalDest, DesiredEndStop) < sqrf(50.0f));
-	bool bIsLiftAtOrNearStart = (vDist3DSq(LiftPosition, DesiredStartStop) < sqrf(50.0f));
-	bool bIsLiftAtOrNearEnd = (vDist3DSq(LiftPosition, DesiredEndStop) < sqrf(50.0f));
-
-	return (bIsLiftAtOrNearStart || bIsLiftMovingToStart) ? NearestConnection->FromLocation : NearestConnection->ToLocation;
-}
-
-dtStatus FindPathClosestToPoint(AvHAIPlayer* pBot, const BotMoveStyle MoveStyle, const Vector ToLocation, vector<bot_path_node>& path, float MaxAcceptableDistance)
-{
-	if (!pBot) { return DT_FAILURE; }
-
-	if (pBot->BotNavInfo.NavProfile.bFlyingProfile)
-	{
-		return FindFlightPathToPoint(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, ToLocation, path, MaxAcceptableDistance);
-	}
-
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(pBot->BotNavInfo.NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(pBot->BotNavInfo.NavProfile);
-	const dtQueryFilter* m_navFilter = &pBot->BotNavInfo.NavProfile.Filters;
-
-	bool bHasWelder = (m_navFilter->getIncludeFlags() & SAMPLE_POLYFLAGS_WELD);
-
-	if (!m_navQuery || !m_navMesh || !m_navFilter || vIsZero(ToLocation))
-	{
-		return DT_FAILURE;
-	}
-
-	Vector FromLocation = pBot->CurrentFloorPosition;
-	Vector FromFloorLocation = FromLocation;
-
-	// If the bot currently has a path, then let's calculate the navigation from the "from" point rather than our exact position right now
-	if (pBot->BotNavInfo.CurrentPathPoint < pBot->BotNavInfo.CurrentPath.size())
-	{
-		bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
-
-		if (CurrentPathNode.flag == SAMPLE_POLYFLAGS_WALK)
-		{
-			bool bFromReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, CurrentPathNode.Location);
-			bool bToReachable = UTIL_PointIsDirectlyReachable(pBot->CurrentFloorPosition, CurrentPathNode.FromLocation);
-			if (bFromReachable && bToReachable)
-			{
-				FromFloorLocation = pBot->CurrentFloorPosition;
-			}
-			else if (bFromReachable)
-			{
-				FromFloorLocation = CurrentPathNode.FromLocation;
-			}
-			else
-			{
-				FromFloorLocation = CurrentPathNode.Location;
-			}
-		}
-		else
-		{
-			FromFloorLocation = CurrentPathNode.FromLocation;
-		}
-	}
-	else
-	{
-		// Add a slight bias towards trying to move forward if on a railing or other narrow bit of navigable terrain
-		// rather than potentially dropping back off it the wrong way
-		Vector GeneralDir = UTIL_GetVectorNormal2D(ToLocation - pBot->CurrentFloorPosition);
-		Vector CheckLocation = FromLocation + (GeneralDir * 16.0f);
-
-		Vector FromFloorLocation = AdjustPointForPathfinding(CheckLocation);
-
-		if (vIsZero(FromFloorLocation))
-		{
-			FromFloorLocation = AdjustPointForPathfinding(FromLocation);
-		}
-	}
-
-	nav_door* LiftReference = UTIL_GetLiftReferenceByEdict(pBot->Edict->v.groundentity);
-	bool bMustDisembarkLiftFirst = false;
-	Vector LiftStart = ZERO_VECTOR;
-	Vector LiftEnd = ZERO_VECTOR;
-
-	if (LiftReference)
-	{
-		LiftEnd = NAV_GetNearestLiftDisembarkPoint(LiftReference);
-
-		if (!vIsZero(LiftEnd))
-		{
-			FromLocation = LiftEnd;
-
-			AvHAIOffMeshConnection* LiftOffMesh = UTIL_GetOffMeshConnectionForLift(LiftReference);
-
-			if (LiftOffMesh)
-			{
-				LiftStart = (vEquals(LiftEnd, LiftOffMesh->ToLocation, 5.0f)) ? LiftOffMesh->FromLocation : LiftOffMesh->ToLocation;
-				bMustDisembarkLiftFirst = true;
-				FromFloorLocation = LiftEnd;
-			}
-		}
-	}
-
-	Vector ToFloorLocation = AdjustPointForPathfinding(ToLocation);
-
-	float pStartPos[3] = { FromFloorLocation.x, FromFloorLocation.z, -FromFloorLocation.y };
-	float pEndPos[3] = { ToFloorLocation.x, ToFloorLocation.z, -ToFloorLocation.y };
-
-	dtStatus status;
-	dtPolyRef StartPoly;
-	float StartNearest[3];
-	dtPolyRef EndPoly;
-	float EndNearest[3];
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	dtPolyRef StraightPolyPath[MAX_AI_PATH_SIZE];
-	int nPathCount = 0;
-	float StraightPath[MAX_AI_PATH_SIZE * 3];
-	unsigned char straightPathFlags[MAX_AI_PATH_SIZE];
-	memset(straightPathFlags, 0, sizeof(straightPathFlags));
-	int nVertCount = 0;
-
-	// find the start polygon
-	status = m_navQuery->findNearestPoly(pStartPos, pExtents, m_navFilter, &StartPoly, StartNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't find a polygon
-	}
-
-	// find the end polygon
-	status = m_navQuery->findNearestPoly(pEndPos, pExtents, m_navFilter, &EndPoly, EndNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't find a polygon
-	}
-
-	status = m_navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
-
-	if (PolyPath[nPathCount - 1] != EndPoly)
-	{
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxAcceptableDistance))
-		{
-			return DT_FAILURE;
-		}
-		else
-		{
-			dtVcopy(EndNearest, epos);
-		}
-	}
-
-	status = m_navQuery->findStraightPath(StartNearest, EndNearest, PolyPath, nPathCount, StraightPath, straightPathFlags, StraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_AREA_CROSSINGS);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return (status & DT_STATUS_DETAIL_MASK); // couldn't create a path
-	}
-
-	if (nVertCount == 0)
-	{
-		return DT_FAILURE; // couldn't find a path
-	}
-
-	path.clear();
-
-	unsigned int CurrFlags;
-	unsigned char CurrArea;
-
-	m_navMesh->getPolyFlags(StraightPolyPath[0], &CurrFlags);
-	m_navMesh->getPolyArea(StraightPolyPath[0], &CurrArea);
-
-	CurrFlags &= ~(SAMPLE_POLYFLAGS_NOONOS);
-
-	// At this point we have our path.  Copy it to the path store
-	int nIndex = 0;
-	TraceResult hit;
-
-	pBot->BotNavInfo.SpecialMovementFlags = 0;
-
-	Vector NodeFromLocation = FromFloorLocation;
-
-	if (bMustDisembarkLiftFirst)
-	{
-		bot_path_node StartPathNode;
-		StartPathNode.FromLocation = LiftStart;
-		StartPathNode.Location = LiftEnd;
-		StartPathNode.flag = SAMPLE_POLYFLAGS_LIFT;
-		StartPathNode.area = SAMPLE_POLYAREA_LIFT;
-
-		path.push_back(StartPathNode);
-
-		NodeFromLocation = LiftEnd;
-	}
-
-	for (int nVert = 0; nVert < nVertCount; nVert++)
-	{
-		bot_path_node NextPathNode;
-
-		NextPathNode.FromLocation = NodeFromLocation;
-
-		// The nav mesh doesn't always align perfectly with the floor, so align each nav point with the floor after generation
-		NextPathNode.Location.x = StraightPath[nIndex++];
-		NextPathNode.Location.z = StraightPath[nIndex++];
-		NextPathNode.Location.y = -StraightPath[nIndex++];
-
-		NextPathNode.Location = UTIL_AdjustPointAwayFromNavWall(NextPathNode.Location, 16.0f);
-
-		NextPathNode.Location = AdjustPointForPathfinding(NextPathNode.Location);
-
-		if ((CurrFlags != SAMPLE_POLYFLAGS_JUMP && CurrFlags != SAMPLE_POLYFLAGS_WALLCLIMB) || NextPathNode.FromLocation.z > NextPathNode.Location.z)
-		{
-			NextPathNode.Location.z += GetPlayerOriginOffsetFromFloor(pBot->Edict, (CurrArea == SAMPLE_POLYAREA_CROUCH)).z;
-		}
-
-		pBot->BotNavInfo.SpecialMovementFlags |= CurrFlags;
-
-		if (pBot->BotNavInfo.SpecialMovementFlags & SAMPLE_POLYFLAGS_WELD)
-		{
-			bool bPing = true;
-		}
-
-		// End alignment to floor
-
-		// For ladders and wall climbing, calculate the climb height needed to complete the move.
-		// This what allows bots to climb over railings without having to explicitly place nav points on the railing itself
-		NextPathNode.requiredZ = NextPathNode.Location.z;
-
-		if (CurrFlags == SAMPLE_POLYFLAGS_WALLCLIMB || CurrFlags == SAMPLE_POLYFLAGS_LADDER)
-		{
-			int HullNum = GetPlayerHullIndex(pBot->Edict, false);
-			Vector FromLocation = (path.size() > 0) ? path.back().Location : pBot->CurrentFloorPosition;
-			float NewRequiredZ = UTIL_FindZHeightForWallClimb(FromLocation, NextPathNode.Location, head_hull);
-			NextPathNode.requiredZ = fmaxf(NewRequiredZ, NextPathNode.Location.z);
-
-			if (CurrFlags == SAMPLE_POLYFLAGS_LADDER)
-			{
-				NextPathNode.requiredZ += 5.0f;
-			}
-
-		}
-		else
-		{
-			NextPathNode.requiredZ = NextPathNode.Location.z;
-		}
-
-		NextPathNode.flag = CurrFlags;
-		NextPathNode.area = CurrArea;
-		NextPathNode.poly = StraightPolyPath[nVert];
-
-		m_navMesh->getPolyFlags(StraightPolyPath[nVert], &CurrFlags);
-		m_navMesh->getPolyArea(StraightPolyPath[nVert], &CurrArea);
-
-		CurrFlags &= ~(SAMPLE_POLYFLAGS_NOONOS);
-
-		NodeFromLocation = NextPathNode.Location;
-
-		path.push_back(NextPathNode);
-	}
-
-	return DT_SUCCESS;
-}
-
-bool UTIL_PointIsReachable(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, const float MaxAcceptableDistance)
-{
 	if (!NavProfile) { return false; }
 
-	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+	if (UTIL_IsPointInSwimArea(FromLocation) && UTIL_IsPointInSwimArea(ToLocation))
+	{
+		if (UTIL_QuickTrace(nullptr, FromLocation, ToLocation, false))
+		{
+			AvHAIPathNode StartPoint;
+			StartPoint.FromLocation = FromLocation;
+			StartPoint.ToLocation = ToLocation;
+			StartPoint.area = NAV_AREA_WALK;
+			StartPoint.flag = NAV_FLAG_WALK;
+
+			ResultPath.push_back(StartPoint);
+
+			return true;
+		}
+	}
+
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!FoundMesh) { return false; }
 
 	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
-	if (!m_navQuery || vIsZero(FromLocation) || vIsZero(ToLocation))
+	Vector FromFloorLocation = FromLocation;
+	Vector ToFloorLocation = ToLocation;
+
+	if (!UTIL_IsPointInSwimArea(FromLocation))
 	{
-		return false;
+		FromFloorLocation = AINAV_AdjustPointForPathfinding(NavProfile, FromLocation);
+	}
+	else
+	{
+		FromFloorLocation = UTIL_GetGroundLocation(FromLocation);
 	}
 
-	float pStartPos[3] = { FromLocation.x, FromLocation.z, -FromLocation.y };
-	float pEndPos[3] = { ToLocation.x, ToLocation.z, -ToLocation.y };
+	if (!UTIL_IsPointInSwimArea(ToLocation))
+	{
+		ToFloorLocation = AINAV_AdjustPointForPathfinding(NavProfile, ToLocation);
+	}
+	else
+	{
+		ToFloorLocation = UTIL_GetGroundLocation(ToLocation);
+	}
 
+	float dtStartPos[3];
+	UTIL_VecGoldSrcToDetour(FromFloorLocation, dtStartPos);
+	float dtEndPos[3];
+	UTIL_VecGoldSrcToDetour(ToFloorLocation, dtEndPos);
+
+	dtStatus status;
 	dtPolyRef StartPoly;
-	float StartNearest[3];
+	float dtStartNearest[3];
 	dtPolyRef EndPoly;
-	float EndNearest[3];
+	float dtEndNearest[3];
 	dtPolyRef PolyPath[MAX_PATH_POLY];
+	dtPolyRef StraightPolyPath[MAX_AI_PATH_SIZE];
 	int nPathCount = 0;
-
-	float searchExtents[3] = { MaxAcceptableDistance, 50.0f, MaxAcceptableDistance };
+	float StraightPath[MAX_AI_PATH_SIZE * 3];
+	unsigned char StraightPathFlags[MAX_AI_PATH_SIZE];
+	std::memset(StraightPathFlags, 0, sizeof(StraightPathFlags));
+	int nVertCount = 0;
 
 	// find the start polygon
-	dtStatus status = FoundMesh->navQuery->findNearestPoly(pStartPos, searchExtents, m_navFilter, &StartPoly, StartNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return false; // couldn't find a polygon
-	}
+	status = FoundMesh->NavQuery->findNearestPoly(dtStartPos, dtDefaultProjectionExtents, m_navFilter, &StartPoly, dtStartNearest);
+	// Start point wasn't on the nav mesh
+	if (!dtStatusSucceed(status)) {	return false; }
 
 	// find the end polygon
-	status = FoundMesh->navQuery->findNearestPoly(pEndPos, searchExtents, m_navFilter, &EndPoly, EndNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
-	{
-		return false; // couldn't find a polygon
-	}
+	status = FoundMesh->NavQuery->findNearestPoly(dtEndPos, dtDefaultProjectionExtents, m_navFilter, &EndPoly, dtEndNearest);
+	// End point wasn't on the nav mesh
+	if (!dtStatusSucceed(status)) { return false; }
 
-	status = FoundMesh->navQuery->findPath(StartPoly, EndPoly, StartNearest, EndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
-
-	if (nPathCount == 0)
-	{
-		return false; // couldn't find a path
-	}
+	status = FoundMesh->NavQuery->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
 
 	if (PolyPath[nPathCount - 1] != EndPoly)
 	{
 		float epos[3];
-		dtVcopy(epos, EndNearest);
+		dtVcopy(epos, dtEndNearest);
 
-		FoundMesh->navQuery->closestPointOnPoly(PolyPath[nPathCount - 1], EndNearest, epos, 0);
+		FoundMesh->NavQuery->closestPointOnPoly(PolyPath[nPathCount - 1], dtEndNearest, epos, 0);
 
-		return (dtVdistSqr(EndNearest, epos) <= sqrf(MaxAcceptableDistance));
+		if (dtVdistSqr(dtEndNearest, epos) > sqrf(MaxAcceptableDistance))
+		{
+			if (!UTIL_IsPointInSwimArea(ToLocation))
+			{
+				return false;
+			}
+			else
+			{
+				TraceResult Hit;
+				Vector StartTrace = Vector(epos[0], -epos[2], epos[1] + 5.0f);
+				UTIL_TraceLine(StartTrace, ToLocation, ignore_monsters, nullptr, &Hit);
 
+				if (Hit.fAllSolid || (Hit.flFraction < 1.0f && vDist3DSq(Hit.vecEndPos, ToLocation) > sqrf(MaxAcceptableDistance)))
+				{
+					return false;
+				}
+				else
+				{
+					dtVcopy(dtEndNearest, epos);
+				}
+			}
+		}
+		else
+		{
+			dtVcopy(dtEndNearest, epos);
+		}
+	}
+
+	status = FoundMesh->NavQuery->findStraightPath(dtStartNearest, dtEndNearest, PolyPath, nPathCount, StraightPath, StraightPathFlags, StraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_AREA_CROSSINGS);
+	// Couldn't find a path
+	if (!dtStatusSucceed(status)) { return false; }
+	if (nVertCount == 0) { return false; }
+
+	unsigned int CurrFlags;
+	unsigned char CurrArea;
+	unsigned char ThisArea;
+	unsigned int ThisFlags;
+
+	FoundMesh->NavMesh->getPolyFlags(StraightPolyPath[0], &CurrFlags);
+	FoundMesh->NavMesh->getPolyArea(StraightPolyPath[0], &CurrArea);
+
+	// At this point we have our path.  Copy it to the path store
+	int nIndex = 0;
+	TraceResult hit;
+	Vector TraceStart;
+
+	Vector NodeFromLocation = FromFloorLocation;
+
+	for (int nVert = 0; nVert < nVertCount; nVert++)
+	{
+		AvHAIPathNode NextPathNode;
+
+		NextPathNode.FromLocation = NodeFromLocation;
+
+		NextPathNode.ToLocation.x = StraightPath[nIndex++];
+		NextPathNode.ToLocation.z = StraightPath[nIndex++];
+		NextPathNode.ToLocation.y = -StraightPath[nIndex++];
+
+		FoundMesh->NavMesh->getPolyArea(StraightPolyPath[nVert], &ThisArea);
+		FoundMesh->NavMesh->getPolyFlags(StraightPolyPath[nVert], &ThisFlags);
+
+		if (ThisArea == NAV_AREA_WALK || ThisArea == NAV_AREA_CROUCH)
+		{
+			NextPathNode.ToLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToLocation, 16.0f);
+		}
+
+		TraceStart = NextPathNode.ToLocation;
+
+		UTIL_TraceLine(TraceStart, (TraceStart - Vector(0.0f, 0.0f, 100.0f)), ignore_monsters, ignore_glass, nullptr, &hit);
+
+		if (hit.flFraction < 1.0f)
+		{
+			NextPathNode.ToLocation = hit.vecEndPos;
+
+			if (CurrFlags != NAV_FLAG_JUMP)
+			{
+				NextPathNode.ToLocation.z += 20.0f;
+			}
+		}
+
+		NextPathNode.requiredZ = NextPathNode.ToLocation.z;
+
+		if (CurrFlags == EAINavMovementFlag::NAV_FLAG_LADDER || CurrFlags == EAINavMovementFlag::NAV_FLAG_WALLCLIMB)
+		{
+			float NewRequiredZ = AINAV_FindZHeightForWallClimb(NextPathNode.FromLocation, NextPathNode.ToLocation, head_hull);
+			NextPathNode.requiredZ = NewRequiredZ;
+
+			NextPathNode.requiredZ += 5.0f;
+		}
+		else
+		{
+			NextPathNode.requiredZ = NextPathNode.ToLocation.z;
+		}
+
+		NextPathNode.flag = static_cast<EAINavMovementFlag>(CurrFlags);
+		NextPathNode.area = static_cast<EAINavArea>(CurrArea);
+		NextPathNode.poly = StraightPolyPath[nVert];
+
+		CurrArea = ThisArea;
+		CurrFlags = ThisFlags;
+
+		NodeFromLocation = NextPathNode.ToLocation;
+
+		ResultPath.push_back(NextPathNode);
+	}
+
+	if (UTIL_IsPointInSwimArea(ToLocation))
+	{
+		AvHAIPathNode FinalSwimBit;
+		FinalSwimBit.area = NAV_AREA_WALK;
+		FinalSwimBit.flag = NAV_FLAG_WALK;
+		FinalSwimBit.FromLocation = ResultPath.back().ToLocation;
+		FinalSwimBit.ToLocation = ToLocation;
+
+		ResultPath.push_back(FinalSwimBit);
 	}
 
 	return true;
 }
 
-bool HasBotReachedPathPoint(const AvHAIPlayer* pBot)
+float AINAV_FindZHeightForWallClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum)
 {
-	if (pBot->BotNavInfo.CurrentPath.size() == 0 || pBot->BotNavInfo.CurrentPathPoint >= pBot->BotNavInfo.CurrentPath.size())
+	TraceResult hit;
+
+	Vector StartTrace = ClimbEnd;
+
+	UTIL_TraceLine(ClimbEnd, ClimbEnd - Vector(0.0f, 0.0f, 50.0f), ignore_monsters, nullptr, &hit);
+
+	if (hit.fAllSolid || hit.fStartSolid || hit.flFraction < 1.0f)
 	{
-		return true;
+		StartTrace.z = hit.vecEndPos.z + 18.0f;
 	}
 
-	bot_path_node CurrentPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint];
+	Vector EndTrace = ClimbStart;
+	EndTrace.z = StartTrace.z;
 
-	SamplePolyFlags CurrentNavFlag = (SamplePolyFlags)CurrentPathNode.flag;
-	SamplePolyAreas CurrentNavArea = (SamplePolyAreas)CurrentPathNode.area;
-	Vector MoveFrom = CurrentPathNode.FromLocation;
-	Vector MoveTo = CurrentPathNode.Location;
-	float RequiredClimbHeight = CurrentPathNode.requiredZ;
+	Vector CurrTraceStart = StartTrace;
+
+	UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, HullNum, nullptr, &hit);
+
+	if (hit.flFraction >= 1.0f && !hit.fAllSolid && !hit.fStartSolid)
+	{
+		return StartTrace.z;
+	}
+	else
+	{
+		int maxTests = 100;
+		int testCount = 0;
+
+		while ((hit.flFraction < 1.0f || hit.fStartSolid || hit.fAllSolid) && testCount < maxTests)
+		{
+			CurrTraceStart.z += 1.0f;
+			EndTrace.z = CurrTraceStart.z;
+			UTIL_TraceHull(CurrTraceStart, EndTrace, ignore_monsters, HullNum, nullptr, &hit);
+			testCount++;
+		}
+
+		if (hit.flFraction >= 1.0f && !hit.fStartSolid)
+		{
+			return CurrTraceStart.z;
+		}
+		else
+		{
+			return StartTrace.z;
+		}
+	}
+
+	return StartTrace.z;
+}
+
+Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, edict_t* Rider, DynamicMapObject* LiftReference)
+{
+	if (!NavProfile || !LiftReference || FNullEnt(Rider)) { return ZERO_VECTOR; }
+
+	const NavOffMeshConnection* NearestConnection = nullptr;
+	float MinDist = 0.0f;
+
+	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!ChosenNavMesh) { return ZERO_VECTOR; }
+
+	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
+	{
+		if (!EnumHasAnyFlags(it->ConnectionFlags, NAV_FLAG_PLATFORM)) { continue; }
+
+		if (it->LinkedObject == LiftReference->Edict)
+		{
+			float ThisDist = fminf(vDist3DSq(it->FromLocation, UTIL_GetClosestPointOnEntityToLocation(it->FromLocation, LiftReference->Edict)), vDist3DSq(it->ToLocation, UTIL_GetClosestPointOnEntityToLocation(it->ToLocation, LiftReference->Edict)));
+
+			if (ThisDist < sqrf(100.0f) && (!NearestConnection || ThisDist < MinDist))
+			{
+				NearestConnection = &(*it);
+				MinDist = ThisDist;
+			}
+		}
+	}
+
+	if (NearestConnection)
+	{
+		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference->Edict);
+		NearestPointFromLocation.z = Rider->v.origin.z;
+
+		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference->Edict);
+		NearestPointToLocation.z = Rider->v.origin.z;
+
+		float DistFromLocation = vDist3DSq(NearestConnection->FromLocation, NearestPointFromLocation);
+		float DistToLocation = vDist3DSq(NearestConnection->ToLocation, NearestPointToLocation);
+		return (DistFromLocation < DistToLocation) ? NearestConnection->FromLocation : NearestConnection->ToLocation;
+	}
+
+	Vector NearestProjectedPoint = ZERO_VECTOR;
+	Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference->Edict);
+	float DisembarkHeight = (!FNullEnt(Rider)) ? GetPlayerBottomOfCollisionHull(Rider).z : LiftReference->Edict->v.absmax.z;
+
+	Vector FrontLocation = Vector(LiftReference->Edict->v.absmax.x, LiftCentre.y, DisembarkHeight);
+	Vector RearLocation = Vector(LiftReference->Edict->v.absmin.x, LiftCentre.y, DisembarkHeight);
+	Vector LeftLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmin.y, DisembarkHeight);
+	Vector RightLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmax.y, DisembarkHeight);
+
+	float ProjectWidth = fmaxf((LiftReference->Edict->v.absmax.x - LiftReference->Edict->v.absmin.x) * 0.5f, (LiftReference->Edict->v.absmax.y - LiftReference->Edict->v.absmin.y) * 0.5f);
+	ProjectWidth += 100.0f;
+
+	Vector ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, FrontLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	{
+		return ProjectedLoc;
+	}
+
+	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RearLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	{
+		return ProjectedLoc;
+	}
+
+	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, LeftLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	{
+		return ProjectedLoc;
+	}
+
+	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RightLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	{
+		return ProjectedLoc;
+	}
+
+	return ZERO_VECTOR;
+}
+
+
+
+
+
+
+
+
+
+
+bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer)
+{
+	if (!AIPlayer->HasValidPath()) { return true; }
+
+	const AvHAIPathNode* CurrentPathNode = AIPlayer->GetCurrentPathNode();
+
+	EAINavMovementFlag CurrentNavFlag = CurrentPathNode->flag;
+	Vector MoveFrom = CurrentPathNode->FromLocation;
+	Vector MoveTo = CurrentPathNode->ToLocation;
+	float RequiredClimbHeight = CurrentPathNode->requiredZ;
 
 	Vector NextMoveLocation = ZERO_VECTOR;
-	SamplePolyFlags NextMoveFlag = SAMPLE_POLYFLAGS_DISABLED;
-	SamplePolyAreas NextMoveArea = SAMPLE_POLYAREA_GROUND;
+	EAINavMovementFlag NextMoveFlag = EAINavMovementFlag::NAV_FLAG_DISABLED;
 
-	if ((pBot->BotNavInfo.CurrentPathPoint + 1) < pBot->BotNavInfo.CurrentPath.size())
+	if (AIPlayer->HasNextPathPoint())
 	{
-		bot_path_node NextPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint + 1];
+		const AvHAIPathNode* NextPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint + 1];
 		NextMoveLocation = NextPathNode.Location;
-		NextMoveFlag = (SamplePolyFlags)NextPathNode.flag;
-		NextMoveArea = (SamplePolyAreas)NextPathNode.area;
+		NextMoveFlag = (NavMovementFlag)NextPathNode.flag;
+	}
+
+	if (UTIL_IsPointInSwimArea(MoveTo) || pBot->BotNavInfo.NavProfile.bFlyingProfile)
+	{
+		Vector ClosestPointToPath = vClosestPointOnLine(MoveFrom, MoveTo, pBot->Edict->v.origin);
+		bool bAtOrPastDestination = vEquals(ClosestPointToPath, MoveTo, 32.0f);
+
+		return vPointOverlaps3D(MoveTo, pBot->Edict->v.absmin, pBot->Edict->v.absmax) || bAtOrPastDestination;
 	}
 
 	switch (CurrentNavFlag)
 	{
-		case SAMPLE_POLYFLAGS_WALK:
-			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
-		case SAMPLE_POLYFLAGS_WELD:
-		case SAMPLE_POLYFLAGS_DOOR:
-		case SAMPLE_POLYFLAGS_TEAM1STRUCTURE:
-		case SAMPLE_POLYFLAGS_TEAM2STRUCTURE:
-			return HasBotCompletedObstacleMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
-		case SAMPLE_POLYFLAGS_LADDER:
-			return HasBotCompletedLadderMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
-		case SAMPLE_POLYFLAGS_FALL:
-			return HasBotCompletedFallMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
-		case SAMPLE_POLYFLAGS_WALLCLIMB:
-			return HasBotCompletedClimbMove(pBot, MoveFrom, MoveTo, RequiredClimbHeight, NextMoveLocation, NextMoveFlag);
-		case SAMPLE_POLYFLAGS_JUMP:
-		case SAMPLE_POLYFLAGS_DUCKJUMP:
-		case SAMPLE_POLYFLAGS_BLOCKED:
-			return HasBotCompletedJumpMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
-		case SAMPLE_POLYFLAGS_TEAM1PHASEGATE:
-		case SAMPLE_POLYFLAGS_TEAM2PHASEGATE:
-			return HasBotCompletedPhaseGateMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
-		case SAMPLE_POLYFLAGS_LIFT:
-			return HasBotCompletedLiftMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
-		default:
-			return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
+	case NAV_FLAG_WALK:
+		return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+	case NAV_FLAG_LADDER:
+		return HasBotCompletedLadderMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+	case NAV_FLAG_FALL:
+		return HasBotCompletedFallMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+	case NAV_FLAG_JUMP:
+		return HasBotCompletedJumpMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+	case NAV_FLAG_PLATFORM:
+		return HasBotCompletedLiftMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
+	default:
+		return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
 	}
 
-	return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, CurrentNavArea, NextMoveLocation, NextMoveFlag, NextMoveArea);
+	return HasBotCompletedWalkMove(pBot, MoveFrom, MoveTo, NextMoveLocation, NextMoveFlag);
 }
 
 bool HasBotCompletedWalkMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, SamplePolyAreas MoveArea, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag, SamplePolyAreas NextMoveArea)
@@ -5110,602 +3702,6 @@ void MoveDirectlyTo(AvHAIPlayer* pBot, const Vector Destination)
 
 }
 
-
-bool UTIL_PointIsDirectlyReachable(const AvHAIPlayer* pBot, const Vector targetPoint, const float MaxDist)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(pBot->BotNavInfo.NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(pBot->BotNavInfo.NavProfile);
-	const dtQueryFilter* m_navFilter = &pBot->BotNavInfo.NavProfile.Filters;
-
-	if (!m_navQuery) { return false; }
-
-	edict_t* pEdict = pBot->Edict;
-
-	Vector CurrentPos = (pBot->BotNavInfo.IsOnGround) ? pBot->Edict->v.origin : pBot->CurrentFloorPosition;
-
-	float pStartPos[3] = { CurrentPos.x, CurrentPos.z, -CurrentPos.y };
-	float pEndPos[3] = { targetPoint.x, targetPoint.z, -targetPoint.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3];
-	float EndNearest[3];
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_navFilter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		return false;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_navFilter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return false;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly) { return true; }
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_navFilter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	if (hitDist < 1.0f)
-	{
-		if (pathCount == 0) { return false; }
-
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[pathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxDist))
-		{
-			return false;
-		}
-		else
-		{
-			return true;
-		}
-	}
-
-	if (EndPoly == PolyPath[pathCount - 1]) { return true; }
-
-	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
-	float Height = 0.0f;
-	m_navQuery->closestPointOnPolyBoundary(PolyPath[pathCount - 1], EndNearest, ClosestPoint);
-	m_navQuery->getPolyHeight(PolyPath[pathCount - 1], ClosestPoint, &Height);
-
-
-	return (Height == 0.0f || Height == EndNearest[1]);
-
-}
-
-bool UTIL_PointIsDirectlyReachable(const AvHAIPlayer* pBot, const Vector start, const Vector target, const float MaxDist)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(pBot->BotNavInfo.NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(pBot->BotNavInfo.NavProfile);
-	const dtQueryFilter* m_navFilter = &pBot->BotNavInfo.NavProfile.Filters;
-
-	if (!m_navQuery) { return false; }
-
-	if (vIsZero(start) || vIsZero(target)) { return false; }
-
-	float pStartPos[3] = { start.x, start.z, -start.y };
-	float pEndPos[3] = { target.x, target.z, -target.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3];
-	float EndNearest[3];
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_navFilter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		return false;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_navFilter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return false;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly) { return true; }
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_navFilter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	if (hitDist < 1.0f)
-	{
-		if (pathCount == 0) { return false; }
-
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[pathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxDist))
-		{
-			return false;
-		}
-		else
-		{
-			return true;
-		}
-	}
-
-	if (EndPoly == PolyPath[pathCount - 1]) { return true; }
-
-	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
-	float Height = 0.0f;
-	m_navQuery->closestPointOnPolyBoundary(PolyPath[pathCount - 1], EndNearest, ClosestPoint);
-	m_navQuery->getPolyHeight(PolyPath[pathCount - 1], ClosestPoint, &Height);
-
-
-	return (Height == 0.0f || Height == EndNearest[1]);
-
-}
-
-const dtNavMesh* UTIL_GetNavMeshForProfile(const nav_profile& NavProfile)
-{
-	if (NavProfile.NavMeshIndex < 0 || NavProfile.NavMeshIndex >= MAX_NAV_MESHES) { return nullptr; }
-
-	return NavMeshes[NavProfile.NavMeshIndex].navMesh;
-}
-
-const dtNavMeshQuery* UTIL_GetNavMeshQueryForProfile(const nav_profile& NavProfile)
-{
-	if (NavProfile.NavMeshIndex < 0 || NavProfile.NavMeshIndex >= MAX_NAV_MESHES) { return nullptr; }
-
-	return NavMeshes[NavProfile.NavMeshIndex].navQuery;
-}
-
-const dtTileCache* UTIL_GetTileCacheForProfile(const nav_profile& NavProfile)
-{
-	if (NavProfile.NavMeshIndex < 0 || NavProfile.NavMeshIndex >= MAX_NAV_MESHES) { return nullptr; }
-
-	return NavMeshes[NavProfile.NavMeshIndex].tileCache;
-}
-
-bool UTIL_PointIsDirectlyReachable(const nav_profile &NavProfile, const Vector start, const Vector target, const float MaxDist)
-{
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navMesh) { return false; }
-
-	float pStartPos[3] = { start.x, start.z, -start.y };
-	float pEndPos[3] = { target.x, target.z, -target.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3] = { 0.0f, 0.0f, 0.0f };
-	float EndNearest[3] = { 0.0f, 0.0f, 0.0f };
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_navFilter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		return false;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_navFilter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return false;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly) { return true; }
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_navFilter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	if (hitDist < 1.0f)
-	{
-		if (pathCount == 0) { return false; }
-
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[pathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxDist))
-		{
-			return false;
-		}
-		else
-		{
-			return true;
-		}
-	}
-
-	if (EndPoly == PolyPath[pathCount - 1]) { return true; }
-
-	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
-	float Height = 0.0f;
-	m_navQuery->closestPointOnPolyBoundary(PolyPath[pathCount - 1], EndNearest, ClosestPoint);
-	m_navQuery->getPolyHeight(PolyPath[pathCount - 1], ClosestPoint, &Height);
-
-
-	return (Height == 0.0f || Height == EndNearest[1]);
-}
-
-bool UTIL_TraceNav(const nav_profile &NavProfile, const Vector start, const Vector target, const float MaxAcceptableDistance)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_Filter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return false; }
-
-	float pStartPos[3] = { start.x, start.z, -start.y };
-	float pEndPos[3] = { target.x, target.z, -target.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3] = { 0.0f, 0.0f, 0.0f };
-	float EndNearest[3] = { 0.0f, 0.0f, 0.0f };
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-	float MaxReachableExtents[3] = { MaxAcceptableDistance, 50.0f, MaxAcceptableDistance };
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, MaxReachableExtents, m_Filter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		return false;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, MaxReachableExtents, m_Filter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return false;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly) { return true; }
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_Filter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	if (hitDist < 1.0f)
-	{
-		if (pathCount == 0) { return false; }
-
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[pathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxAcceptableDistance))
-		{
-			return false;
-		}
-		else
-		{
-			return true;
-		}
-	}
-
-	if (EndPoly == PolyPath[pathCount - 1]) { return true; }
-
-	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
-	float Height = 0.0f;
-	m_navQuery->closestPointOnPolyBoundary(PolyPath[pathCount - 1], EndNearest, ClosestPoint);
-	m_navQuery->getPolyHeight(PolyPath[pathCount - 1], ClosestPoint, &Height);
-
-
-	return (Height == 0.0f || Height == EndNearest[1]);
-}
-
-void UTIL_TraceNavLine(const nav_profile &NavProfile, const Vector Start, const Vector End, nav_hitresult* HitResult)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_Filter = &NavProfile.Filters;
-
-	if (!m_navQuery)
-	{
-		HitResult->flFraction = 0.0f;
-		HitResult->bStartOffMesh = true;
-		HitResult->TraceEndPoint = Start;
-		return;
-	}
-
-	float pStartPos[3] = { Start.x, Start.z, -Start.y };
-	float pEndPos[3] = { End.x, End.z, -End.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3] = { 0.0f, 0.0f, 0.0f };
-	float EndNearest[3] = { 0.0f, 0.0f, 0.0f };
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-	float MaxReachableExtents[3] = { 18.0f, 32.0f, 18.0f };
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, MaxReachableExtents, m_Filter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		HitResult->flFraction = 0.0f;
-		HitResult->bStartOffMesh = true;
-		HitResult->TraceEndPoint = Start;
-		return;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, MaxReachableExtents, m_Filter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		HitResult->flFraction = 0.0f;
-		HitResult->bStartOffMesh = true;
-		HitResult->TraceEndPoint = Start;
-		return;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly)
-	{
-
-		HitResult->flFraction = 1.0f;
-		HitResult->bStartOffMesh = false;
-		HitResult->TraceEndPoint = Vector(EndNearest[0], -EndNearest[2], EndNearest[1]);
-		return;
-	}
-
-
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_Filter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	HitResult->flFraction = hitDist;
-	HitResult->bStartOffMesh = false;
-
-	Vector HitLocation = g_vecZero;
-
-	if (hitDist >= 1.0f)
-	{
-		HitLocation = Vector(EndNearest[0], -EndNearest[2], EndNearest[1]);
-	}
-	else
-	{
-		Vector Dir = UTIL_GetVectorNormal(End - Start);
-		Vector Point = Start + (Dir * HitResult->flFraction);
-
-		HitLocation = UTIL_ProjectPointToNavmesh(Point, Vector(100.0f, 100.0f, 100.0f), NavProfile);
-	}
-
-	HitResult->TraceEndPoint = HitLocation;
-}
-
-bool UTIL_PointIsDirectlyReachable(const Vector start, const Vector target, const float MaxDist)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtQueryFilter* m_Filter = &BaseNavProfiles[ALL_NAV_PROFILE].Filters;
-
-	if (!m_navQuery) { return false; }
-
-	float pStartPos[3] = { start.x, start.z, -start.y };
-	float pEndPos[3] = { target.x, target.z, -target.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3] = { 0.0f, 0.0f, 0.0f };
-	float EndNearest[3] = { 0.0f, 0.0f, 0.0f };
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_Filter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		return false;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_Filter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return false;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly) { return true; }
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_Filter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	if (hitDist < 1.0f)
-	{
-		if (pathCount == 0) { return false; }
-
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[pathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(MaxDist))
-		{
-			return false;
-		}
-		else
-		{
-			return true;
-		}
-	}
-
-	if (EndPoly == PolyPath[pathCount - 1]) { return true; }
-
-	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
-	float Height = 0.0f;
-	m_navQuery->closestPointOnPolyBoundary(PolyPath[pathCount - 1], EndNearest, ClosestPoint);
-	m_navQuery->getPolyHeight(PolyPath[pathCount - 1], ClosestPoint, &Height);
-
-
-	return (Height == 0.0f || Height == EndNearest[1]);
-}
-
-float UTIL_PointIsDirectlyReachable_DEBUG(const Vector start, const Vector target)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtQueryFilter* m_Filter = &BaseNavProfiles[ALL_NAV_PROFILE].Filters;
-
-	if (!m_navQuery) { return 0.0f; }
-
-	float pStartPos[3] = { start.x, start.z, -start.y };
-	float pEndPos[3] = { target.x, target.z, -target.y };
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float StartNearest[3];
-	float EndNearest[3];
-
-	float hitDist;
-	float HitNormal[3];
-
-	dtPolyRef PolyPath[MAX_PATH_POLY];
-	int pathCount = 0;
-
-
-	dtStatus FoundStartPoly = m_navQuery->findNearestPoly(pStartPos, dtDefaultReachableExtents, m_Filter, &StartPoly, StartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly))
-	{
-		return 1.1f;
-	}
-
-	dtStatus FoundEndPoly = m_navQuery->findNearestPoly(pEndPos, dtDefaultReachableExtents, m_Filter, &EndPoly, EndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return 1.2f;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly) { return 2.1f; }
-
-	m_navQuery->raycast(StartPoly, StartNearest, EndNearest, m_Filter, &hitDist, HitNormal, PolyPath, &pathCount, MAX_AI_PATH_SIZE);
-
-	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
-	float Height = 0.0f;
-	m_navQuery->closestPointOnPolyBoundary(PolyPath[pathCount - 1], EndNearest, ClosestPoint);
-	m_navQuery->getPolyHeight(PolyPath[pathCount - 1], ClosestPoint, &Height);
-
-	float Dist = dtVdistSqr(EndNearest, ClosestPoint);
-
-	if (hitDist < 1.0f)
-	{
-		if (pathCount == 0) { return 1.3f; }
-
-		float epos[3];
-		dtVcopy(epos, EndNearest);
-
-		m_navQuery->closestPointOnPoly(PolyPath[pathCount - 1], EndNearest, epos, 0);
-
-		if (dtVdistSqr(EndNearest, epos) > sqrf(max_ai_use_reach))
-		{
-			return 1.5f;
-		}
-		else
-		{
-			return 2.4f;
-		}
-
-
-		return 1.3f;
-	}
-
-	if (EndPoly != PolyPath[pathCount - 1])
-	{
-		if (Height == 0.0f || Height == EndNearest[1])
-		{
-			return 2.3f;
-		}
-		return 1.4f;
-	}
-
-	return 2.2f;
-}
-
-dtPolyRef UTIL_GetNearestPolyRefForLocation(const nav_profile& NavProfile, const Vector Location)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return 0; }
-
-	float ConvertedFloorCoords[3] = { Location.x, Location.z, -Location.y };
-
-	float pPolySearchExtents[3] = { 50.0f, 50.0f, 50.0f };
-
-	dtPolyRef result;
-	float nearestPoint[3] = { 0.0f, 0.0f, 0.0f };
-
-	m_navQuery->findNearestPoly(ConvertedFloorCoords, pPolySearchExtents, m_navFilter, &result, nearestPoint);
-
-	return result;
-}
-
-dtPolyRef UTIL_GetNearestPolyRefForLocation(const Vector Location)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtQueryFilter* m_navFilter = &BaseNavProfiles[ALL_NAV_PROFILE].Filters;
-
-	if (!m_navQuery) { return 0; }
-
-	float ConvertedFloorCoords[3] = { Location.x, Location.z, -Location.y };
-
-	float pPolySearchExtents[3] = { 50.0f, 50.0f, 50.0f };
-
-	dtPolyRef result;
-	float nearestPoint[3] = { 0.0f, 0.0f, 0.0f };
-
-	m_navQuery->findNearestPoly(ConvertedFloorCoords, pPolySearchExtents, m_navFilter, &result, nearestPoint);
-
-	return result;
-}
-
 dtPolyRef UTIL_GetNearestPolyRefForEntity(const edict_t* Edict)
 {
 	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
@@ -5726,86 +3722,6 @@ dtPolyRef UTIL_GetNearestPolyRefForEntity(const edict_t* Edict)
 	m_navQuery->findNearestPoly(ConvertedFloorCoords, pPolySearchExtents, m_navFilter, &result, nearestPoint);
 
 	return result;
-}
-
-unsigned char UTIL_GetNavAreaAtLocation(const nav_profile &NavProfile, const Vector Location)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return (unsigned char)SAMPLE_POLYAREA_BLOCKED; }
-
-	Vector TraceHit = UTIL_GetTraceHitLocation(Location + Vector(0.0f, 0.0f, 10.0f), Location - Vector(0.0f, 0.0f, 500.0f));
-
-	Vector PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
-
-	float pCheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (dtStatusSucceed(success))
-	{
-		unsigned char area = 0;
-		m_navMesh->getPolyArea(FoundPoly, &area);
-		return area;
-	}
-	else
-	{
-		return (unsigned char)SAMPLE_POLYAREA_BLOCKED;
-	}
-}
-
-unsigned char UTIL_GetNavAreaAtLocation(const Vector Location)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtQueryFilter* m_navFilter = &BaseNavProfiles[ALL_NAV_PROFILE].Filters;
-
-	if (!m_navQuery) { return 0; }
-
-	Vector TraceHit = UTIL_GetTraceHitLocation(Location + Vector(0.0f, 0.0f, 10.0f), Location - Vector(0.0f, 0.0f, 500.0f));
-
-	Vector PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
-
-	float pCheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (dtStatusSucceed(success))
-	{
-		unsigned char area = 0;
-		m_navMesh->getPolyArea(FoundPoly, &area);
-		return area;
-	}
-	else
-	{
-		return 0;
-	}
-}
-
-const char* UTIL_NavmeshAreaToChar(const unsigned char Area)
-{
-	switch (Area)
-	{
-	case SAMPLE_POLYAREA_BLOCKED:
-		return "Blocked";
-	case SAMPLE_POLYAREA_CROUCH:
-		return "Crouch";
-	case SAMPLE_POLYAREA_GROUND:
-		return "Ground";
-	default:
-		return "INVALID";
-
-	}
-
-	return "INVALID";
 }
 
 void UTIL_UpdateBotMovementStatus(AvHAIPlayer* pBot)
@@ -6090,7 +4006,7 @@ void SetBaseNavProfile(AvHAIPlayer* pBot)
 	}
 }
 
-void UpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle)
+void UpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle)
 {
 	switch (pBot->Edict->v.iuser3)
 	{
@@ -6133,7 +4049,7 @@ void UpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle)
 
 void MarineUpdateBotMoveProfile(AvHAIPlayer* pBot, BotMoveStyle MoveStyle)
 {
-	nav_profile* NavProfile = &pBot->BotNavInfo.NavProfile;
+	NavAgentProfile* NavProfile = &pBot->BotNavInfo.NavProfile;
 
 	bool bHasWelder = PlayerHasWeapon(pBot->Player, WEAPON_MARINE_WELDER);
 
@@ -7423,202 +5339,6 @@ bool BotIsAtLocation(const AvHAIPlayer* pBot, const Vector Destination)
 	return (vDist2DSq(pBot->Edict->v.origin, Destination) < sqrf(GetPlayerRadius(pBot->Player)) && fabs(pBot->CurrentFloorPosition.z - Destination.z) <= GetPlayerHeight(pBot->Edict, false));
 }
 
-Vector UTIL_ProjectPointToNavmesh(const Vector Location)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtQueryFilter* m_navFilter = &BaseNavProfiles[ALL_NAV_PROFILE].Filters;
-
-	if (!m_navQuery) { return g_vecZero; }
-
-	Vector PointToProject = Location;
-
-	float pCheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-	float Extents[3] = { 400.0f, 400.0f, 400.0f };
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, Extents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (FoundPoly > 0 && dtStatusSucceed(success))
-	{
-		return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-	}
-	else
-	{
-		int PointContents = UTIL_PointContents(PointToProject);
-
-		if (PointContents != CONTENTS_SOLID && PointContents != CONTENTS_LADDER)
-		{
-			Vector TraceHit = UTIL_GetTraceHitLocation(PointToProject + Vector(0.0f, 0.0f, 1.0f), PointToProject - Vector(0.0f, 0.0f, 1000.0f));
-
-			PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
-		}
-
-		float pRecheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-		dtStatus successRetry = m_navQuery->findNearestPoly(pRecheckLoc, Extents, m_navFilter, &FoundPoly, NavNearest);
-
-		if (FoundPoly > 0 && dtStatusSucceed(success))
-		{
-			return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-		}
-		else
-		{
-			return g_vecZero;
-		}
-
-	}
-}
-
-Vector UTIL_ProjectPointToNavmesh(const Vector Location, const Vector Extents)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(BaseNavProfiles[ALL_NAV_PROFILE]);
-	const dtQueryFilter* m_navFilter = &BaseNavProfiles[ALL_NAV_PROFILE].Filters;
-
-	if (!m_navQuery) { return g_vecZero; }
-
-	Vector PointToProject = Location;
-
-	float pCheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-	float fExtents[3] = { Extents.x, Extents.z, Extents.y };
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, fExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (FoundPoly > 0 && dtStatusSucceed(success))
-	{
-		return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-	}
-	else
-	{
-		int PointContents = UTIL_PointContents(PointToProject);
-
-		if (PointContents != CONTENTS_SOLID && PointContents != CONTENTS_LADDER)
-		{
-			Vector TraceHit = UTIL_GetTraceHitLocation(PointToProject + Vector(0.0f, 0.0f, 1.0f), PointToProject - Vector(0.0f, 0.0f, 1000.0f));
-
-			PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
-		}
-
-		float pRecheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-		dtStatus successRetry = m_navQuery->findNearestPoly(pRecheckLoc, fExtents, m_navFilter, &FoundPoly, NavNearest);
-
-		if (FoundPoly > 0 && dtStatusSucceed(success))
-		{
-			return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-		}
-		else
-		{
-			return g_vecZero;
-		}
-
-	}
-}
-
-Vector UTIL_ProjectPointToNavmesh(const Vector Location, const nav_profile &NavProfile)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return g_vecZero; }
-
-	Vector PointToProject = Location;
-
-	float pCheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, pExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (FoundPoly > 0 && dtStatusSucceed(success))
-	{
-		return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-	}
-	else
-	{
-		int PointContents = UTIL_PointContents(PointToProject);
-
-		if (PointContents != CONTENTS_SOLID && PointContents != CONTENTS_LADDER)
-		{
-			Vector TraceHit = UTIL_GetTraceHitLocation(PointToProject + Vector(0.0f, 0.0f, 1.0f), PointToProject - Vector(0.0f, 0.0f, 1000.0f));
-
-			PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
-		}
-
-		float pRecheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-		dtStatus successRetry = m_navQuery->findNearestPoly(pRecheckLoc, pExtents, m_navFilter, &FoundPoly, NavNearest);
-
-		if (FoundPoly > 0 && dtStatusSucceed(success))
-		{
-			return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-		}
-		else
-		{
-			return g_vecZero;
-		}
-
-	}
-}
-
-Vector UTIL_ProjectPointToNavmesh(const Vector Location, const Vector Extents, const nav_profile& NavProfile)
-{
-	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
-	const dtNavMesh* m_navMesh = UTIL_GetNavMeshForProfile(NavProfile);
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery) { return g_vecZero; }
-
-	Vector PointToProject = Location;
-
-	float pCheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-	dtPolyRef FoundPoly;
-	float NavNearest[3];
-
-	float fExtents[3] = { Extents.x, Extents.z, Extents.y };
-
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, fExtents, m_navFilter, &FoundPoly, NavNearest);
-
-	if (FoundPoly > 0 && dtStatusSucceed(success))
-	{
-		return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-	}
-	else
-	{
-		int PointContents = UTIL_PointContents(PointToProject);
-
-		if (PointContents != CONTENTS_SOLID && PointContents != CONTENTS_LADDER)
-		{
-			Vector TraceHit = UTIL_GetTraceHitLocation(PointToProject + Vector(0.0f, 0.0f, 1.0f), PointToProject - Vector(0.0f, 0.0f, 1000.0f));
-
-			PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
-		}
-
-		float pRecheckLoc[3] = { PointToProject.x, PointToProject.z, -PointToProject.y };
-
-		dtStatus successRetry = m_navQuery->findNearestPoly(pRecheckLoc, fExtents, m_navFilter, &FoundPoly, NavNearest);
-
-		if (FoundPoly > 0 && dtStatusSucceed(success))
-		{
-			return Vector(NavNearest[0], -NavNearest[2], NavNearest[1]);
-		}
-		else
-		{
-			return g_vecZero;
-		}
-
-	}
-}
-
 bool UTIL_PointIsOnNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector SearchExtents)
 {
 	const dtNavMeshQuery* m_navQuery = UTIL_GetNavMeshQueryForProfile(NavProfile);
@@ -7722,9 +5442,9 @@ void HandlePlayerAvoidance(AvHAIPlayer* pBot, const Vector MoveDestination)
 	}
 }
 
-float UTIL_GetPathCostBetweenLocations(const nav_profile &NavProfile , const Vector FromLocation, const Vector ToLocation)
+float UTIL_GetPathCostBetweenLocations(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation)
 {
-	vector<bot_path_node> path;
+	vector<AvHAIPathNode> path;
 	path.clear();
 
 	dtStatus pathFindResult = FindPathClosestToPoint(NavProfile, FromLocation, ToLocation, path, max_ai_use_reach);
@@ -8032,13 +5752,12 @@ Vector UTIL_GetFurthestVisiblePointOnLineWithHull(const Vector ViewerLocation, c
 	return FinalView;
 }
 
-Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<bot_path_node>& path, bool bPrecise)
+Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<AvHAIPathNode>& path, bool bPrecise)
 {
 	if (path.size() == 0) { return g_vecZero; }
 
 	for (auto it = path.rbegin(); it != path.rend(); it++)
 	{
-
 		if (UTIL_QuickTrace(NULL, ViewerLocation, it->Location))
 		{
 			if (!bPrecise || it == path.rbegin())
@@ -8047,8 +5766,8 @@ Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<bo
 			}
 			else
 			{
-				Vector FromLoc = it->Location;
-				Vector ToLoc = prev(it)->Location;
+				Vector FromLoc = it->FromLocation;
+				Vector ToLoc = prev(it)->ToLocation;
 
 				Vector Dir = UTIL_GetVectorNormal(ToLoc - FromLoc);
 
@@ -9255,42 +6974,6 @@ nav_door* UTIL_GetClosestLiftToPoints(const Vector StartPoint, const Vector EndP
 	return Result;
 }
 
-void UTIL_AddOffMeshConnection(Vector StartLoc, Vector EndLoc, unsigned char area, unsigned int flags, bool bBiDirectional, AvHAIOffMeshConnection* RemoveConnectionDef)
-{
-	Vector ConnStart, ConnEnd;
-
-	TraceResult hit;
-	UTIL_TraceLine(StartLoc + Vector(0.0f, 0.0f, 5.0f), StartLoc - Vector(0.0f, 0.0f, 100.0f), ignore_monsters, ignore_glass, nullptr, &hit);
-
-	ConnStart = (hit.flFraction < 1.0f) ? hit.vecEndPos : StartLoc;
-
-	UTIL_TraceLine(EndLoc + Vector(0.0f, 0.0f, 5.0f), EndLoc - Vector(0.0f, 0.0f, 100.0f), ignore_monsters, ignore_glass, nullptr, &hit);
-
-	ConnEnd = (hit.flFraction < 1.0f) ? hit.vecEndPos : EndLoc;
-
-	ConnStart = Vector(ConnStart.x, ConnStart.z, -ConnStart.y);
-	ConnEnd = Vector(ConnEnd.x, ConnEnd.z, -ConnEnd.y);
-
-	for (int i = 0; i < BUILDING_NAV_MESH; i++)
-	{
-		dtOffMeshConnectionRef ref = 0;
-
-		NavMeshes[i].tileCache->addOffMeshConnection(ConnStart, ConnEnd, 18.0f, area, flags, bBiDirectional, &ref);
-
-		RemoveConnectionDef->ConnectionRefs[i] = (unsigned int)ref;
-	}
-}
-
-void UTIL_RemoveOffMeshConnections(AvHAIOffMeshConnection* RemoveConnectionDef)
-{
-	for (int i = 0; i < BUILDING_NAV_MESH; i++)
-	{
-		NavMeshes[i].tileCache->removeOffMeshConnection(RemoveConnectionDef->ConnectionRefs[i]);
-
-		RemoveConnectionDef->ConnectionRefs[i] = 0;
-	}
-}
-
 const dtOffMeshConnection* DEBUG_FindNearestOffMeshConnectionToPoint(const Vector Point, unsigned int FilterFlags)
 {
 	const dtOffMeshConnection* Result = nullptr;
@@ -9675,143 +7358,4 @@ void NAV_SetPickupMovementTask(AvHAIPlayer* pBot, edict_t* ThingToPickup, DoorTr
 	MoveTask->TaskTarget = ThingToPickup;
 	MoveTask->TriggerToActivate = TriggerToActivate;
 	MoveTask->TaskLocation = ThingToPickup->v.origin;
-}
-
-vector<NavHint*> NAV_GetHintsOfType(unsigned int HintType, bool bUnoccupiedOnly)
-{
-	vector<NavHint*> Result;
-
-	Result.clear();
-
-	for (auto it = MapNavHints.begin(); it != MapNavHints.end(); it++)
-	{
-		if (HintType != STRUCTURE_NONE && !(it->hintType & HintType)) { continue; }
-
-		if (bUnoccupiedOnly && !FNullEnt(it->OccupyingBuilding)) { continue; }
-
-		Result.push_back(&(*it));
-	}
-
-	return Result;
-
-}
-
-vector<NavHint*> NAV_GetHintsOfTypeInRadius(unsigned int HintType, Vector SearchLocation, float Radius, bool bUnoccupiedOnly)
-{
-	vector<NavHint*> Result;
-
-	Result.clear();
-
-	float SearchRadius = sqrf(Radius);
-
-	for (auto it = MapNavHints.begin(); it != MapNavHints.end(); it++)
-	{
-		if (HintType != STRUCTURE_NONE && !(it->hintType & HintType)) { continue; }
-
-		if (bUnoccupiedOnly && !FNullEnt(it->OccupyingBuilding)) { continue; }
-
-		if (vDist3DSq(it->Position, SearchLocation) < SearchRadius)
-		{
-			Result.push_back(&(*it));
-		}
-	}
-
-	return Result;
-
-}
-
-void RefineFlightPath(vector<bot_path_node>& InputPath, vector<bot_path_node>& RefinedPath)
-{
-	RefinedPath.clear();
-
-	if (InputPath.size() == 0) { return; }
-
-	if (InputPath.size() == 1)
-	{
-		RefinedPath.push_back(InputPath.front());
-		return;
-	}
-
-	Vector PrevLoc = InputPath.front().FromLocation;
-
-	for (auto it = InputPath.begin(); it != InputPath.end(); it++)
-	{
-		if (it->flag == SAMPLE_POLYFLAGS_FALL || next(it) == InputPath.end())
-		{
-			bot_path_node NewNode = (*it);
-			NewNode.FromLocation = PrevLoc;
-			PrevLoc = NewNode.Location;
-			RefinedPath.push_back(NewNode);
-
-			continue;
-		}
-
-		Vector Dir = UTIL_GetVectorNormal(it->Location - PrevLoc);
-
-		float Dist = vDist3D(PrevLoc, it->Location);
-		float StepSize = Dist * 0.1f;
-		int CurrStep = 0;
-
-		bool bSkippedAhead = false;
-
-		vector<bot_path_node>::iterator StartIterator = next(it);
-		int NodesSkipped = 0;
-
-		while (NodesSkipped < 5 && next(StartIterator) != InputPath.end() && next(StartIterator)->flag != SAMPLE_POLYFLAGS_FALL)
-		{
-			StartIterator = next(StartIterator);
-
-			NodesSkipped++;
-		}
-
-		for (auto nIt = StartIterator; nIt != next(it) && nIt != it; nIt--)
-		{
-			Vector TracePoint = ZERO_VECTOR;
-			Vector TraceFrom = PrevLoc;
-			CurrStep = 0;
-
-			while (vIsZero(TracePoint) && CurrStep < 10)
-			{
-				TraceFrom = (PrevLoc + Vector(0.0f, 0.0f, 10.0f)) + (Dir * (StepSize * CurrStep));
-
-				TracePoint = UTIL_FindHighestSuccessfulTracePoint(TraceFrom, nIt->FromLocation, nIt->Location, 5.0f, 50.0f, 200.0f);
-
-				CurrStep++;
-			}
-
-			if (!vIsZero(TracePoint))
-			{
-				bot_path_node StubNode = (*it);
-				StubNode.FromLocation = PrevLoc;
-				StubNode.Location = TraceFrom;
-				PrevLoc = StubNode.Location;
-				RefinedPath.push_back(StubNode);
-
-				bot_path_node NewNode = (*it);
-				NewNode.FromLocation = PrevLoc;
-				NewNode.Location = TracePoint;
-				PrevLoc = NewNode.Location;
-				RefinedPath.push_back(NewNode);
-				bSkippedAhead = true;
-
-				it = prev(nIt);
-
-				it->FromLocation = TracePoint;
-
-				break;
-			}
-		}
-
-		if (!bSkippedAhead)
-		{
-			bot_path_node NewNode = (*it);
-			NewNode.FromLocation = PrevLoc;
-			PrevLoc = NewNode.Location;
-			RefinedPath.push_back(NewNode);
-
-			continue;
-		}
-
-
-	}
 }

@@ -29,7 +29,7 @@ constexpr int TILECACHESET_VERSION = 4;
 constexpr int DT_AREA_NULL = 0; // Represents a null area on the nav mesh. Not traversable and considered not on the nav mesh
 constexpr int DT_AREA_BLOCKED = 3; // Area occupied by an obstruction (e.g. building). Not traversable, but considered to be on the nav mesh
 
-constexpr float pExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
+constexpr float dtDefaultProjectionExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
 constexpr float dtDefaultReachableExtents[3] = { max_ai_use_reach, max_ai_use_reach, max_ai_use_reach }; // Extents (in GoldSrc units) to determine if something is on the nav mesh
 static const Vector DefaultReachableExtents = Vector(max_ai_use_reach, max_ai_use_reach, max_ai_use_reach); // Extents (in GoldSrc units) to determine if something is on the nav mesh
 
@@ -71,15 +71,17 @@ struct NavOffMeshConnection
 		return ConnectionRef > 0 && IsValidNavMeshIndex(NavMeshIndex) && !vEquals(FromLocation, ToLocation);
 	}
 };
+typedef std::vector<NavOffMeshConnection> OffMeshConnectionList;
 
 // Hints are locations placed on the nav mesh to influence and guide the bot. For example, "good ambush point".
 // See the nav constants header for all nav hint types.
 struct NavHint
 {
-	unsigned int NavMeshIndex = 0;
+	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
 	unsigned int HintTypes = 0;
 	Vector Position;
 };
+typedef std::vector<NavHint> NavHintList;
 
 // A temporary obstacle is a shape placed on the map during play which affects the area it covers, changing the movement flags on it.
 // For example, a temporary obstacle with an area type of NULL would cut a hole in the nav mesh, e.g. a door is permanently welded shut.
@@ -104,6 +106,7 @@ struct NavTempObstacle
 		ObstacleRef = 0;
 	}
 };
+typedef std::vector<NavTempObstacle> NavTempObstacleList;
 
 // Works like a TraceResult, but specifically for running traces on the nav mesh
 struct NavHitResult
@@ -111,26 +114,35 @@ struct NavHitResult
 	float flFraction = 0.0f;
 	bool bStartOffMesh = false;
 	Vector TraceEndPoint = ZERO_VECTOR;
+	Vector HitNormal = ZERO_VECTOR;
+
+	void Clear()
+	{
+		flFraction = 0.0f;
+		bStartOffMesh = false;
+		TraceEndPoint = ZERO_VECTOR;
+		HitNormal = ZERO_VECTOR;
+	}
 };
 
 // Links together a tile cache, nav query and the nav mesh into one handy structure for all your querying needs
 struct NavMesh
 {
 	EAINavMeshIndex MeshIndex = NAV_MESH_INVALID;
-	class dtTileCache* tileCache = nullptr;
-	class dtNavMeshQuery* navQuery = nullptr;
-	class dtNavMesh* navMesh = nullptr;
-	std::vector<NavOffMeshConnection> MeshConnections;
-	std::vector<NavHint> MeshHints;
-	std::vector<NavTempObstacle> TempObstacles;
+	class dtTileCache* TileCache = nullptr;
+	class dtNavMeshQuery* NavQuery = nullptr;
+	class dtNavMesh* NavMesh = nullptr;
+	OffMeshConnectionList MeshConnections;
+	NavHintList MeshHints;
+	NavTempObstacleList TempObstacles;
 	bool bIsMeshUpToDate = true;
 
 	void Clear()
 	{
 		MeshIndex = NAV_MESH_INVALID;
-		dtFreeNavMesh(navMesh);
-		dtFreeNavMeshQuery(navQuery);
-		dtFreeTileCache(tileCache);
+		dtFreeNavMesh(NavMesh);
+		dtFreeNavMeshQuery(NavQuery);
+		dtFreeTileCache(TileCache);
 
 		MeshConnections.clear();
 		MeshHints.clear();
@@ -140,9 +152,9 @@ struct NavMesh
 	bool IsValid()
 	{
 		return MeshIndex < NAV_MESH_INVALID
-			&& tileCache != nullptr
-			&& navQuery != nullptr
-			&& navMesh != nullptr;
+			&& TileCache != nullptr
+			&& NavQuery != nullptr
+			&& NavMesh != nullptr;
 	}
 
 	bool IsUpToDate() { return bIsMeshUpToDate; }
@@ -254,6 +266,14 @@ void AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const 
 /* Removes the off-mesh connection from all nav meshes which contain it */
 bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef);
 
+// Returns true if the trace along the nav mesh from start to end made it within the acceptable distance range
+bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, float MaxAcceptableDistance = 0.1f);
+
+// Returns detailed information on a nav mesh trace. Will return the end location of the trace, as well as populating the details in HitResult
+Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult = nullptr);
+EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const Vector Location);
+dtPolyRef AIMESH_GetNearestPolyRefForLocation(const NavAgentProfile* NavProfile, const Vector Location);
+Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, const Vector& Location, const float MaxDistanceFromWall);
 
 // Applies a temporary obstacle to the navmesh. Returns a pointer to the temp obstacle created if successful.
 NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area);
@@ -271,7 +291,7 @@ NavHint* AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location,
 	Uses pExtents by default if not supplying one.
 	Returns ZERO_VECTOR if not projected successfully
 */
-Vector AIMESH_ProjectPointToNavmesh(EAINavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile = GetBaseAgentProfile(NAV_PROFILE_DEFAULT), const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
+Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
 
 // Finds any random point on the navmesh that is relevant for the bot. Returns ZERO_VECTOR if none found
 Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const Vector& SearchPoint = ZERO_VECTOR, bool bIgnoreReachability = true);
@@ -291,7 +311,7 @@ Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile,
 Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = NAV_FLAG_NONE);
 
 
-bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const Vector SearchExtents = DefaultReachableExtents);
+bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const NavAgentProfile* NavProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT), const Vector SearchExtents = DefaultReachableExtents);
 
 void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTime);
 void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTime);

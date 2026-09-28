@@ -134,7 +134,7 @@ bool AIMESH_IsNavMeshLoaded()
 
 	if (NavMeshList.size() < 1) { return false; }
 
-	return NavMeshList[0].navMesh != nullptr;
+	return NavMeshList[0].NavMesh != nullptr;
 }
 
 void AIMESH_GetNavMeshFilePath(const char* mapname, char* buffer)
@@ -190,7 +190,7 @@ bool AIMESH_UpdateTileCache(EAINavMeshIndex MeshIndex)
 
 	if (!FoundMesh) { return true; }
 
-	FoundMesh->tileCache->update(0.0f, FoundMesh->navMesh, &FoundMesh->bIsMeshUpToDate);
+	FoundMesh->TileCache->update(0.0f, FoundMesh->NavMesh, &FoundMesh->bIsMeshUpToDate);
 
 	return FoundMesh->IsUpToDate();
 }
@@ -283,10 +283,10 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 		}
 
-		NewNavMesh.navMesh = dtAllocNavMesh();
+		NewNavMesh.NavMesh = dtAllocNavMesh();
 
 		// Could not allocate memory for the nav mesh for some reason.
-		if (!NewNavMesh.navMesh)
+		if (!NewNavMesh.NavMesh)
 		{
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
@@ -294,10 +294,10 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
-		NewNavMesh.tileCache = dtAllocTileCache();
+		NewNavMesh.TileCache = dtAllocTileCache();
 
 		// Could not allocate memory for the tile cache for some reason.
-		if (!NewNavMesh.tileCache)
+		if (!NewNavMesh.TileCache)
 		{
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
@@ -305,10 +305,10 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
-		NewNavMesh.navQuery = dtAllocNavMeshQuery();
+		NewNavMesh.NavQuery = dtAllocNavMeshQuery();
 
 		// Could not allocate memory for the nav query for some reason.
-		if (!NewNavMesh.navQuery)
+		if (!NewNavMesh.NavQuery)
 		{
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
@@ -316,7 +316,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
-		dtStatus MeshInitStatus = NewNavMesh.navMesh->init(&tcHeader.meshParams);
+		dtStatus MeshInitStatus = NewNavMesh.NavMesh->init(&tcHeader.meshParams);
 
 		// Could not initialize the nav mesh for some reason (possibly bad data?)
 		if (dtStatusFailed(MeshInitStatus))
@@ -327,7 +327,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			return EAINavMeshLoadResult::NAVMESH_STATUS_MESHINITFAIL;
 		}
 
-		dtStatus TileCacheInitStatus = NewNavMesh.tileCache->init(&tcHeader.cacheParams, m_talloc, m_tcomp, m_tmproc);
+		dtStatus TileCacheInitStatus = NewNavMesh.TileCache->init(&tcHeader.cacheParams, m_talloc, m_tcomp, m_tmproc);
 
 		// Could not initialize the tile cache for some reason (possibly bad data?)
 		if (dtStatusFailed(TileCacheInitStatus))
@@ -364,7 +364,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			}
 
 			dtCompressedTileRef tile = 0;
-			dtStatus addTileStatus = NewNavMesh.tileCache->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
+			dtStatus addTileStatus = NewNavMesh.TileCache->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
 
 			// Invalid tile data
 			if (dtStatusFailed(addTileStatus))
@@ -377,10 +377,10 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* mapname)
 			}
 
 			if (tile)
-				NewNavMesh.tileCache->buildNavMeshTile(tile, NewNavMesh.navMesh);
+				NewNavMesh.TileCache->buildNavMeshTile(tile, NewNavMesh.NavMesh);
 		}
 
-		dtStatus QueryInitStatus = NewNavMesh.navQuery->init(NewNavMesh.navMesh, 2048);
+		dtStatus QueryInitStatus = NewNavMesh.NavQuery->init(NewNavMesh.NavMesh, 2048);
 
 		if (dtStatusFailed(QueryInitStatus))
 		{
@@ -449,8 +449,15 @@ NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh,
 
 	if (!FoundMesh) { return nullptr; }
 
-	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(TargetNavMesh, StartLoc);
-	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(TargetNavMesh, EndLoc);
+	const NavAgentProfile* DefaultProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
+
+	if (!DefaultProfile) { return nullptr; }
+
+	NavAgentProfile ProjectProfile = *DefaultProfile;
+	ProjectProfile.MeshIndex = TargetNavMesh;
+
+	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(&ProjectProfile, StartLoc);
+	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(&ProjectProfile, EndLoc);
 
 	if (vIsZero(ProjectedStart) || vIsZero(ProjectedEnd)) { return nullptr; }
 
@@ -472,7 +479,7 @@ NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh,
 	dtOffMeshConnectionRef ref = 0;
 	NewConnectionDef.ConnectionRef = 0;
 
-	dtStatus AddStatus = FoundMesh->tileCache->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 18.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &ref);
+	dtStatus AddStatus = FoundMesh->TileCache->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 18.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &ref);
 
 	if (dtStatusSucceed(AddStatus))
 	{
@@ -496,7 +503,7 @@ void AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const 
 	if (!ParentMesh) { return; }
 
 	Connection->ConnectionFlags = NewFlag;
-	ParentMesh->tileCache->modifyOffMeshConnection(Connection->ConnectionRef, static_cast<unsigned int>(NewFlag));
+	ParentMesh->TileCache->modifyOffMeshConnection(Connection->ConnectionRef, static_cast<unsigned int>(NewFlag));
 }
 
 bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
@@ -507,7 +514,7 @@ bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
 
 	if (!ParentNavMesh) { return false; }
 
-	dtStatus RemoveStatus = ParentNavMesh->tileCache->removeOffMeshConnection(RemoveConnectionDef->ConnectionRef);
+	dtStatus RemoveStatus = ParentNavMesh->TileCache->removeOffMeshConnection(RemoveConnectionDef->ConnectionRef);
 
 	if (dtStatusSucceed(RemoveStatus))
 	{
@@ -521,6 +528,269 @@ bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
 	}
 }
 
+dtPolyRef AIMESH_GetNearestPolyRefForLocation(const NavAgentProfile* NavProfile, const Vector Location)
+{
+	if (!NavProfile) { return 0; }
+
+	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return 0; }
+
+	float dtLocation[3];
+	UTIL_VecGoldSrcToDetour(Location, dtLocation);
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
+
+	float dtSearchExtents[3] = { 50.0f, 50.0f, 50.0f };
+
+	dtPolyRef ResultPoly;
+	float dtNearestPoint[3] = { 0.0f, 0.0f, 0.0f };
+
+	dtStatus FindResult = FoundMesh->NavQuery->findNearestPoly(dtLocation, dtSearchExtents, m_navFilter, &ResultPoly, dtNearestPoint);
+
+	if (dtStatusSucceed(FindResult))
+	{
+		return ResultPoly;
+	}
+
+	return 0;
+}
+
+EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const Vector Location)
+{
+	if (!NavProfile) { return EAINavArea::NAV_AREA_NULL; }
+
+	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return EAINavArea::NAV_AREA_NULL; }
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
+
+	Vector TraceHit = UTIL_GetTraceHitLocation(Location + Vector(0.0f, 0.0f, 10.0f), Location - Vector(0.0f, 0.0f, 500.0f));
+
+	Vector PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
+
+	float dtLocation[3];
+	UTIL_VecGoldSrcToDetour(PointToProject, dtLocation);
+
+	dtPolyRef FoundPoly;
+	float NavNearest[3];
+
+	dtStatus success = FoundMesh->NavQuery->findNearestPoly(PointToProject, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
+
+	if (dtStatusSucceed(success))
+	{
+		unsigned char area = 0;
+		FoundMesh->NavMesh->getPolyArea(FoundPoly, &area);
+		return static_cast<EAINavArea>(area);
+	}
+
+	return EAINavArea::NAV_AREA_NULL;
+}
+
+Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, const Vector& Location, const float MaxDistanceFromWall)
+{
+	if (!NavProfile) { return Location; }
+
+	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return Location; }
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
+
+	float dtLocation[3];
+	UTIL_VecGoldSrcToDetour(Location, dtLocation);
+
+	float HitDist = 0.0f;
+	float HitPos[3] = { 0.0f, 0.0f, 0.0f };
+	float HitNorm[3] = { 0.0f, 0.0f, 0.0f };
+
+	dtPolyRef StartPoly = AIMESH_GetNearestPolyRefForLocation(NavProfile, Location);
+
+	dtStatus Result = FoundMesh->NavQuery->findDistanceToWall(StartPoly, dtLocation, MaxDistanceFromWall, m_navFilter, &HitDist, HitPos, HitNorm);
+
+	if (dtStatusSucceed(Result))
+	{
+		float AdjustDistance = MaxDistanceFromWall - HitDist;
+
+		Vector HitPosVector = Vector(HitPos[0], -HitPos[2], HitPos[1]);
+
+		Vector AdjustDir = (HitDist > 0.1f) ? UTIL_GetVectorNormal2D(Location - HitPosVector) : Vector(HitNorm[0], -HitNorm[2], HitNorm[1]);
+
+		Vector AdjustLocation = Location + (AdjustDir * AdjustDistance);
+
+		float AdjustLoc[3] = { AdjustLocation.x, AdjustLocation.z, -AdjustLocation.y };
+
+		if (AIMESH_QuickTraceNavLine(NavProfile, Location, AdjustLocation, 0.1f))
+		{
+			return AdjustLocation;
+		}
+		else
+		{
+			return Location;
+		}
+	}
+
+	return Location;
+}
+
+bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, float MaxAcceptableDistance)
+{
+	if (!NavProfile) { return false; }
+
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return false; }
+
+	const dtQueryFilter* m_Filter = &NavProfile->Filters;
+
+	float dtStartLocation[3];
+	UTIL_VecGoldSrcToDetour(StartLocation, dtStartLocation);
+
+	float dtEndLocation[3];
+	UTIL_VecGoldSrcToDetour(EndLocation, dtEndLocation);
+
+	dtPolyRef StartPoly;
+	dtPolyRef EndPoly;
+	float dtStartNearest[3];
+	float dtEndNearest[3];
+
+	float MaxReachableExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
+
+	dtStatus FoundStartPoly = FoundMesh->NavQuery->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
+
+	if (!dtStatusSucceed(FoundStartPoly))
+	{
+		return false;
+	}
+
+	dtStatus FoundEndPoly = FoundMesh->NavQuery->findNearestPoly(dtEndLocation, MaxReachableExtents, m_Filter, &EndPoly, dtEndNearest);
+
+	if (!dtStatusSucceed(FoundEndPoly))
+	{
+		return false;
+	}
+
+	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
+	if (StartPoly == EndPoly) { return true; }
+
+	float HitDist;
+	float HitNormal[3];
+
+	dtPolyRef PolyPath[MAX_PATH_POLY];
+	int PathCount = 0;
+
+	FoundMesh->NavQuery->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
+
+	if (HitDist < 1.0f)
+	{
+		if (PathCount == 0) { return false; }
+
+		float epos[3];
+		dtVcopy(epos, dtEndNearest);
+
+		FoundMesh->NavQuery->closestPointOnPoly(PolyPath[PathCount - 1], dtEndNearest, epos, 0);
+
+		if (dtVdistSqr(dtEndNearest, epos) > sqrf(MaxAcceptableDistance))
+		{
+			return false;
+		}
+		else
+		{
+			return true;
+		}
+	}
+
+	if (EndPoly == PolyPath[PathCount - 1]) { return true; }
+
+	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
+	float Height = 0.0f;
+	FoundMesh->NavQuery->closestPointOnPolyBoundary(PolyPath[PathCount - 1], dtEndNearest, ClosestPoint);
+	FoundMesh->NavQuery->getPolyHeight(PolyPath[PathCount - 1], ClosestPoint, &Height);
+
+	return (Height == 0.0f || Height == dtEndNearest[1]);
+}
+
+Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult)
+{
+	HitResult->Clear();
+
+	if (!NavProfile)
+	{
+		return ZERO_VECTOR;
+	}
+
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh)
+	{
+		return ZERO_VECTOR;
+	}
+
+	const dtQueryFilter* m_Filter = &NavProfile->Filters;
+
+	float dtStartLocation[3];
+	UTIL_VecGoldSrcToDetour(StartLocation, dtStartLocation);
+
+	float dtEndLocation[3];
+	UTIL_VecGoldSrcToDetour(EndLocation, dtEndLocation);
+
+	dtPolyRef StartPoly;
+	dtPolyRef EndPoly;
+	float dtStartNearest[3];
+	float dtEndNearest[3];
+
+	float MaxReachableExtents[3] = { 18.0f, 32.0f, 18.0f };
+
+	dtStatus FoundStartPoly = FoundMesh->NavQuery->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
+
+	if (!dtStatusSucceed(FoundStartPoly))
+	{
+		HitResult->bStartOffMesh = true;
+		return ZERO_VECTOR;
+	}
+
+	dtStatus FoundEndPoly = FoundMesh->NavQuery->findNearestPoly(dtEndLocation, MaxReachableExtents, m_Filter, &EndPoly, dtEndNearest);
+
+	if (!dtStatusSucceed(FoundEndPoly))
+	{
+		return ZERO_VECTOR;
+	}
+
+	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
+	if (StartPoly == EndPoly)
+	{
+		HitResult->flFraction = 1.0f;
+		HitResult->bStartOffMesh = false;
+		HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
+		return HitResult->TraceEndPoint;
+	}
+
+	dtPolyRef PolyPath[MAX_PATH_POLY];
+	int PathCount = 0;
+
+	float HitDist;
+	float HitNormal[3];
+
+	FoundMesh->NavQuery->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
+
+	HitResult->flFraction = HitDist;
+	HitResult->bStartOffMesh = false;
+
+	Vector HitLocation = ZERO_VECTOR;
+
+	if (HitDist >= 1.0f)
+	{
+		HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
+		return HitResult->TraceEndPoint;
+	}
+
+	dtVlerp(dtEndNearest, dtStartNearest, dtEndNearest, HitDist);
+
+	HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
+	HitResult->HitNormal = UTIL_VecDetourToGoldSrc(HitNormal);
+}
+
 NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area)
 {
 	NavMesh* ParentNavMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
@@ -529,11 +799,10 @@ NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vect
 
 	// Convert to Detour coordinate system, and adjust so position is the centre of the obstacle rather than bottom
 	float Pos[3];
-
 	UTIL_VecGoldSrcToDetour(Position, Pos);
 
 	dtObstacleRef ObsRef = 0;
-	dtStatus status = ParentNavMesh->tileCache->addObstacle(Pos, Radius, Height, static_cast<int>(Area), &ObsRef);
+	dtStatus status = ParentNavMesh->TileCache->addObstacle(Pos, Radius, Height, static_cast<int>(Area), &ObsRef);
 
 	if (!dtStatusSucceed(status)) { return nullptr; }
 
@@ -562,7 +831,7 @@ bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove)
 		return false;
 	}
 
-	dtStatus status = ParentMesh->tileCache->removeObstacle(ObstacleToRemove->ObstacleRef);
+	dtStatus status = ParentMesh->TileCache->removeObstacle(ObstacleToRemove->ObstacleRef);
 
 	const bool bSuccessful = dtStatusSucceed(status);
 
@@ -575,31 +844,29 @@ bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove)
 	return bSuccessful;
 }
 
-Vector AIMESH_ProjectPointToNavmesh(EAINavMeshIndex TargetNavMesh, const Vector Location, const NavAgentProfile& NavProfile, const Vector Extents)
+Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents)
 {
-	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
+	if (!NavProfile) { return ZERO_VECTOR; }
+
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!FoundMesh) { return ZERO_VECTOR; }
 
-	const dtNavMeshQuery* m_navQuery = FoundMesh->navQuery;
-	const dtNavMesh* m_navMesh = FoundMesh->navMesh;
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
-
-	if (!m_navQuery || !m_navMesh) { return ZERO_VECTOR; }
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
 	Vector PointToProject = Location;
 
-	float pCheckLoc[3];
-	UTIL_VecGoldSrcToDetour(Location, pCheckLoc);
+	float dtCheckLoc[3];
+	UTIL_VecGoldSrcToDetour(Location, dtCheckLoc);
 
 	dtPolyRef FoundPoly;
-	float NavNearest[3];
+	float dtNavNearest[3];
 
-	dtStatus success = m_navQuery->findNearestPoly(pCheckLoc, Extents, m_navFilter, &FoundPoly, NavNearest);
+	dtStatus success = FoundMesh->NavQuery->findNearestPoly(dtCheckLoc, Extents, m_navFilter, &FoundPoly, dtNavNearest);
 
 	if (FoundPoly > 0 && dtStatusSucceed(success))
 	{
-		return UTIL_VecDetourToGoldSrc(NavNearest);
+		return UTIL_VecDetourToGoldSrc(dtNavNearest);
 	}
 	else
 	{
@@ -612,15 +879,15 @@ Vector AIMESH_ProjectPointToNavmesh(EAINavMeshIndex TargetNavMesh, const Vector 
 			PointToProject = (!vIsZero(TraceHit)) ? TraceHit : Location;
 		}
 
-		float pRecheckLoc[3];
+		float dtRecheckLoc[3];
 
-		UTIL_VecGoldSrcToDetour(PointToProject, pRecheckLoc);
+		UTIL_VecGoldSrcToDetour(PointToProject, dtRecheckLoc);
 
-		dtStatus successRetry = m_navQuery->findNearestPoly(pRecheckLoc, Extents, m_navFilter, &FoundPoly, NavNearest);
+		dtStatus successRetry = FoundMesh->NavQuery->findNearestPoly(dtRecheckLoc, Extents, m_navFilter, &FoundPoly, dtNavNearest);
 
 		if (FoundPoly > 0 && dtStatusSucceed(success))
 		{
-			return UTIL_VecDetourToGoldSrc(NavNearest);
+			return UTIL_VecDetourToGoldSrc(dtNavNearest);
 		}
 		else
 		{
@@ -637,7 +904,7 @@ Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const V
 
 	if (!QueriedMesh) { return g_vecZero; }
 
-	const dtNavMeshQuery* m_navQuery = QueriedMesh->navQuery;
+	const dtNavMeshQuery* m_navQuery = QueriedMesh->NavQuery;
 	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
 
 	if (!m_navQuery) { return g_vecZero; }
@@ -695,7 +962,7 @@ Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile,
 		? NavAgentProfile(NavProfile.MeshIndex, FlagFilter, NavProfile.bFlyingProfile)
 		: NavProfile;
 
-	const dtNavMeshQuery* m_navQuery = QueriedMesh->navQuery;
+	const dtNavMeshQuery* m_navQuery = QueriedMesh->NavQuery;
 	const dtQueryFilter* m_navFilter = &SearchProfile.Filters;
 
 	if (!m_navQuery) { return g_vecZero; }
@@ -757,15 +1024,13 @@ Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, 
 	return ZERO_VECTOR;
 }
 
-bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const Vector SearchExtents)
+bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const NavAgentProfile* NavProfile, const Vector SearchExtents)
 {
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
 
 	if (!FoundMesh) { return false; }
 
-	const NavAgentProfile* DefaultProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
-
-	if (!DefaultProfile) { return false; }
+	if (!NavProfile) { return false; }
 
 	float dtCheckLoc[3];
 	UTIL_VecGoldSrcToDetour(Location, dtCheckLoc);
@@ -776,7 +1041,7 @@ bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Locat
 	dtPolyRef FoundPoly;
 	float NavNearest[3];
 
-	dtStatus success = FoundMesh->navQuery->findNearestPoly(dtCheckLoc, dtCheckExtents, &DefaultProfile->Filters, &FoundPoly, NavNearest);
+	dtStatus success = FoundMesh->NavQuery->findNearestPoly(dtCheckLoc, dtCheckExtents, &NavProfile->Filters, &FoundPoly, NavNearest);
 
 	return dtStatusSucceed(success) && FoundPoly > 0;
 }
@@ -789,9 +1054,9 @@ void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTi
 
 	int NumDrawn = 0;
 
-	for (int i = 0; i < FoundMesh->tileCache->getOffMeshCount(); i++)
+	for (int i = 0; i < FoundMesh->TileCache->getOffMeshCount(); i++)
 	{
-		const dtOffMeshConnection* con = FoundMesh->tileCache->getOffMeshConnection(i);
+		const dtOffMeshConnection* con = FoundMesh->TileCache->getOffMeshConnection(i);
 
 		if (con->state == DT_OFFMESH_EMPTY || con->state == DT_OFFMESH_REMOVING) { continue; }
 
@@ -819,11 +1084,11 @@ void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTi
 
 	if (!FoundMesh) { return; }
 
-		int NumObstacles = FoundMesh->tileCache->getObstacleCount();
+		int NumObstacles = FoundMesh->TileCache->getObstacleCount();
 
 		for (int i = 0; i < NumObstacles; i++)
 		{
-			const dtTileCacheObstacle* ObstacleRef = FoundMesh->tileCache->getObstacle(i);
+			const dtTileCacheObstacle* ObstacleRef = FoundMesh->TileCache->getObstacle(i);
 
 			// TODO: Add support for AABB and orientated box types
 			if (!ObstacleRef || ObstacleRef->state != DT_OBSTACLE_PROCESSED || ObstacleRef->type != ObstacleType::DT_OBSTACLE_CYLINDER) { continue; }
