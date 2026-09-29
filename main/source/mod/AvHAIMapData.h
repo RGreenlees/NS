@@ -134,6 +134,8 @@ bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObjec
 
 DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile* NavProfile);
 Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, edict_t* ButtonEdict);
+Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const DynamicMapObject* LiftReference);
+const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, DynamicMapObject* PlatformRef);
 
 bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject);
 

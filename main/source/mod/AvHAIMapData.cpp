@@ -15,6 +15,7 @@
 #include <dlls/plats.h>
 
 #include <dlls/cbase.h>       // Core base entity classes (CBaseEntity)
+#include "AvHAIPlayerUtil.h"
 
 std::vector<DynamicMapObject> DynamicMapObjects;
 
@@ -1788,6 +1789,114 @@ void AIMAP_RemoveAllTempObstaclesFromObject(DynamicMapObject* Object)
 void AIMAP_ClearCachedMapData()
 {
 	DynamicMapObjects.clear();
+}
+
+Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const DynamicMapObject* LiftReference)
+{
+	if (!LiftReference || !NavProfile) { return ZERO_VECTOR; }
+
+	NavOffMeshConnection* NearestConnection = nullptr;
+	float MinDist = 0.0f;
+
+	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!ChosenNavMesh) { return ZERO_VECTOR; }
+
+	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
+	{
+		if (!(it->ConnectionFlags & NAV_FLAG_PLATFORM)) { continue; }
+
+		if (it->LinkedObject == LiftReference->Edict)
+		{
+			const float ThisDist = fminf(vDist3DSq(it->FromLocation, UTIL_GetClosestPointOnEntityToLocation(it->FromLocation, LiftReference->Edict)),
+									vDist3DSq(it->ToLocation, UTIL_GetClosestPointOnEntityToLocation(it->ToLocation, LiftReference->Edict)));
+
+			if (ThisDist < sqrf(100.0f) && (!NearestConnection || ThisDist < MinDist))
+			{
+				NearestConnection = &(*it);
+				MinDist = ThisDist;
+			}
+		}
+	}
+
+	if (NearestConnection)
+	{
+		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference->Edict);
+		NearestPointFromLocation.z = Rider->v.origin.z;
+
+		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference->Edict);
+		NearestPointToLocation.z = Rider->v.origin.z;
+
+		float DistFromLocation = vDist3DSq(NearestConnection->FromLocation, NearestPointFromLocation);
+		float DistToLocation = vDist3DSq(NearestConnection->ToLocation, NearestPointToLocation);
+		return (DistFromLocation < DistToLocation) ? NearestConnection->FromLocation : NearestConnection->ToLocation;
+	}
+	else
+	{
+		Vector NearestProjectedPoint = ZERO_VECTOR;
+		Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference->Edict);
+		float DisembarkHeight = (!FNullEnt(Rider)) ? GetPlayerBottomOfCollisionHull(Rider).z : LiftReference->Edict->v.absmax.z;
+
+		Vector FrontLocation = Vector(LiftReference->Edict->v.absmax.x, LiftCentre.y, DisembarkHeight);
+		Vector RearLocation = Vector(LiftReference->Edict->v.absmin.x, LiftCentre.y, DisembarkHeight);
+		Vector LeftLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmin.y, DisembarkHeight);
+		Vector RightLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmax.y, DisembarkHeight);
+
+		float ProjectWidth = fmaxf((LiftReference->Edict->v.absmax.x - LiftReference->Edict->v.absmin.x) * 0.5f, (LiftReference->Edict->v.absmax.y - LiftReference->Edict->v.absmin.y) * 0.5f);
+		ProjectWidth += 100.0f;
+
+		Vector ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, FrontLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+		{
+			return ProjectedLoc;
+		}
+
+		ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RearLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+		{
+			return ProjectedLoc;
+		}
+
+		ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, LeftLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+		{
+			return ProjectedLoc;
+		}
+
+		ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RightLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
+
+		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+		{
+			return ProjectedLoc;
+		}
+	}
+
+	return ZERO_VECTOR;
+}
+
+const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* PlatformRef)
+{
+	if (!NavProfile || !PlatformRef) { return nullptr; }
+
+	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!ChosenNavMesh) { return nullptr; }
+
+	// TODO: What about cases where multiple off-mesh connections are associated with this?
+	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
+	{
+		const NavOffMeshConnection* ThisConnection = &(*it);
+
+		if (!(it->ConnectionFlags & NAV_FLAG_PLATFORM)) { continue; }
+
+		if (it->LinkedObject == PlatformRef->Edict)
+		{
+			return ThisConnection;
+		}
+	}
 }
 
 void DEBUG_PrintObjectInfo(DynamicMapObject* Object)

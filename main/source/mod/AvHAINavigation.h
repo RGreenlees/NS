@@ -39,9 +39,15 @@ void FadeUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
 void OnosUpdateBotMoveProfile(AvHAIPlayer* pBot, EAIMoveStyle MoveStyle);
 
 
-
+bool AINAV_IsPointDirectlyReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach);
 bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach);
 Vector AINAV_FindClosestNavigablePointTo(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation);
+
+AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer);
+
+// Checks the bot's current path and sees if there are any necessary movement tasks to progress (e.g. press button, break something)
+// Returns true if a movement task was required and added.
+bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer);
 
 // Roughly estimates the movement cost to move between FromLocation and ToLocation. Uses simple formula of distance between points x cost modifier for that movement
 float UTIL_GetPathCostBetweenLocations(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation);
@@ -54,7 +60,7 @@ void NewMove(AvHAIPlayer* pBot);
 // Returns true if the bot has completed the current movement along their path
 bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer);
 bool HasBotCompletedLadderMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool HasBotCompletedWalkMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, SamplePolyAreas MoveArea, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag, SamplePolyAreas NextMoveArea);
+bool AINAV_HasBotCompletedWalkMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool HasBotCompletedFallMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
 bool HasBotCompletedClimbMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, float RequiredClimbHeight, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
 bool HasBotCompletedJumpMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);

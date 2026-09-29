@@ -32,6 +32,15 @@ const AvHAIPathNode* AvHAIPlayer::GetCurrentPathNode() const
 	return &BotNavInfo.CurrentPath[BotNavInfo.CurrentPathPoint];
 }
 
+const AvHAIPathNode* AvHAIPlayer::GetNextPathNode() const
+{
+	if (BotNavInfo.CurrentPath.empty()) { return nullptr; }
+
+	if (BotNavInfo.CurrentPathPoint + 1 >= BotNavInfo.CurrentPath.size()) { return nullptr; }
+
+	return &BotNavInfo.CurrentPath[BotNavInfo.CurrentPathPoint + 1];
+}
+
 bool AvHAIPlayer::HasValidPath() const
 {
 	const AvHAIPathNode* CurrentPathNode = GetCurrentPathNode();
@@ -44,6 +53,11 @@ bool AvHAIPlayer::HasNextPathPoint() const
 	if (BotNavInfo.CurrentPath.empty()) { return false; }
 
 	return (BotNavInfo.CurrentPathPoint + 1) < BotNavInfo.CurrentPath.size();
+}
+
+bool AvHAIPlayer::IsOnGround() const
+{
+	!FNullEnt(Edict) && ((Edict->v.flags & FL_ONGROUND) || IsPlayerOnLadder(Edict));
 }
 
 

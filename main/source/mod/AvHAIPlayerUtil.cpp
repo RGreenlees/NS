@@ -583,7 +583,7 @@ Vector GetPlayerAttemptedMoveDirection(const edict_t* Player)
 int GetPlayerIndex(AvHPlayer* Player)
 {
 	return Player->entindex();
-	
+
 }
 
 bool IsEdictPlayer(const edict_t* edict)
@@ -809,7 +809,7 @@ bool IsPlayerStandingOnPlayer(const edict_t* Player)
 AvHUser3 GetPlayerActiveClass(const AvHPlayer* Player)
 {
 	if (Player->pev->iuser3 == AVH_USER3_ALIEN_EMBRYO) // If player is gestating...
-	{		
+	{
 		switch (Player->GetEvolution()) // If they're targeting a new life form (i.e. not getting upgrade), then return the new life form. Otherwise, return previous
 		{
 			case ALIEN_LIFEFORM_ONE:
@@ -823,7 +823,7 @@ AvHUser3 GetPlayerActiveClass(const AvHPlayer* Player)
 			case ALIEN_LIFEFORM_FIVE:
 				return AVH_USER3_ALIEN_PLAYER5;
 			default: // Player is gestating an upgrade
-				return Player->GetPreviousUser3(); 
+				return Player->GetPreviousUser3();
 		}
 	}
 

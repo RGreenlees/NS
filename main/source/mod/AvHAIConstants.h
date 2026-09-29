@@ -375,15 +375,22 @@ struct AvHAIPathNode
 {
 	Vector FromLocation = ZERO_VECTOR; // Location to move from
 	Vector ToLocation = ZERO_VECTOR; // Location to move to
-	float requiredZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
-	EAINavMovementFlag flag = NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
-	EAINavArea area = NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
-	unsigned int poly = 0; // The nav mesh poly this point resides on
+	float RequiredClimbZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
+	EAINavMovementFlag MovementFlag = NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
+	EAINavArea MovementArea = NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
+	unsigned int MeshPoly = 0; // The nav mesh poly this point resides on
 	edict_t* Platform = nullptr;
 
 	bool IsValidMove() const
 	{
-		return !vEquals(FromLocation, ToLocation) && flag != EAINavMovementFlag::NAV_FLAG_DISABLED && area != EAINavArea::NAV_AREA_NULL;
+		return !vEquals(FromLocation, ToLocation) && MovementFlag != EAINavMovementFlag::NAV_FLAG_DISABLED && MovementArea != EAINavArea::NAV_AREA_NULL;
+	}
+
+	// Returns true if this movement requires careful alignment from start to end point to avoid screwing it up
+	bool IsPrecisionMove() const
+	{
+		EAINavMovementFlag PrecisionFlags = (EAINavMovementFlag::NAV_FLAG_WALLCLIMB | EAINavMovementFlag::NAV_FLAG_LADDER | EAINavMovementFlag::NAV_FLAG_JUMP | EAINavMovementFlag::NAV_FLAG_FALL);
+		return EnumHasAnyFlags(MovementFlag, PrecisionFlags);
 	}
 };
 typedef std::vector<AvHAIPathNode> AvHAIPath;
@@ -462,15 +469,34 @@ struct AvHAIMoveTask
 	edict_t* TaskTarget = nullptr;
 	edict_t* TriggerToActivate = nullptr;
 	bool bPathGenerated = false;
+
+	void Clear()
+	{
+		TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
+		TaskLocation = ZERO_VECTOR;
+		TaskTarget = nullptr;
+		TriggerToActivate = nullptr;
+		bPathGenerated = false;
+	}
 };
 typedef std::vector<AvHAIMoveTask> AIMoveTaskList;
 
 struct AvHAIStuckTracker
 {
+	float LastStuckCheckTime = 0.0f; // Last time the bot checked if it had successfully moved
+	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
 	Vector LastBotPosition = g_vecZero;
 	Vector MoveDestination = g_vecZero;
-	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
 	bool bPathFollowFailed = false;
+
+	void Clear()
+	{
+		LastStuckCheckTime = 0.0f;
+		TotalStuckTime = 0.0f;
+		LastBotPosition = g_vecZero;
+		MoveDestination = g_vecZero;
+		bPathFollowFailed = false;
+	}
 };
 
 // Contains the bot's current navigation info, such as current path
@@ -519,10 +545,27 @@ struct AvHAINavStatus
 
 	AvHAIStuckTracker StuckInfo;
 
-	unsigned int SpecialMovementFlags = 0; // Any special movement flags required for the current path (e.g. needs to pick up an item)
+	EAINavMovementFlag SpecialMovementFlags = EAINavMovementFlag::NAV_FLAG_NONE; // Any special movement flags required for the current path (e.g. needs to pick up an item)
 
 	AIMoveTaskList MovementTasks;
 	AvHAIMoveTask UnstuckTask;
+
+	void Reset()
+	{
+		CurrentPath.clear();
+		CurrentPathPoint = 0;
+		StuckInfo.Clear();
+		MovementTasks.clear();
+		UnstuckTask.Clear();
+	}
+
+	void ClearPath()
+	{
+		CurrentPath.clear();
+		CurrentPathPoint = 0;
+		MovementTasks.clear();
+		UnstuckTask.Clear();
+	}
 };
 
 enum class EAIOrderPurpose
@@ -654,9 +697,14 @@ struct AvHAIPlayer
 
 	int DebugValue = 0; // Used for debugging the bot
 
+	bool IsValid() const { return !FNullEnt(Edict); }
 	bool HasValidPath() const;
 	const AvHAIPathNode* GetCurrentPathNode() const;
+	const AvHAIPathNode* GetNextPathNode() const;
 	bool HasNextPathPoint() const;
+	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
+	bool IsOnGround() const;
+	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
 };
 
 struct AvHAISquad
