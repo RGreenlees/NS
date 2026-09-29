@@ -257,7 +257,7 @@ Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const 
 	return ProjectedPoint;
 }
 
-bool AINAV_FindPathClosestToPoint(AvHAIPlayer* AIPlayer, const Vector FromLocation, const Vector ToLocation, vector<AvHAIPathNode>& ResultPath, float MaxAcceptableDistance)
+bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector FromLocation, const Vector ToLocation, vector<AvHAIPathNode>& ResultPath, float MaxAcceptableDistance)
 {
 	ResultPath.clear();
 
@@ -530,7 +530,7 @@ bool AINAV_FindPathClosestToPoint(AvHAIPlayer* AIPlayer, const Vector FromLocati
 	return true;
 }
 
-Vector AINAV_GetBotPathStartPoint(AvHAIPlayer* AIPlayer, const Vector& Destination)
+Vector AINAV_GetBotPathStartPoint(const AvHAIPlayer* AIPlayer, const Vector& Destination)
 {
 	if (!AIPlayer || !AIPlayer->IsValid()) { return ZERO_VECTOR; }
 
@@ -968,8 +968,69 @@ bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer)
 
 		if (!FutureNode || !FutureNode->IsValidMove()) { return false; }
 
+		if (FutureNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->Platform);
 
+			if (!PlatformObject || !AIMAP_PlatformNeedsActivating(AIPlayer, PlatformObject, FutureNode->FromLocation, FutureNode->ToLocation)) { continue; }
+
+			const DynamicMapObjectStop* DesiredStartStop;
+			const DynamicMapObjectStop* DesiredEndStop;
+
+			AIMAP_GetDesiredPlatformStops(PlatformObject, FutureNode->FromLocation, FutureNode->ToLocation, DesiredStartStop, DesiredEndStop);
+
+			if (!DesiredStartStop || !DesiredEndStop) { continue; }
+
+			const DynamicMapObject* Trigger = nullptr;
+
+			if (vEquals(UTIL_GetCentreOfEntity(PlatformObject->Edict), DesiredStartStop->StopLocation, 5.0f))
+			{
+				Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformObject, FutureNode->FromLocation.z + 32.0f);
+			}
+
+			if (!Trigger)
+			{
+				Trigger = AIMAP_GetBestTriggerForObject(PlatformObject, pBot->Edict, pBot->BotNavInfo.NavProfile);
+
+				if (Trigger)
+				{
+					if (PlatformObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+					{
+						NAV_AddUseMovementTask(pBot, Trigger->Edict, Trigger);
+					}
+					else
+					{
+						NAV_AddMoveMovementTask(pBot, UTIL_GetButtonFloorLocation(pBot->BotNavInfo.NavProfile, pBot->Edict->v.origin, Trigger->Edict), nullptr);
+					}
+					return;
+				}
+			}
+		}
 	}
+}
+
+void AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate)
+{
+	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
+
+	if (vIsZero(MoveLocation)) { return; }
+
+	if (vDist2DSq(pBot->CurrentFloorPosition, MoveLocation) < sqrf(GetPlayerRadius(pBot->Edict)) && fabsf(pBot->CollisionHullBottomLocation.z - MoveLocation.z) < 50.0f) { return; }
+
+	AvHAIMoveTask NewTask;
+
+	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
+	NewTask.TaskLocation = MoveLocation;
+
+	vector<AvHAIPathNode> Path;
+	const bool bFoundPath = AINAV_FindPathClosestToPoint(AIPlayer, pBot->CurrentFloorPosition, MoveLocation, Path, 200.0f);
+
+	if (dtStatusSucceed(PathStatus) && Path.size() > 0)
+	{
+		NewTask.TaskLocation = Path.back().Location;
+	}
+
+	pBot->BotNavInfo.MovementTasks.push_back(NewTask);
 }
 
 AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer)

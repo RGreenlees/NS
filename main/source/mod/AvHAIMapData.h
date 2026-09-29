@@ -70,6 +70,31 @@ struct DynamicMapObject
 	bool bIsActive = true; // If false, means this trigger or object has a dependent multisource or env_global which have not been satisfied yet, therefore this object is inert.
 	int NumTimesActivated = 0; // How many times this object has been triggered
 
+	const DynamicMapObjectStop* GetCurrentStop() const
+	{
+		if (NextStopIndex >= StopPoints.size()) { return nullptr; }
+
+		return &StopPoints[NextStopIndex];
+	}
+
+	const DynamicMapObjectStop* GetNextStop() const
+	{
+		if (StopPoints.size() <= 1) { return nullptr; }
+
+		return (NextStopIndex + 1 >= StopPoints.size())
+			? &StopPoints[0]
+			: &StopPoints[NextStopIndex + 1];
+	}
+
+	const DynamicMapObjectStop* GetPreviousStop() const
+	{
+		if (StopPoints.size() <= 1) { return nullptr; }
+
+		return (NextStopIndex - 1 < 0)
+			? &StopPoints[StopPoints.size() - 1]
+			: &StopPoints[NextStopIndex - 1];
+	}
+
 	void ClearObject()
 	{
 		EdictIndex = -1;
@@ -135,11 +160,16 @@ bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObjec
 DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile* NavProfile);
 Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, edict_t* ButtonEdict);
 Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const DynamicMapObject* LiftReference);
-const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, DynamicMapObject* PlatformRef);
+const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* PlatformRef);
+bool AIMAP_PlatformNeedsActivating(const AvHAIPlayer* AIPlayer, const DynamicMapObject* Platform, const Vector& EmbarkPoint, const Vector& DisembarkPoint);
+void AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, const DynamicMapObjectStop* EmbarkStop, const DynamicMapObjectStop* DisembarkStop);
+bool AIMAP_CanBoardPlatform(const AvHAIPlayer* AIPlayer, const DynamicMapObject* Platform, const Vector& BoardingPoint, const Vector& DesiredStop);
+const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapObject* Platform, float LiftHeight, const Vector& PlatformPosition = ZERO_VECTOR);
+const DynamicMapObject* AIMAP_GetBestTriggerForObject(const DynamicMapObject* ObjectToActivate, const AvHAIPlayer* PlayerToTrigger, const NavAgentProfile* NavProfile);
 
-bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector StartLoc, const Vector EndLoc, DynamicMapObject* SearchObject);
+bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector StartLoc, const Vector EndLoc, const DynamicMapObject* SearchObject);
 
-DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject);
+DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, const DynamicMapObject* SearchObject, const DynamicMapObject* IgnoreObject);
 
 // Removes all temporary obstacles from the map
 void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area);
