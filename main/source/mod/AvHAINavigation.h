@@ -125,7 +125,10 @@ edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, bot_path_node* Pa
 edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, edict_t* SearchBreakable);
 
 
-Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, edict_t* ButtonEdict);
+Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, const edict_t* ButtonEdict);
+
+void AINAV_AddUseMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate);
+void AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate)
 
 // Clears all tracking of a bot's stuck status
 void ClearBotStuck(AvHAIPlayer* pBot);
@@ -174,9 +177,9 @@ Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const 
 
 Vector UTIL_FindHighestSuccessfulTracePoint(const Vector TraceFrom, const Vector TargetPoint, const Vector NextPoint, const float IterationStep, const float MinIdealHeight, const float MaxHeight);
 
-bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector FromLocation, const Vector ToLocation, vector<AvHAIPathNode>& ResultPath, float MaxAcceptableDistance);
+bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, AvHAIPath* ResultPath, float MaxAcceptableDistance);
 
-Vector AINAV_GetBotPathStartPoint(const AvHAIPlayer* AIPlayer, const Vector& Destination);
+Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination);
 
 dtStatus DEBUG_TestFindPath(const nav_profile& NavProfile, const Vector FromLocation, const Vector ToLocation, vector<bot_path_node>& path, float MaxAcceptableDistance);
 

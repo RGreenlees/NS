@@ -14,9 +14,9 @@ edict_t* UTIL_TraceEntityHull(const edict_t* pEdict, const Vector& start, const 
 Vector UTIL_GetTraceHitLocation(const Vector Start, const Vector End);
 Vector UTIL_GetHullTraceHitLocation(const Vector Start, const Vector End, int HullNum);
 
-Vector UTIL_GetGroundLocation(const Vector CheckLocation);
 Vector UTIL_GetCentreOfEntity(const edict_t* Entity);
 Vector UTIL_GetFloorUnderEntity(const edict_t* Edict);
+Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity = nullptr);
 
 // Returns the name of the supplied location on the map. This will be the same as what appears in the bottom left of the player's screen
 string UTIL_GetLocationName(Vector Location);

@@ -25,20 +25,20 @@ extern edict_t* DebugBots[MAX_PLAYERS];
 
 const AvHAIPathNode* AvHAIPlayer::GetCurrentPathNode() const
 {
-	if (BotNavInfo.CurrentPath.empty()) { return nullptr; }
+	if (BotNavInfo.CurrentPath.PathNodes.empty()) { return nullptr; }
 
-	if (BotNavInfo.CurrentPathPoint >= BotNavInfo.CurrentPath.size()) { return nullptr; }
+	if (BotNavInfo.CurrentPath.CurrentNodeIndex >= BotNavInfo.CurrentPath.PathNodes.size()) { return nullptr; }
 
-	return &BotNavInfo.CurrentPath[BotNavInfo.CurrentPathPoint];
+	return &BotNavInfo.CurrentPath.PathNodes[BotNavInfo.CurrentPath.CurrentNodeIndex];
 }
 
 const AvHAIPathNode* AvHAIPlayer::GetNextPathNode() const
 {
-	if (BotNavInfo.CurrentPath.empty()) { return nullptr; }
+	if (BotNavInfo.CurrentPath.PathNodes.empty()) { return nullptr; }
 
-	if (BotNavInfo.CurrentPathPoint + 1 >= BotNavInfo.CurrentPath.size()) { return nullptr; }
+	if (BotNavInfo.CurrentPath.CurrentNodeIndex + 1 >= BotNavInfo.CurrentPath.PathNodes.size()) { return nullptr; }
 
-	return &BotNavInfo.CurrentPath[BotNavInfo.CurrentPathPoint + 1];
+	return &BotNavInfo.CurrentPath.PathNodes[BotNavInfo.CurrentPath.CurrentNodeIndex + 1];
 }
 
 bool AvHAIPlayer::HasValidPath() const
@@ -50,9 +50,7 @@ bool AvHAIPlayer::HasValidPath() const
 
 bool AvHAIPlayer::HasNextPathPoint() const
 {
-	if (BotNavInfo.CurrentPath.empty()) { return false; }
-
-	return (BotNavInfo.CurrentPathPoint + 1) < BotNavInfo.CurrentPath.size();
+	return ((BotNavInfo.CurrentPath.CurrentNodeIndex + 1) < BotNavInfo.CurrentPath.PathNodes.size());
 }
 
 bool AvHAIPlayer::IsOnGround() const

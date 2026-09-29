@@ -146,6 +146,11 @@ struct NavAgentProfile
 		Filters.setExcludeFlags(0);
 		Filters.setIncludeFlags(InFlags);
 	}
+
+	bool IsValid() const
+	{
+		return MeshIndex != NAV_MESH_INVALID;
+	}
 };
 
 // Agent profile definition. Holds all information an agent needs when querying the nav mesh

@@ -83,22 +83,6 @@ Vector UTIL_GetHullTraceHitLocation(const Vector Start, const Vector End, int Hu
 	return Start;
 }
 
-Vector UTIL_GetGroundLocation(const Vector CheckLocation)
-{
-	if (vIsZero(CheckLocation)) { return g_vecZero; }
-
-	TraceResult hit;
-
-	UTIL_TraceHull(CheckLocation, (CheckLocation - Vector(0.0f, 0.0f, 1000.0f)), ignore_monsters, head_hull, nullptr, &hit);
-
-	if (hit.flFraction < 1.0f)
-	{
-		return hit.vecEndPos;
-	}
-
-	return CheckLocation;
-}
-
 Vector UTIL_GetCentreOfEntity(const edict_t* Entity)
 {
 	if (!Entity) { return g_vecZero; }
@@ -109,20 +93,22 @@ Vector UTIL_GetFloorUnderEntity(const edict_t* Edict)
 {
 	if (FNullEnt(Edict)) { return g_vecZero; }
 
+	return UTIL_FindFloor(Edict->v.origin);
+}
+
+Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity)
+{
 	TraceResult hit;
 
-	Vector TraceStart = UTIL_GetCentreOfEntity(Edict) + Vector(0.0f, 0.0f, 1.0f);
+	Vector TraceStart = CheckLocation + Vector(0.0f, 0.0f, 1.0f);
 	Vector TraceEnd = (TraceStart - Vector(0.0f, 0.0f, 1000.0f));
 
-	UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
-
-	const edict_t* HitEntity = Edict;
+	UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, (IgnoreEntity) ? IgnoreEntity->v.pContainingEntity : nullptr, &hit);
 
 	while (hit.flFraction < 1.0f)
 	{
 		if (IsEdictPlayer(hit.pHit) || IsEdictStructure(hit.pHit) || IsEdictHive(hit.pHit))
 		{
-			HitEntity = hit.pHit;
 			TraceStart.z = hit.pHit->v.origin.z;
 			TraceEnd = (TraceStart - Vector(0.0f, 0.0f, 1000.0f));
 			UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, hit.pHit->v.pContainingEntity, &hit);
@@ -133,7 +119,7 @@ Vector UTIL_GetFloorUnderEntity(const edict_t* Edict)
 		}
 	}
 
-	return HitEntity->v.origin;
+	return CheckLocation;
 }
 
 string UTIL_GetLocationName(Vector Location)

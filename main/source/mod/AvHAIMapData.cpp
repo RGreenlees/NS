@@ -913,7 +913,7 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 		TestProfile.MeshIndex = ThisConnection->NavMeshIndex;
 
-		DynamicMapObject* ThisTrigger = AIMAP_GetBestTriggerForObject(Object, ThisConnection->FromLocation, &TestProfile);
+		const DynamicMapObject* ThisTrigger = AIMAP_GetBestTriggerForObject(&TestProfile, Object, ThisConnection->FromLocation);
 
 		if (!ThisTrigger)
 		{
@@ -1094,18 +1094,19 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector
 		return false;
 	}
 
-	vector<AvHAIPathNode> TestPath;
-	TestPath.clear();
+	AvHAIPath TestPath;
 
 	// Now we find a path backwards from the valid nav mesh point to our location, trying to get as close as we can to it
 
-	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartLoc, ValidNavmeshPoint, TestPath, 50.0f);
+	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartLoc, ValidNavmeshPoint, &TestPath, 50.0f);
 
 	if (bFoundPath)
 	{
-		for (auto it = TestPath.begin(); it != TestPath.end(); it++)
+		for (int32 i = 0; i < TestPath.GetPathSize(); i++)
 		{
-			const AvHAIPathNode* ThisPathNode = &(*it);
+			const AvHAIPathNode* ThisPathNode = TestPath.GetNodeAtIndex(i);
+
+			if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
 
 			if (AIMAP_GetObjectBlockingPathPoint(ThisPathNode->FromLocation, ThisPathNode->ToLocation, ThisPathNode->MovementFlag, SearchObject, nullptr) != nullptr)
 			{
@@ -1244,101 +1245,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 	return nullptr;
 }
 
-DynamicMapObject* AIMAP_GetBestTriggerForObject(DynamicMapObject* ObjectToActivate, Vector ActivateLocation, const NavAgentProfile* NavProfile)
-{
-	if (!ObjectToActivate || ObjectToActivate->Triggers.size() == 0 || vIsZero(ActivateLocation)) { return nullptr; }
-
-	DynamicMapObject* WinningTrigger = nullptr;
-
-	Vector FromLoc = ActivateLocation;
-
-	float MinDist = FLT_MAX;
-
-	// This object is triggered by itself, such as a door set to USE_ONLY or a func_plat which needs to be touched to activate
-	if (ObjectToActivate->Triggers.size() == 1 && ObjectToActivate->Triggers[0] == ObjectToActivate->Edict)
-	{
-		return AIMAP_GetDynamicObjectByEdict(ObjectToActivate->Triggers[0]);
-	}
-
-	for (auto it = ObjectToActivate->Triggers.begin(); it != ObjectToActivate->Triggers.end(); it++)
-	{
-		DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
-
-		if (!ThisTrigger || !ThisTrigger->bIsActive) { continue; }
-
-		// For triggers we can activate from a distance and are in our LOS, short-cut and add them to the list
-		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK)
-		{
-			TraceResult hit;
-
-			UTIL_TraceLine(ActivateLocation + Vector(0.0f, 0.0f, 5.0f), UTIL_GetCentreOfEntity(ThisTrigger->Edict), ignore_monsters, ignore_glass, nullptr, &hit);
-
-			if (hit.pHit == ThisTrigger->Edict)
-			{
-				float ThisDist = vDist3DSq(FromLoc, UTIL_GetCentreOfEntity(ThisTrigger->Edict));
-
-				if (ThisDist < MinDist)
-				{
-					WinningTrigger = ThisTrigger;
-					MinDist = ThisDist;
-				}
-
-				continue;
-			}
-		}
-
-		Vector TriggerLocation = AIMAP_GetButtonFloorLocation(NavProfile, FromLoc, ThisTrigger->Edict);
-
-		if (vIsZero(TriggerLocation))
-		{
-			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
-		}
-
-		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
-
-		if (!AINAV_IsPointReachable(&NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
-
-		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
-		{
-			if (AIMAP_IsPathBlockedByObject(NavProfile, FromLoc, TriggerLocation, ObjectToActivate)) { continue; }
-		}
-		else
-		{
-			vector<AvHAIPathNode> CheckPath;
-
-			dtStatus PathFindStatus = FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, CheckPath, MaxDist);
-
-			if (!dtStatusSucceed(PathFindStatus)) { continue; }
-
-			bool bOtherSideOfLift = false;
-
-			for (auto pathIt = CheckPath.begin(); pathIt != CheckPath.end(); pathIt++)
-			{
-				if (pathIt->flag & NAV_FLAG_PLATFORM)
-				{
-					if (AIMAP_GetClosestPlatformToPoints(pathIt->FromLocation, pathIt->ToLocation) == ObjectToActivate)
-					{
-						bOtherSideOfLift = true;
-						break;
-					}
-				}
-			}
-
-			if (bOtherSideOfLift) { continue; }
-		}
-
-		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
-
-		if (ThisDist < MinDist)
-		{
-			WinningTrigger = ThisTrigger;
-		}
-	}
-
-	return WinningTrigger;
-}
-
-Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, edict_t* ButtonEdict)
+Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, const edict_t* ButtonEdict)
 {
 	if (UTIL_IsPointInSwimArea(UserLocation))
 	{
@@ -1370,7 +1277,7 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vec
 		return ClosestPoint;
 	}
 
-	Vector ButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile->MeshIndex, ClosestPoint, NavProfile, Vector(100.0f, 100.0f, 100.0f));
+	Vector ButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile, ClosestPoint, Vector(100.0f, 100.0f, 100.0f));
 
 	if (vIsZero(ButtonAccessPoint))
 	{
@@ -1404,7 +1311,7 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vec
 		NewProjection = ClosestPoint + Vector(0.0f, 0.0f, 100.0f);
 	}
 
-	Vector NewButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile->MeshIndex, NewProjection, NavProfile);
+	Vector NewButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile, NewProjection);
 
 	if (vIsZero(NewButtonAccessPoint))
 	{
@@ -2041,9 +1948,103 @@ void AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Ve
 	}
 }
 
-const DynamicMapObject* AIMAP_GetBestTriggerForObject(const DynamicMapObject* ObjectToActivate, const AvHAIPlayer* PlayerToTrigger, const NavAgentProfile* NavProfile)
+Vector AIMAP_GetTriggerFloorLocation(const NavAgentProfile* NavProfile, const DynamicMapObject* TriggerObject, const Vector& UserLocation)
 {
-	if (!ObjectToActivate || ObjectToActivate->Triggers.size() == 0 || !PlayerToTrigger || !PlayerToTrigger->IsValid()) { return nullptr; }
+	if (!NavProfile || !NavProfile->IsValid()) { return ZERO_VECTOR; }
+	if (!TriggerObject || !TriggerObject->IsValid()) { return ZERO_VECTOR; }
+
+	const edict_t* TriggerEdict = TriggerObject->Edict;
+
+	if (UTIL_IsPointInSwimArea(UserLocation))
+	{
+		Vector NearestTriggerPoint = UTIL_GetClosestPointOnEntityToLocation(UserLocation, TriggerEdict);
+
+		TraceResult Hit;
+
+		UTIL_TraceHull(UserLocation, NearestTriggerPoint, ignore_monsters, head_hull, nullptr, &Hit);
+
+		if (Hit.fInWater)
+		{
+			if (vDist3DSq(NearestTriggerPoint, Hit.vecEndPos) < sqrf(max_player_use_reach)) { return Hit.vecEndPos; }
+		}
+	}
+
+	Vector ClosestPoint = ZERO_VECTOR;
+
+	if (TriggerEdict->v.size.x > 64.0f || TriggerEdict->v.size.y > 64.0f)
+	{
+		ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(UserLocation, TriggerEdict);
+	}
+	else
+	{
+		ClosestPoint = UTIL_GetCentreOfEntity(TriggerEdict);
+	}
+
+	if (UTIL_IsPointInSwimArea(ClosestPoint))
+	{
+		return ClosestPoint;
+	}
+
+	Vector ButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile, ClosestPoint, Vector(100.0f, 100.0f, 100.0f));
+
+	if (vIsZero(ButtonAccessPoint))
+	{
+		ButtonAccessPoint = ClosestPoint;
+	}
+
+	Vector PlayerAccessLoc = ButtonAccessPoint;
+
+	if (ButtonAccessPoint.z > ClosestPoint.z)
+	{
+		PlayerAccessLoc.z += 18.0f;
+	}
+	else
+	{
+		PlayerAccessLoc.z += 36.0f;
+	}
+
+	if (fabsf(PlayerAccessLoc.z - ClosestPoint.z) <= max_player_use_reach)
+	{
+		return ButtonAccessPoint;
+	}
+
+	Vector NewProjection = ClosestPoint;
+
+	if (ButtonAccessPoint.z > ClosestPoint.z)
+	{
+		NewProjection = ClosestPoint - Vector(0.0f, 0.0f, 100.0f);
+	}
+	else
+	{
+		NewProjection = ClosestPoint + Vector(0.0f, 0.0f, 100.0f);
+	}
+
+	Vector NewButtonAccessPoint = AIMESH_ProjectPointToNavmesh(NavProfile, NewProjection);
+
+	if (vIsZero(NewButtonAccessPoint))
+	{
+		NewButtonAccessPoint = ClosestPoint;
+	}
+	else
+	{
+		if (UTIL_IsPointInSwimArea(NewButtonAccessPoint))
+		{
+			Vector NewClosestPoint = NewButtonAccessPoint + ((ClosestPoint - NewButtonAccessPoint) * 0.95f);
+
+			if (UTIL_IsPointInSwimArea(NewClosestPoint))
+			{
+				NewButtonAccessPoint = NewClosestPoint;
+			}
+		}
+	}
+
+	return NewButtonAccessPoint;
+}
+
+const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const AvHAIPlayer* PlayerToTrigger)
+{
+	if (!PlayerToTrigger || !PlayerToTrigger->IsValid()) { return nullptr; }
+	if (!ObjectToActivate || ObjectToActivate->GetNumTriggers() == 0) { return nullptr; }
 
 	const DynamicMapObject* WinningTrigger = nullptr;
 
@@ -2094,21 +2095,120 @@ const DynamicMapObject* AIMAP_GetBestTriggerForObject(const DynamicMapObject* Ob
 		}
 		else
 		{
-			vector<AvHAIPathNode> CheckPath;
+			AvHAIPath CheckPath;
 
-			const bool bSuccess = AINAV_FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, CheckPath, MaxDist);
+			const bool bSuccess = AINAV_FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, &CheckPath, MaxDist);
 
 			if (!bSuccess) { continue; }
 
 			bool bOtherSideOfLift = false;
 
-			for (auto PathIt = CheckPath.begin(); PathIt != CheckPath.end(); PathIt++)
+			for (int32 i = 0; i < CheckPath.GetPathSize(); i++)
 			{
-				const AvHAIPathNode* PathNode = &(*PathIt);
+				const AvHAIPathNode* PathNode = CheckPath.GetNodeAtIndex(i);
+
+				if (!PathNode || !PathNode->IsValidMove()) { break; }
 
 				if (!EnumHasAnyFlags(PathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
 				{
 					if (AIMAP_GetClosestPlatformToPoints(PathNode->FromLocation, PathNode->ToLocation) == ObjectToActivate)
+					{
+						bOtherSideOfLift = true;
+						break;
+					}
+				}
+			}
+
+			if (bOtherSideOfLift) { continue; }
+		}
+
+		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
+
+		if (ThisDist < MinDist)
+		{
+			WinningTrigger = ThisTrigger;
+		}
+	}
+
+	return WinningTrigger;
+}
+
+const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const Vector& ActivateLocation)
+{
+	if (!NavProfile || !NavProfile->IsValid()) { return nullptr; }
+	if (!ObjectToActivate || ObjectToActivate->IsValid() || ObjectToActivate->GetNumTriggers() == 0) { return nullptr; }
+	if (vIsZero(ActivateLocation)) { return nullptr; }
+
+	const DynamicMapObject* WinningTrigger = nullptr;
+
+	Vector FromLoc = ActivateLocation;
+
+	float MinDist = FLT_MAX;
+
+	// This object is triggered by itself, such as a door set to USE_ONLY or a func_plat which needs to be touched to activate
+	if (ObjectToActivate->Triggers.size() == 1 && ObjectToActivate->Triggers[0] == ObjectToActivate->Edict) { return AIMAP_GetDynamicObjectByEdict(ObjectToActivate->Triggers[0]); }
+
+	for (auto it = ObjectToActivate->Triggers.begin(); it != ObjectToActivate->Triggers.end(); it++)
+	{
+		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
+
+		if (!ThisTrigger || !ThisTrigger->bIsActive) { continue; }
+
+		// For triggers we can activate from a distance and are in our LOS, short-cut and add them to the list
+		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK)
+		{
+			TraceResult hit;
+
+			UTIL_TraceLine(ActivateLocation + Vector(0.0f, 0.0f, 5.0f), UTIL_GetCentreOfEntity(ThisTrigger->Edict), ignore_monsters, ignore_glass, nullptr, &hit);
+
+			if (hit.pHit == ThisTrigger->Edict)
+			{
+				float ThisDist = vDist3DSq(FromLoc, UTIL_GetCentreOfEntity(ThisTrigger->Edict));
+
+				if (ThisDist < MinDist)
+				{
+					WinningTrigger = ThisTrigger;
+					MinDist = ThisDist;
+				}
+
+				continue;
+			}
+		}
+
+		Vector TriggerLocation = AIMAP_GetButtonFloorLocation(NavProfile, FromLoc, ThisTrigger->Edict);
+
+		if (vIsZero(TriggerLocation))
+		{
+			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
+		}
+
+		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
+
+		if (!UTIL_PointIsReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
+
+		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
+		{
+			if (AIMAP_IsPathBlockedByObject(NavProfile, FromLoc, TriggerLocation, ObjectToActivate)) { continue; }
+		}
+		else
+		{
+			AvHAIPath CheckPath;
+
+			bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, &CheckPath, MaxDist);
+
+			if (!bFoundPath) { continue; }
+
+			bool bOtherSideOfLift = false;
+
+			for (int32 i = 0; i < CheckPath.GetPathSize(); i++)
+			{
+				const AvHAIPathNode* ThisPathNode = CheckPath.GetNodeAtIndex(i);
+
+				if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
+
+				if (EnumHasAnyFlags(ThisPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+				{
+					if (AIMAP_GetClosestPlatformToPoints(ThisPathNode->FromLocation, ThisPathNode->ToLocation) == ObjectToActivate)
 					{
 						bOtherSideOfLift = true;
 						break;

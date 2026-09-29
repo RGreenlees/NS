@@ -393,7 +393,85 @@ struct AvHAIPathNode
 		return EnumHasAnyFlags(MovementFlag, PrecisionFlags);
 	}
 };
-typedef std::vector<AvHAIPathNode> AvHAIPath;
+typedef std::vector<AvHAIPathNode> AvHAIPathList;
+
+struct AvHAIPath
+{
+	AvHAIPathList PathNodes;
+
+	EAINavMovementFlag RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
+
+	uint32 CurrentNodeIndex = 0;
+
+	void Clear()
+	{
+		PathNodes.clear();
+		RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
+		CurrentNodeIndex = 0;
+	}
+
+	bool IsValidPath() const
+	{
+		return CurrentNodeIndex < PathNodes.size();
+	}
+
+	const AvHAIPathNode* GetCurrentPathNode() const
+	{
+		if (IsValidPath()) { return nullptr; }
+
+		return &PathNodes[CurrentNodeIndex];
+	}
+
+	const AvHAIPathNode* GetNextPathNode() const
+	{
+		if (IsValidPath()) { return nullptr; }
+
+		if (CurrentNodeIndex + 1 < PathNodes.size())
+		{
+			return &PathNodes[CurrentNodeIndex + 1];
+		}
+
+		return nullptr;
+	}
+
+	const AvHAIPathNode* GetPreviousPathNode() const
+	{
+		if (IsValidPath() || CurrentNodeIndex == 0) { return nullptr; }
+
+		if (CurrentNodeIndex - 1 < PathNodes.size())
+		{
+			return &PathNodes[CurrentNodeIndex - 1];
+		}
+
+		return nullptr;
+	}
+
+	const AvHAIPathNode* GetNodeAtIndex(int32 Index) const
+	{
+		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
+
+		return &PathNodes[Index];
+	}
+
+	AvHAIPathNode* GetNodeAtIndex_Mutable(int32 Index)
+	{
+		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
+
+		return &PathNodes[Index];
+	}
+
+	int32 GetPathSize() const
+	{
+		return PathNodes.size();
+	}
+
+	Vector GetFinalDestination() const
+	{
+		if (!IsValidPath()) { return ZERO_VECTOR; }
+
+		return PathNodes[PathNodes.size() - 1].ToLocation;
+	}
+};
 
 // Represents a bot's current understanding of an enemy player's status
 struct AvHAIEnemyStatus
@@ -466,8 +544,8 @@ struct AvHAIMoveTask
 {
 	EAIMovementTaskType TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
 	Vector TaskLocation = ZERO_VECTOR;
-	edict_t* TaskTarget = nullptr;
-	edict_t* TriggerToActivate = nullptr;
+	const edict_t* TaskTarget = nullptr;
+	const edict_t* TriggerToActivate = nullptr;
 	bool bPathGenerated = false;
 
 	void Clear()
@@ -503,7 +581,6 @@ struct AvHAIStuckTracker
 struct AvHAINavStatus
 {
 	AvHAIPath CurrentPath; // Bot's path nodes
-	unsigned int CurrentPathPoint = 0;
 
 	Vector TargetDestination = ZERO_VECTOR; // Desired destination
 	Vector ActualMoveDestination = ZERO_VECTOR; // Actual destination on nav mesh
@@ -552,7 +629,7 @@ struct AvHAINavStatus
 
 	void Reset()
 	{
-		CurrentPath.clear();
+		CurrentPath.Clear();
 		CurrentPathPoint = 0;
 		StuckInfo.Clear();
 		MovementTasks.clear();
@@ -561,7 +638,7 @@ struct AvHAINavStatus
 
 	void ClearPath()
 	{
-		CurrentPath.clear();
+		CurrentPath.Clear();
 		CurrentPathPoint = 0;
 		MovementTasks.clear();
 		UnstuckTask.Clear();

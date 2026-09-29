@@ -257,15 +257,13 @@ Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const 
 	return ProjectedPoint;
 }
 
-bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector FromLocation, const Vector ToLocation, vector<AvHAIPathNode>& ResultPath, float MaxAcceptableDistance)
+bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, AvHAIPath* ResultPath, float MaxAcceptableDistance)
 {
-	ResultPath.clear();
+	ResultPath->Clear();
 
-	if (!AIPlayer || !AIPlayer->IsValid()) { return false; }
+	if (!NavProfile || !NavProfile->IsValid()) { return false; }
 
-	const NavAgentProfile* NavProfile = AIPlayer->GetNavProfile();
-
-	if (!NavProfile || vEquals(FromLocation, ToLocation)) { return false; }
+	if (vEquals(FromLocation, ToLocation)) { return false; }
 
 	// First check: if we're swimming, see if we can just swim directly to it!
 	if (UTIL_IsPointInSwimArea(FromLocation) && UTIL_IsPointInSwimArea(ToLocation))
@@ -285,7 +283,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 				StartPoint.MovementArea = EAINavArea::NAV_AREA_WALK;
 				StartPoint.MovementFlag = EAINavMovementFlag::NAV_FLAG_WALK;
 
-				ResultPath.push_back(StartPoint);
+				ResultPath->PathNodes.push_back(StartPoint);
 
 				return true;
 			}
@@ -298,7 +296,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 
 	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
-	Vector FromFloorLocation = AINAV_GetBotPathStartPoint(AIPlayer, ToLocation);
+	Vector FromFloorLocation = AINAV_FindNewPathStartPoint(NavProfile, ResultPath, FromLocation, ToLocation);
 
 	const DynamicMapObject* CurrentPlatform = AIMAP_GetDynamicObjectByEdict(pBot->Edict->v.groundentity);
 	bool bMustDisembarkLiftFirst = false;
@@ -430,7 +428,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 	int nIndex = 0;
 	TraceResult hit;
 
-	AIPlayer->BotNavInfo.SpecialMovementFlags = EAINavMovementFlag::NAV_FLAG_NONE;
+	ResultPath->RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
 
 	Vector NodeFromLocation = FromFloorLocation;
 
@@ -442,7 +440,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 		StartPathNode.MovementFlag = EAINavMovementFlag::NAV_FLAG_PLATFORM;
 		StartPathNode.MovementArea = EAINavArea::NAV_AREA_WALK;
 
-		ResultPath.push_back(StartPathNode);
+		ResultPath->PathNodes.push_back(StartPathNode);
 
 		NodeFromLocation = LiftEnd;
 	}
@@ -477,7 +475,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 			}
 		}
 
-		EnumAddFlags(AIPlayer->BotNavInfo.SpecialMovementFlags, static_cast<EAINavMovementFlag>(dtCurrFlags));
+		EnumAddFlags(ResultPath->RequiredMoveFlags, static_cast<EAINavMovementFlag>(dtCurrFlags));
 
 		// End alignment to floor
 
@@ -488,7 +486,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 		if (dtCurrFlags == NAV_FLAG_LADDER || dtCurrFlags == NAV_FLAG_WALLCLIMB)
 		{
 			int HullNum = GetPlayerHullIndex(pBot->Edict, false);
-			Vector FromLocation = (ResultPath.size() > 0) ? ResultPath.back().ToLocation : AIPlayer->CurrentFloorPosition;
+			Vector FromLocation = (ResultPath->PathNodes.size() > 0) ? ResultPath->PathNodes.back().ToLocation : FromFloorLocation;
 			float NewRequiredZ = UTIL_FindZHeightForWallClimb(FromLocation, NextPathNode.ToLocation, head_hull);
 			NextPathNode.RequiredClimbZ = fmaxf(NewRequiredZ, NextPathNode.ToLocation.z);
 
@@ -512,7 +510,7 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 
 		NodeFromLocation = NextPathNode.ToLocation;
 
-		ResultPath.push_back(NextPathNode);
+		ResultPath->PathNodes.push_back(NextPathNode);
 
 	}
 
@@ -521,24 +519,22 @@ bool AINAV_FindPathClosestToPoint(const AvHAIPlayer* AIPlayer, const Vector From
 		AvHAIPathNode FinalSwimBit;
 		FinalSwimBit.MovementArea = EAINavArea::NAV_AREA_WALK;
 		FinalSwimBit.MovementFlag = EAINavMovementFlag::NAV_FLAG_WALK;
-		FinalSwimBit.FromLocation = ResultPath.back().ToLocation;
+		FinalSwimBit.FromLocation = ResultPath->PathNodes.back().ToLocation;
 		FinalSwimBit.ToLocation = ToLocation;
 
-		ResultPath.push_back(FinalSwimBit);
+		ResultPath->PathNodes.push_back(FinalSwimBit);
 	}
 
 	return true;
 }
 
-Vector AINAV_GetBotPathStartPoint(const AvHAIPlayer* AIPlayer, const Vector& Destination)
+Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination)
 {
-	if (!AIPlayer || !AIPlayer->IsValid()) { return ZERO_VECTOR; }
+	if (!NavProfile || !NavProfile->IsValid()) { return ZERO_VECTOR; }
 
-	const NavAgentProfile* NavProfile = AIPlayer->GetNavProfile();
+	const Vector FloorLocation = UTIL_FindFloor(DesiredStartPoint);
 
-	const Vector FloorLocation = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
-
-	if (AIPlayer->IsInWater())
+	if (UTIL_IsPointInSwimArea(DesiredStartPoint))
 	{
 		return FloorLocation;
 	}
@@ -546,9 +542,9 @@ Vector AINAV_GetBotPathStartPoint(const AvHAIPlayer* AIPlayer, const Vector& Des
 	Vector Result = AINAV_AdjustPointForPathfinding(NavProfile, FloorLocation);
 
 	// If the bot currently has a path, then let's calculate the navigation from the "from" point rather than our exact position right now
-	if (AIPlayer->HasValidPath())
+	if (ExistingPath && ExistingPath->IsValidPath())
 	{
-		const AvHAIPathNode* CurrentPathNode = AIPlayer->GetCurrentPathNode();
+		const AvHAIPathNode* CurrentPathNode = ExistingPath->GetCurrentPathNode();
 
 		if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_WALK)
 		{
@@ -883,6 +879,7 @@ void AINAV_FollowPath(AvHAIPlayer* AIPlayer)
 		return;
 	}
 
+	AvHAIPath* CurrentPath = &AIPlayer->BotNavInfo.CurrentPath;
 	AvHAINavStatus* NavInfo = &AIPlayer->BotNavInfo;
 	AvHAIStuckTracker* StuckInfo = &NavInfo->StuckInfo;
 
@@ -899,38 +896,42 @@ void AINAV_FollowPath(AvHAIPlayer* AIPlayer)
 			return;
 		}
 
-		NavInfo->CurrentPathPoint++;
+		CurrentPath->CurrentNodeIndex++;
 	}
 
 	if (PlayerEdict->v.flags & FL_INWATER)
 	{
 		TraceResult Hit;
 
-		for (int i = NavInfo->CurrentPathPoint + 1; i < NavInfo->CurrentPath.size(); i++)
+		for (int32 i = CurrentPath->CurrentNodeIndex + 1; i < CurrentPath->GetPathSize(); i++)
 		{
-			if (!UTIL_IsPointInSwimArea(NavInfo->CurrentPath[i].ToLocation)) { break; }
+			AvHAIPathNode* ThisNode = CurrentPath->GetNodeAtIndex_Mutable(i);
 
-			UTIL_TraceHull(pBot->Edict->v.origin, NavInfo->CurrentPath[i].ToLocation, ignore_monsters, head_hull, nullptr, &Hit);
+			if (!ThisNode || !ThisNode->IsValidMove()) { break; }
+
+			if (!UTIL_IsPointInSwimArea(ThisNode->ToLocation)) { break; }
+
+			UTIL_TraceHull(pBot->Edict->v.origin, ThisNode->ToLocation, ignore_monsters, head_hull, nullptr, &Hit);
 
 			if (!Hit.fAllSolid && !Hit.fStartSolid && Hit.flFraction >= 1.0f)
 			{
-				NavInfo->CurrentPathPoint = i;
-				NavInfo->CurrentPath[i].FromLocation = pBot->Edict->v.origin;
+				CurrentPath->CurrentNodeIndex = i;
+				ThisNode->FromLocation = pBot->Edict->v.origin;
 			}
 		}
 	}
 
-	const AvHAIPathNode* CurrentPathNode = AIPlayer->GetCurrentPathNode();
+	const AvHAIPathNode* CurrentPathNode = CurrentPath->GetCurrentPathNode();
 
 	if (IsPlayerStandingOnPlayer(pBot->Edict) && CurrentPathNode->MovementFlag != EAINavMovementFlag::NAV_FLAG_LADDER)
 	{
 		if (PlayerEdict->v.groundentity->v.velocity.Length2D() > 10.0f)
 		{
-			pBot->desiredMovementDir = UTIL_GetVectorNormal2D(-PlayerEdict->v.groundentity->v.velocity);
+			AIPlayer->desiredMovementDir = UTIL_GetVectorNormal2D(-PlayerEdict->v.groundentity->v.velocity);
 			return;
 		}
 
-		MoveToWithoutNav(pBot, CurrentPathNode->ToLocation);
+		MoveToWithoutNav(AIPlayer, CurrentPathNode->ToLocation);
 
 		return;
 	}
@@ -962,7 +963,10 @@ bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer)
 	// If we are currently navigating a platform, don't run the checks in case we screw up our current move
 	if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM) { return false; }
 
-	for (int32 i = AIPlayer->BotNavInfo.CurrentPathPoint; i < AIPlayer->BotNavInfo.CurrentPath.size(); i++)
+	const AvHAIPath* AIPlayerPath = &AIPlayer->BotNavInfo.CurrentPath;
+	const NavAgentProfile* NavProfile = AIPlayer->GetNavProfile();
+
+	for (int32 i = AIPlayerPath->CurrentNodeIndex; i < AIPlayerPath->GetPathSize(); i++)
 	{
 		const AvHAIPathNode* FutureNode = &AIPlayer->BotNavInfo.CurrentPath[i];
 
@@ -990,23 +994,37 @@ bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer)
 
 			if (!Trigger)
 			{
-				Trigger = AIMAP_GetBestTriggerForObject(PlatformObject, pBot->Edict, pBot->BotNavInfo.NavProfile);
+				Trigger = AIMAP_GetBestTriggerForObject(NavProfile, PlatformObject, AIPlayer);
 
 				if (Trigger)
 				{
 					if (PlatformObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 					{
-						NAV_AddUseMovementTask(pBot, Trigger->Edict, Trigger);
+						AINAV_AddUseMovementTask(pBot, Trigger->Edict, Trigger);
 					}
 					else
 					{
-						NAV_AddMoveMovementTask(pBot, UTIL_GetButtonFloorLocation(pBot->BotNavInfo.NavProfile, pBot->Edict->v.origin, Trigger->Edict), nullptr);
+						AINAV_AddMoveMovementTask(pBot, AIMAP_GetButtonFloorLocation(pBot->BotNavInfo.NavProfile, pBot->Edict->v.origin, Trigger->Edict), nullptr);
 					}
 					return;
 				}
 			}
 		}
 	}
+}
+
+void AINAV_AddUseMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate)
+{
+	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
+
+	AvHAIMoveTask NewTask;
+
+	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_USE;
+	NewTask.TaskTarget = EntityToUse;
+	NewTask.TriggerToActivate = TriggerToActivate->Edict;
+	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(pBot->BotNavInfo.NavProfile, pBot->Edict->v.origin, EntityToUse);
+
+	pBot->BotNavInfo.MovementTasks.push_back(NewTask);
 }
 
 void AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate)
@@ -1022,12 +1040,12 @@ void AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
 	NewTask.TaskLocation = MoveLocation;
 
-	vector<AvHAIPathNode> Path;
-	const bool bFoundPath = AINAV_FindPathClosestToPoint(AIPlayer, pBot->CurrentFloorPosition, MoveLocation, Path, 200.0f);
+	AvHAIPath TaskPath;
+	const bool bFoundPath = AINAV_FindPathClosestToPoint(AIPlayer->GetNavProfile(), pBot->CurrentFloorPosition, MoveLocation, &TaskPath, 200.0f);
 
-	if (dtStatusSucceed(PathStatus) && Path.size() > 0)
+	if (bFoundPath && TaskPath.IsValidPath())
 	{
-		NewTask.TaskLocation = Path.back().Location;
+		NewTask.TaskLocation = TaskPath.GetFinalDestination();
 	}
 
 	pBot->BotNavInfo.MovementTasks.push_back(NewTask);
@@ -6108,7 +6126,7 @@ Vector UTIL_GetFurthestVisiblePointOnPath(const Vector ViewerLocation, vector<Av
 	return g_vecZero;
 }
 
-Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, edict_t* ButtonEdict)
+Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, const edict_t* ButtonEdict)
 {
 	Vector ClosestPoint = g_vecZero;
 
