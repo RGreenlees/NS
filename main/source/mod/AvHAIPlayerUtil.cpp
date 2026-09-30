@@ -217,17 +217,16 @@ float GetPlayerRadius(const AvHPlayer* Player)
 
 	switch (hullnum)
 	{
-	case human_hull:
-	case head_hull:
-		return 16.0f;
-		break;
-	case large_hull:
-		return 32.0f;
-		break;
-	default:
-		return 16.0f;
-		break;
-
+		case human_hull:
+		case head_hull:
+			return 16.0f;
+			break;
+		case large_hull:
+			return 32.0f;
+			break;
+		default:
+			return 16.0f;
+			break;
 	}
 }
 

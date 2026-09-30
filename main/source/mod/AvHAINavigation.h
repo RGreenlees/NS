@@ -83,7 +83,8 @@ bool AINAV_IsBotOffFallNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* Pa
 bool AINAV_IsBotOffJumpNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
 bool AINAV_IsBotOffPlatformNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
 
-
+bool AINAV_NextMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_NextSwimMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 
 
 

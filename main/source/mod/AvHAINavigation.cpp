@@ -1338,6 +1338,184 @@ AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer)
 	return nullptr;
 }
 
+bool AINAV_NewGroundMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	const Vector CurrentPos = (AIPlayer->IsOnGround()) ? AIPlayer->Edict->v.origin : AIPlayer->CurrentFloorPosition;
+
+	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPos);
+	// Same goes for the right vector, might not be the same as the bot's right
+	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
+
+	bool bAdjustingForCollision = false;
+
+	const float PlayerRadius = AIPlayer->GetPlayerRadius() + 2.0f;
+
+	Vector stTrcLft = CurrentPos - (vRight * PlayerRadius);
+	Vector stTrcRt = CurrentPos + (vRight * PlayerRadius);
+	Vector endTrcLft = stTrcLft + (vForward * 24.0f);
+	Vector endTrcRt = stTrcRt + (vForward * 24.0f);
+
+	bool bumpLeft = !AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), stTrcLft, endTrcLft);
+	bool bumpRight = !AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), stTrcRt, endTrcRt);
+
+	OutMovementInput.DesiredMoveDirection = vForward;
+
+	if (bumpRight && !bumpLeft)
+	{
+		OutMovementInput.DesiredMoveDirection = OutMovementInput.DesiredMoveDirection - vRight;
+	}
+	else if (bumpLeft && !bumpRight)
+	{
+		OutMovementInput.DesiredMoveDirection = OutMovementInput.DesiredMoveDirection + vRight;
+	}
+	else if (bumpLeft && bumpRight)
+	{
+		stTrcLft.z = AIPlayer->Edict->v.origin.z;
+		stTrcRt.z = AIPlayer->Edict->v.origin.z;
+		endTrcLft.z = AIPlayer->Edict->v.origin.z;
+		endTrcRt.z = AIPlayer->Edict->v.origin.z;
+
+		if (!UTIL_QuickTrace(AIPlayer->Edict, stTrcLft, endTrcLft))
+		{
+			OutMovementInput.DesiredMoveDirection = OutMovementInput.DesiredMoveDirection + vRight;
+		}
+		else
+		{
+			OutMovementInput.DesiredMoveDirection = OutMovementInput.DesiredMoveDirection - vRight;
+		}
+	}
+	else
+	{
+		const float DistFromLine = vDistanceFromLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentPos);
+
+		if (DistFromLine > 18.0f)
+		{
+			float modifier = (float)vPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentPos);
+			OutMovementInput.DesiredMoveDirection = OutMovementInput.DesiredMoveDirection + (vRight * modifier);
+		}
+	}
+
+	OutMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(OutMovementInput.DesiredMoveDirection);
+
+	if (AIPlayer->CanCrouch())
+	{
+		if (EnumHasAnyFlags(CurrentPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_CROUCH))
+		{
+			OutMovementInput.Button |= IN_DUCK;
+		}
+		else
+		{
+			Vector HeadLocation = GetPlayerTopOfCollisionHull(AIPlayer->Edict, false);
+
+			// Crouch if we have something in our way at head height
+			if (!UTIL_QuickTrace(AIPlayer->Edict, HeadLocation, (HeadLocation + (OutMovementInput.DesiredMoveDirection * 50.0f))))
+			{
+				OutMovementInput.Button |= IN_DUCK;
+			}
+		}
+	}
+}
+
+bool AINAV_NewFallMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+
+}
+
+bool AINAV_NewJumpMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+
+}
+
+bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+
+}
+
+bool AINAV_NewPlatformMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+
+}
+
+bool AINAV_NextMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	OutMovementInput.Clear();
+
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	bool bMoveSuccess = false;
+
+	switch (CurrentPathNode->MovementFlag)
+	{
+		case EAINavMovementFlag::NAV_FLAG_WALK:
+			bMoveSuccess = AINAV_NewGroundMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_FALL:
+			bMoveSuccess = AINAV_NewFallMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_JUMP:
+			bMoveSuccess = AINAV_NewJumpMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_LADDER:
+			bMoveSuccess = AINAV_NewLadderMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
+			bMoveSuccess = AINAV_NewPlatformMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			break;
+		default:
+			bMoveSuccess = AINAV_NewGroundMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			break;
+	}
+
+	if (!bMoveSuccess) { return false; }
+
+	if (AIPlayer->CanCrouch())
+	{
+		if (NextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+		{
+			const bool bIsNearNextPoint = (vDist2DSq(AIPlayer->Edict->v.origin, NextPathNode->FromLocation) <= sqrf(50.0f));
+
+			// Start crouching early if we're about to enter a crouch path point
+			if (bIsNearNextPoint)
+			{
+				OutMovementInput.Button |= IN_DUCK;
+			}
+		}
+	}
+
+	if (vIsZero(pBot->LookTargetLocation) && vIsZero(pBot->MoveLookLocation))
+	{
+		Vector FurthestView = UTIL_GetFurthestVisiblePointOnPath(pBot);
+
+		if (vIsZero(FurthestView) || vDist2DSq(FurthestView, pBot->CurrentEyePosition) < sqrf(200.0f))
+		{
+			FurthestView = MoveTo;
+
+			Vector LookNormal = UTIL_GetVectorNormal2D(FurthestView - pBot->CurrentEyePosition);
+
+			FurthestView = FurthestView + (LookNormal * 1000.0f);
+		}
+
+		BotLookAt(pBot, FurthestView);
+	}
+
+	// While moving, check to make sure we're not obstructed by a func_breakable, e.g. vent or window.
+	CheckAndHandleBreakableObstruction(pBot, MoveFrom, MoveTo, CurrentNavFlags);
+
+	HandlePlayerAvoidance(pBot, MoveTo);
+
+	return true;
+}
+
+bool AINAV_NextSwimMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	OutMovementInput.Clear();
+
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+}
+
+
 
 
 

@@ -706,6 +706,32 @@ enum class EAIOrderPurpose
 	ORDERPURPOSE_BUILD_GUARDPOST
 };
 
+struct AvHAIMovementInput
+{
+	float			ForwardMove = 0.0f;
+	float			SideMove = 0.0f;
+	float			UpMove = 0.0f;
+	int				Button = 0;
+	int				Impulse = 0;
+	Vector			RequiredLookDirection = ZERO_VECTOR; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
+	Vector			DesiredLookDirection = ZERO_VECTOR;  // Where the bot might want to look if they're not focused on something else (e.g. enemy)
+	EAIWeaponId		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot might need to continue moving
+	Vector			DesiredMoveDirection = ZERO_VECTOR;
+
+	void Clear()
+	{
+		ForwardMove = 0.0f;
+		SideMove = 0.0f;
+		UpMove = 0.0f;
+		Button = 0;
+		Impulse = 0;
+		RequiredLookDirection = ZERO_VECTOR;
+		DesiredLookDirection = ZERO_VECTOR;
+		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID;
+		DesiredMoveDirection = ZERO_VECTOR;
+	}
+};
+
 struct AvHAICommanderOrder
 {
 	edict_t* Assignee = nullptr;
@@ -733,11 +759,7 @@ struct AvHAIPlayer
 	AvHPlayer* Player = nullptr;
 	edict_t* Edict = nullptr;
 	AvHTeamNumber	Team = TEAM_IND;
-	float			ForwardMove = 0.0f;
-	float			SideMove = 0.0f;
-	float			UpMove = 0.0f;
-	int				Button = 0.0f;
-	int				Impulse = 0.0f;
+	AvHAIMovementInput MovementInput;
 	byte			AdjustedMsec = 0;
 
 	bool bIsPendingKill = false;
@@ -823,7 +845,7 @@ struct AvHAIPlayer
 
 	int DebugValue = 0; // Used for debugging the bot
 
-	bool IsValid() const { return !FNullEnt(Edict); }
+	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free; }
 	bool HasValidPath() const;
 	const AvHAIPathNode* GetCurrentPathNode() const;
 	const AvHAIPathNode* GetNextPathNode() const;
@@ -831,6 +853,10 @@ struct AvHAIPlayer
 	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
 	bool IsOnGround() const;
 	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
+	bool CanCrouch() const;
+	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
+	enum_hull GetPlayerHull() const;
+	float GetPlayerRadius() const;
 	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
 	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
 	EAINavMoveResult ProgressMovementTasks();

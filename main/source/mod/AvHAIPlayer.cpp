@@ -58,6 +58,65 @@ bool AvHAIPlayer::IsOnGround() const
 	!FNullEnt(Edict) && ((Edict->v.flags & FL_ONGROUND) || IsPlayerOnLadder(Edict));
 }
 
+bool AvHAIPlayer::CanCrouch() const
+{
+	if (!IsValid()) { return false; }
+
+	switch (Edict->v.iuser3)
+	{
+		case AVH_USER3_ALIEN_PLAYER1:
+		case AVH_USER3_ALIEN_PLAYER2:
+		case AVH_USER3_ALIEN_PLAYER3:
+			return false;
+		default:
+			return true;
+	}
+}
+
+enum_hull AvHAIPlayer::GetPlayerHull() const
+{
+	if (!IsValid()) { return point_hull; }
+
+	AvHUser3 PlayerClass = (AvHUser3)Edict->v.iuser3;
+
+	switch (PlayerClass)
+	{
+		case AVH_USER3_MARINE_PLAYER: // Regular/heavy marine
+		case AVH_USER3_ALIEN_PLAYER4: // Fade
+			return (IsCrouching()) ? head_hull : human_hull;
+		case AVH_USER3_COMMANDER_PLAYER:
+			return head_hull;
+		case AVH_USER3_ALIEN_EMBRYO: // Gestating
+			return head_hull;
+		case AVH_USER3_ALIEN_PLAYER1: // Skulk
+		case AVH_USER3_ALIEN_PLAYER2: // Gorge
+		case AVH_USER3_ALIEN_PLAYER3:// Lerk
+			return head_hull;
+		case AVH_USER3_ALIEN_PLAYER5: // Onos
+			return (IsCrouching()) ? human_hull : large_hull;
+		default:
+			return head_hull;
+	}
+}
+
+float AvHAIPlayer::GetPlayerRadius() const
+{
+	if (!IsValid()) { return 0.0f; }
+
+	enum_hull PlayerHull = GetPlayerHull();
+
+	switch (PlayerHull)
+	{
+		case human_hull:
+		case head_hull:
+			return 16.0f;
+		case large_hull:
+			return 32.0f;
+		default:
+			return 16.0f;
+	}
+}
+
 EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 {
 	// If the destination is close enough to our core movement task, then we are continuing with our existing movement tasks
