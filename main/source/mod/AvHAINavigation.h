@@ -17,6 +17,7 @@
 #include "DetourTileCache.h"
 #include "AvHAIPlayer.h"
 #include "AvHAIConstants.h"
+#include "AvHAIMapData.h"
 
 constexpr auto MIN_PATH_RECALC_TIME = 0.33f; // How frequently can a bot recalculate its path? Default to max 3 times per second
 constexpr auto MAX_BOT_STUCK_TIME = 30.0f; // How long a bot can be stuck, unable to move, before giving up and suiciding
@@ -49,6 +50,44 @@ AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer);
 // Returns true if a movement task was required and added.
 bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer);
 
+void AINAV_AddTriggerMovementTask(AvHAIPlayer* AIPlayer, const DynamicMapObject* Trigger, const DynamicMapObject* TriggerTarget);
+void AINAV_AddPickupMovementTask(AvHAIPlayer* AIPlayer, const edict_t* ThingToPickup, const DynamicMapObject* TriggerToActivate);
+bool AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate);
+void AINAV_AddTouchMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToTouch, const DynamicMapObject* TriggerToActivate);
+void AINAV_AddUseMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate);
+void AINAV_AddBreakMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToBreak, const DynamicMapObject* TriggerToActivate);
+void AINAV_AddWeldMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToWeld, const DynamicMapObject* TriggerToActivate);
+
+bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedWalkMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedLiftMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedWallClimbMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedJumpMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedLadderMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedObstacleMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_HasBotCompletedPhaseGateMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+
+float AINAV_FindZHeightForWallClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
+Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const Vector& Point);
+
+bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, AvHAIPath* ResultPath, float MaxAcceptableDistance);
+
+Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination);
+
+Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, edict_t* Rider, DynamicMapObject* LiftReference);
+
+bool AINAV_IsBotOffPathNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
+bool AINAV_IsBotOffWalkNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
+bool AINAV_IsBotOffLadderNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
+bool AINAV_IsBotOffFallNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
+bool AINAV_IsBotOffJumpNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
+bool AINAV_IsBotOffPlatformNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode);
+
+
+
+
+
+
 // Roughly estimates the movement cost to move between FromLocation and ToLocation. Uses simple formula of distance between points x cost modifier for that movement
 float UTIL_GetPathCostBetweenLocations(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation);
 
@@ -57,28 +96,12 @@ bool BotIsAtLocation(const AvHAIPlayer* pBot, const Vector Destination);
 
 // Sets the bot's desired movement direction and performs jumps/crouch/etc. to traverse the current path point
 void NewMove(AvHAIPlayer* pBot);
-// Returns true if the bot has completed the current movement along their path
-bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer);
-bool HasBotCompletedLadderMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool AINAV_HasBotCompletedWalkMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
-bool HasBotCompletedFallMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool HasBotCompletedClimbMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, float RequiredClimbHeight, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool HasBotCompletedJumpMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool HasBotCompletedPhaseGateMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool HasBotCompletedLiftMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool HasBotCompletedObstacleMove(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-
-Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, edict_t* Rider, DynamicMapObject* LiftReference);
 
 // Returns true if the bot is considered to have strayed off the path (e.g. missed a jump and fallen)
-bool IsBotOffPath(const AvHAIPlayer* pBot);
+
 bool IsBotOffLadderNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffWalkNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffFallNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
 bool IsBotOffClimbNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffJumpNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
 bool IsBotOffPhaseGateNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffLiftNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
 bool IsBotOffObstacleNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
 
 // Called by NewMove, determines the movement direction and inputs required to walk/crouch between start and end points
@@ -94,18 +117,12 @@ void FallMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
 // Called by NewMove, determines the movement direction and inputs required to climb a ladder to reach endpoint
 void LadderMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight, unsigned char NextArea);
 
-// Called by NewMove, determines the movement direction and inputs required to climb a wall to reach endpoint
-LerkFlightBehaviour BotFlightClimbMove(AvHAIPlayer* pBot, Vector FromLocation, Vector ToLocation, float RequiredZ);
 void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight);
 void BlinkClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight);
 // Called by NewMove, determines the movement direction and inputs required to use a phase gate to reach end point
 void PhaseGateMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint);
 // Called by NewMove, determines the movement direction and inputs required to use a lift to reach an end point
 void LiftMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint);
-
-DoorTrigger* UTIL_GetDoorTriggerByEntity(edict_t* TriggerEntity);
-
-bool UTIL_TriggerHasBeenRecentlyActivated(edict_t* TriggerEntity);
 
 // Directly calls the Use function on this trigger, regardless of where the bot is
 void NAV_ForceActivateTrigger(AvHAIPlayer* pBot, DoorTrigger* TriggerRef);
@@ -115,8 +132,6 @@ void CheckAndHandleBreakableObstruction(AvHAIPlayer* pBot, const Vector MoveFrom
 
 void CheckAndHandleDoorObstruction(AvHAIPlayer* pBot);
 
-DoorTrigger* UTIL_GetNearestDoorTrigger(const Vector Location, nav_door* Door, CBaseEntity* IgnoreTrigger, bool bCheckBlockedByDoor);
-DoorTrigger* UTIL_GetNearestDoorTriggerFromLift(edict_t* LiftEdict, nav_door* Door, CBaseEntity* IgnoreTrigger);
 bool UTIL_IsPathBlockedByDoor(const Vector StartLoc, const Vector EndLoc, edict_t* SearchDoor);
 
 edict_t* UTIL_GetDoorBlockingPathPoint(AvHAIPlayer* pBot, bot_path_node* PathNode, edict_t* SearchDoor);
@@ -125,10 +140,9 @@ edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, bot_path_node* Pa
 edict_t* UTIL_GetBreakableBlockingPathPoint(AvHAIPlayer* pBot, const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, edict_t* SearchBreakable);
 
 
-Vector UTIL_GetButtonFloorLocation(const Vector UserLocation, const edict_t* ButtonEdict);
 
-void AINAV_AddUseMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate);
-void AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate)
+
+
 
 // Clears all tracking of a bot's stuck status
 void ClearBotStuck(AvHAIPlayer* pBot);
@@ -172,21 +186,10 @@ void MoveToWithoutNav(AvHAIPlayer* pBot, const Vector Destination);
 // Check if there are any players in our way and try to move around them. If we can't, then back up to let them through
 void HandlePlayerAvoidance(AvHAIPlayer* pBot, const Vector MoveDestination);
 
-float AINAV_FindZHeightForWallClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
-Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const Vector& Point);
 
-Vector UTIL_FindHighestSuccessfulTracePoint(const Vector TraceFrom, const Vector TargetPoint, const Vector NextPoint, const float IterationStep, const float MinIdealHeight, const float MaxHeight);
-
-bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, AvHAIPath* ResultPath, float MaxAcceptableDistance);
-
-Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination);
 
 dtStatus DEBUG_TestFindPath(const nav_profile& NavProfile, const Vector FromLocation, const Vector ToLocation, vector<bot_path_node>& path, float MaxAcceptableDistance);
 
-// If the bot is stuck and off the path or nav mesh, this will try to find a point it can directly move towards to get it back on track
-Vector FindClosestPointBackOnPath(AvHAIPlayer* pBot, Vector Destination);
-
-Vector FindClosestNavigablePointToDestination(const nav_profile& NavProfile, const Vector FromLocation, const Vector ToLocation, float MaxAcceptableDistance);
 
 // Will attempt to move directly towards MoveDestination while jumping/ducking as needed, and avoiding obstacles in the way
 void PerformUnstuckMove(AvHAIPlayer* pBot, const Vector MoveDestination);
@@ -197,9 +200,6 @@ static float frand();
 
 // Sets the BotNavInfo so the bot can track if it's on the ground, in the air, climbing a wall, on a ladder etc.
 void UTIL_UpdateBotMovementStatus(AvHAIPlayer* pBot);
-
-// Returns true if a path could be found between From and To location. Cheaper than full path finding, only a rough check to confirm it can be done.
-bool UTIL_PointIsReachable(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, const float MaxAcceptableDistance);
 
 // If the bot has a path, it will work out how far along the path it can see and return the furthest point. Used so that the bot looks ahead along the path rather than just at its next path point
 Vector UTIL_GetFurthestVisiblePointOnPath(const AvHAIPlayer* pBot);
@@ -219,8 +219,6 @@ void ClearBotPath(AvHAIPlayer* pBot);
 // Clears just the bot's current stuck movement attempt (see PerformUnstuckMove())
 void ClearBotStuckMovement(AvHAIPlayer* pBot);
 
-void UTIL_ClearDoorData();
-void UTIL_ClearWeldablesData();
 
 // Based on the direction the bot wants to move and it's current facing angle, sets the forward and side move, and the directional buttons to make the bot actually move
 void BotMovementInputs(AvHAIPlayer* pBot);
@@ -230,34 +228,7 @@ void OnBotStartLadder(AvHAIPlayer* pBot);
 // Event called when a bot leaves a ladder
 void OnBotEndLadder(AvHAIPlayer* pBot);
 
-// Tracks all doors and their current status
-void UTIL_PopulateDoors();
-void UTIL_PopulateTrainStopPoints(nav_door* TrainDoor);
 
-void UTIL_UpdateWeldableObstacles();
-void UTIL_UpdateDoors(bool bInitial = false);
-void UTIL_UpdateDoorTriggers(nav_door* Door);
-
-void UTIL_ModifyOffMeshConnectionFlag(AvHAIOffMeshConnection* Connection, const unsigned int NewFlag);
-
-bool UTIL_IsTriggerLinkedToDoor(CBaseEntity* TriggerEntity, vector<CBaseEntity*>& CheckedTriggers, CBaseEntity* Door);
-void UTIL_PopulateTriggersForEntity(edict_t* Entity, vector<DoorTrigger>& TriggerList);
-void UTIL_PopulateAffectedConnectionsForDoor(nav_door* Door);
-
-void UTIL_PopulateWeldableObstacles();
-
-void UTIL_ApplyTempObstaclesToDoor(nav_door* DoorRef, const int Area);
-
-nav_door* UTIL_GetLiftReferenceByEdict(const edict_t* DoorEdict);
-nav_door* UTIL_GetNavDoorByEdict(const edict_t* DoorEdict);
-nav_door* UTIL_GetClosestLiftToPoints(const Vector StartPoint, const Vector EndPoint);
-AvHAIOffMeshConnection* UTIL_GetOffMeshConnectionForLift(nav_door* LiftRef);
-
-void UTIL_PopulateBaseNavProfiles();
-
-void OnOffMeshConnectionAdded(dtOffMeshConnection* NewConnection);
-
-const dtOffMeshConnection* DEBUG_FindNearestOffMeshConnectionToPoint(const Vector Point, unsigned int FilterFlags);
 
 void NAV_SetPickupMovementTask(AvHAIPlayer* pBot, edict_t* ThingToPickup, DoorTrigger* TriggerToActivate);
 void NAV_SetMoveMovementTask(AvHAIPlayer* pBot, Vector MoveLocation, DoorTrigger* TriggerToActivate);
@@ -270,8 +241,6 @@ void NAV_ClearMovementTask(AvHAIPlayer* pBot);
 
 void NAV_ProgressMovementTask(AvHAIPlayer* pBot);
 bool NAV_IsMovementTaskStillValid(AvHAIPlayer* pBot);
-
-void RefineFlightPath(vector<bot_path_node>& InputPath, vector<bot_path_node>& RefinedPath);
 
 
 #endif // BOT_NAVIGATION_H

@@ -98,6 +98,7 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = DoorRef;
 	NewObject.EdictIndex = ENTINDEX(DoorObject);
 	NewObject.Edict = DoorObject;
 
@@ -166,6 +167,7 @@ bool AIMAP_PopulateDynamicTrainObject(edict_t* TrainObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = TrainRef;
 	NewObject.EdictIndex = ENTINDEX(TrainObject);
 	NewObject.Edict = TrainObject;
 
@@ -294,6 +296,7 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = PlatRef;
 	NewObject.EdictIndex = ENTINDEX(PlatObject);
 	NewObject.Edict = PlatObject;
 
@@ -358,6 +361,7 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = ButtonRef;
 	NewObject.EdictIndex = ENTINDEX(ButtonObject);
 	NewObject.Edict = ButtonObject;
 
@@ -420,6 +424,7 @@ bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = WeldableRef;
 	NewObject.EdictIndex = ENTINDEX(WeldableObject);
 	NewObject.Edict = WeldableObject;
 	NewObject.ObjectName = STRING(NewObject.Edict->v.targetname);
@@ -453,6 +458,7 @@ bool AIMAP_PopulateDynamicTriggerObject(edict_t* TriggerObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = TriggerRef;
 	NewObject.EdictIndex = ENTINDEX(TriggerObject);
 	NewObject.Edict = TriggerObject;
 
@@ -494,6 +500,7 @@ bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectRef = BreakableRef;
 	NewObject.EdictIndex = ENTINDEX(BreakableObject);
 	NewObject.Edict = BreakableObject;
 	NewObject.ObjectName = STRING(NewObject.Edict->v.targetname);
@@ -840,6 +847,14 @@ void AIMAP_UpdateDynamicWeldableObject(DynamicMapObject* WeldableObject)
 	}
 }
 
+const DynamicMapObject* AIMAP_TraceForDynamicObject(const Vector& TraceFrom, const Vector& TraceTo)
+{
+	TraceResult Hit;
+	UTIL_TraceHull(TraceFrom, TraceTo, ignore_monsters, head_hull, nullptr, &Hit);
+
+	return AIMAP_GetDynamicObjectByEdict(Hit.pHit);
+}
+
 void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject)
 {
 	if (!UsedObject) { return; }
@@ -852,7 +867,7 @@ void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject)
 
 	for (auto it = UsedObject->Targets.begin(); it != UsedObject->Targets.end(); it++)
 	{
-		DynamicMapObject* TargetObject = AIMAP_GetDynamicObjectByEdict((*it));
+		DynamicMapObject* TargetObject = AIMAP_GetDynamicObjectByEdict_Mutable((*it));
 
 		if (TargetObject)
 		{
@@ -1018,13 +1033,17 @@ void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 
 		for (auto it = FoundNavMesh->MeshConnections.begin(); it != FoundNavMesh->MeshConnections.end(); it++)
 		{
-			if (it->DefaultConnectionFlags & NAV_FLAG_PLATFORM)
+			NavOffMeshConnection* ThisConnection = &(*it);
+
+			if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+
+			if (ThisConnection->DefaultConnectionFlags & NAV_FLAG_PLATFORM)
 			{
-				DynamicMapObject* NearestPlatform = AIMAP_GetClosestPlatformToPoints(it->FromLocation, it->ToLocation);
+				const DynamicMapObject* NearestPlatform = AIMAP_GetClosestPlatformToPoints(ThisConnection->FromLocation, ThisConnection->ToLocation);
 
 				if (NearestPlatform)
 				{
-					it->LinkedObject = NearestPlatform->Edict;
+					ThisConnection->LinkedObject = NearestPlatform->Edict;
 				}
 			}
 		}
@@ -1333,9 +1352,9 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vec
 	return NewButtonAccessPoint;
 }
 
-DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, const Vector EndPoint)
+const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, const Vector EndPoint)
 {
-	DynamicMapObject* Result = nullptr;
+	const DynamicMapObject* Result = nullptr;
 
 	float minDist = 0.0f;
 
@@ -1411,6 +1430,8 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 			for (auto it = FoundMesh->MeshConnections.begin(); it != FoundMesh->MeshConnections.end(); it++)
 			{
 				NavOffMeshConnection* TestConnection = &(*it);
+
+				if (!TestConnection || !TestConnection->IsValid()) { continue; }
 
 				if (AIMAP_IsOffMeshConnectionAffectedByObject(Object, ObjectCentre, TestConnection))
 				{
@@ -1595,7 +1616,22 @@ bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* Ta
 	return false;
 }
 
-DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict)
+const DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict)
+{
+	if (FNullEnt(SearchEdict)) { return nullptr; }
+
+	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
+	{
+		if (it->Edict == SearchEdict)
+		{
+			return &(*it);
+		}
+	}
+
+	return nullptr;
+}
+
+DynamicMapObject* AIMAP_GetDynamicObjectByEdict_Mutable(const edict_t* SearchEdict)
 {
 	if (FNullEnt(SearchEdict)) { return nullptr; }
 
@@ -1699,11 +1735,11 @@ void AIMAP_ClearCachedMapData()
 	DynamicMapObjects.clear();
 }
 
-Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const DynamicMapObject* LiftReference)
+Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const Vector& RiderPosition, const DynamicMapObject* LiftReference)
 {
 	if (!LiftReference || !NavProfile) { return ZERO_VECTOR; }
 
-	NavOffMeshConnection* NearestConnection = nullptr;
+	const NavOffMeshConnection* NearestConnection = nullptr;
 	float MinDist = 0.0f;
 
 	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
@@ -1712,16 +1748,20 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 
 	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
 	{
-		if (!(it->ConnectionFlags & NAV_FLAG_PLATFORM)) { continue; }
+		const NavOffMeshConnection* ThisConnection = &(*it);
 
-		if (it->LinkedObject == LiftReference->Edict)
+		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+
+		if (!EnumHasAnyFlags(ThisConnection->ConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
+
+		if (ThisConnection->LinkedObject == LiftReference->Edict)
 		{
 			const float ThisDist = fminf(vDist3DSq(it->FromLocation, UTIL_GetClosestPointOnEntityToLocation(it->FromLocation, LiftReference->Edict)),
 									vDist3DSq(it->ToLocation, UTIL_GetClosestPointOnEntityToLocation(it->ToLocation, LiftReference->Edict)));
 
 			if (ThisDist < sqrf(100.0f) && (!NearestConnection || ThisDist < MinDist))
 			{
-				NearestConnection = &(*it);
+				NearestConnection = ThisConnection;
 				MinDist = ThisDist;
 			}
 		}
@@ -1730,10 +1770,10 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 	if (NearestConnection)
 	{
 		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference->Edict);
-		NearestPointFromLocation.z = Rider->v.origin.z;
+		NearestPointFromLocation.z = RiderPosition.z;
 
 		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference->Edict);
-		NearestPointToLocation.z = Rider->v.origin.z;
+		NearestPointToLocation.z = RiderPosition.z;
 
 		float DistFromLocation = vDist3DSq(NearestConnection->FromLocation, NearestPointFromLocation);
 		float DistToLocation = vDist3DSq(NearestConnection->ToLocation, NearestPointToLocation);
@@ -1743,7 +1783,7 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 	{
 		Vector NearestProjectedPoint = ZERO_VECTOR;
 		Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference->Edict);
-		float DisembarkHeight = (!FNullEnt(Rider)) ? GetPlayerBottomOfCollisionHull(Rider).z : LiftReference->Edict->v.absmax.z;
+		float DisembarkHeight = RiderPosition.z;
 
 		Vector FrontLocation = Vector(LiftReference->Edict->v.absmax.x, LiftCentre.y, DisembarkHeight);
 		Vector RearLocation = Vector(LiftReference->Edict->v.absmin.x, LiftCentre.y, DisembarkHeight);
@@ -1798,9 +1838,11 @@ const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgent
 	{
 		const NavOffMeshConnection* ThisConnection = &(*it);
 
-		if (!(it->ConnectionFlags & NAV_FLAG_PLATFORM)) { continue; }
+		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-		if (it->LinkedObject == PlatformRef->Edict)
+		if (!(ThisConnection->ConnectionFlags & NAV_FLAG_PLATFORM)) { continue; }
+
+		if (ThisConnection->LinkedObject == PlatformRef->Edict)
 		{
 			return ThisConnection;
 		}
@@ -2184,7 +2226,7 @@ const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* Nav
 
 		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
 
-		if (!UTIL_PointIsReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
+		if (!AINAV_IsPointReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
 
 		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
 		{
@@ -2228,6 +2270,38 @@ const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* Nav
 	}
 
 	return WinningTrigger;
+}
+
+void AIMAP_ForceActivateTrigger(const AvHAIPlayer* AIPlayer, const DynamicMapObject* TriggerObject)
+{
+	if (!AIPlayer || !AIPlayer->IsValid()) { return; }
+	if (!TriggerObject || !TriggerObject->IsValid()) { return; }
+
+	switch (TriggerObject->Type)
+	{
+		case EAIDynamicMapObjectType::TRIGGER_TOUCH:
+			TriggerObject->ObjectRef->Touch(AIPlayer->Player);
+			break;
+		case EAIDynamicMapObjectType::TRIGGER_USE:
+			TriggerObject->ObjectRef->Use(AIPlayer->Player, AIPlayer->Player, USE_TOGGLE, 0.0f);
+			break;
+		case EAIDynamicMapObjectType::TRIGGER_BREAK:
+		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
+			TriggerObject->ObjectRef->TakeDamage(AIPlayer->Player->pev, AIPlayer->Player->pev, 10000.0f, NS_DMG_NORMAL);
+			break;
+		case EAIDynamicMapObjectType::TRIGGER_WELD:
+		{
+			if (AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(TriggerObject->ObjectRef))
+			{
+				WeldableRef->AddBuildTime(300.0f);
+			}
+		}
+		break;
+
+		default:
+			TriggerObject->ObjectRef->Use(AIPlayer->Player, AIPlayer->Player, USE_TOGGLE, 0.0f);
+			break;
+	}
 }
 
 const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapObject* Platform, float LiftHeight, const Vector& PlatformPosition)
@@ -2341,7 +2415,7 @@ void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
 
 	for (auto it = Object->Triggers.begin(); it != Object->Triggers.end(); it++)
 	{
-		DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
+		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
 
 		if (!ThisTrigger) { continue; }
 

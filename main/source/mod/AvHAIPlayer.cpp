@@ -58,9 +58,126 @@ bool AvHAIPlayer::IsOnGround() const
 	!FNullEnt(Edict) && ((Edict->v.flags & FL_ONGROUND) || IsPlayerOnLadder(Edict));
 }
 
+EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
+{
+	// If the destination is close enough to our core movement task, then we are continuing with our existing movement tasks
+	if (BotNavInfo.MovementTasks.size() > 0)
+	{
+		AvHAIMoveTask& CoreTask = BotNavInfo.MovementTasks.at(0);
+
+		if (vEquals(CoreTask.TaskLocation, DesiredLocation, 18.0f))
+		{
+			return ProgressMovementTasks();
+		}
+	}
+
+	// This is a brand new destination
+	BotNavInfo.ClearPath();
+
+	const bool bAddedTask = AINAV_AddMoveMovementTask(this, DesiredLocation, nullptr);
+
+	if (bAddedTask)
+	{
+		return ProgressMovementTasks();
+	}
+
+	return EAINavMoveResult::NAV_MOVE_SUCCESS;
+}
+
+EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
+{
+
+}
+
+EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
+{
+	if (BotNavInfo.MovementTasks.size() == 0)
+	{
+		return EAINavMoveResult::NAV_MOVE_NOTASK;
+	}
+}
+
+EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
+{
+	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
+
+	if (AINAV_HasBotCompletedPathPoint(this, CurrentPathNode, NextPathNode))
+	{
+		// We have reached the end of our path. Job done.
+		if (!NextPathNode)
+		{
+			return EAINavMoveResult::NAV_MOVE_PATH_COMPLETE;
+		}
+
+		Path->OnPathNodeComplete();
+
+		CurrentPathNode = Path->GetCurrentPathNode();
+		NextPathNode = Path->GetNextPathNode();
+	}
+
+	if (IsInWater())
+	{
+		TraceResult Hit;
+
+		AvHAIMutablePathNodeList FutureNodeList = Path->GetMutableFuturePathNodeList();
+
+		for (AvHAIPathNode* ThisNode : FutureNodeList)
+		{
+			if (!UTIL_IsPointInSwimArea(ThisNode->ToLocation)) { break; }
+
+			UTIL_TraceHull(Edict->v.origin, ThisNode->ToLocation, ignore_monsters, head_hull, nullptr, &Hit);
+
+			if (!Hit.fAllSolid && !Hit.fStartSolid && Hit.flFraction >= 1.0f)
+			{
+				Path->JumpToPathNode(ThisNode);
+				ThisNode->FromLocation = Edict->v.origin;
+			}
+		}
+
+		CurrentPathNode = Path->GetCurrentPathNode();
+		NextPathNode = Path->GetNextPathNode();
+	}
 
 
+	if (IsPlayerStandingOnPlayer(Edict) && CurrentPathNode->MovementFlag != EAINavMovementFlag::NAV_FLAG_LADDER)
+	{
+		if (Edict->v.groundentity->v.velocity.Length2D() > 10.0f)
+		{
+			DesiredMovementDir = UTIL_GetVectorNormal2D(-Edict->v.groundentity->v.velocity);
+			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
 
+		MoveToWithoutNav(CurrentPathNode->ToLocation);
+
+		return;
+	}
+
+	AvHPlayer* RidingPlayer = AINAV_GetPlayerRidingOnBot(this);
+
+	if (RidingPlayer)
+	{
+		// TODO: Something here
+	}
+
+	if (AINAV_IsBotOffPathNode(this, CurrentPathNode))
+	{
+		return EAINavMoveResult::NAV_MOVE_OFFPATH;
+	}
+
+	if (IsInWater())
+	{
+		AINAV_NewSwimMove(AIPlayer);
+	}
+	else
+	{
+		AINAV_NewMove(AIPlayer);
+	}
+}
 
 
 

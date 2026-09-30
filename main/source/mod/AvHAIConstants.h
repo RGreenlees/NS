@@ -394,13 +394,15 @@ struct AvHAIPathNode
 	}
 };
 typedef std::vector<AvHAIPathNode> AvHAIPathList;
+typedef std::vector<const AvHAIPathNode*> AvHAIPathNodeList;
+typedef std::vector<AvHAIPathNode*> AvHAIMutablePathNodeList;
 
 struct AvHAIPath
 {
 	AvHAIPathList PathNodes;
 
+	Vector DesiredDestination = ZERO_VECTOR;
 	EAINavMovementFlag RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
-
 	uint32 CurrentNodeIndex = 0;
 
 	void Clear()
@@ -408,11 +410,12 @@ struct AvHAIPath
 		PathNodes.clear();
 		RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
 		CurrentNodeIndex = 0;
+		DesiredDestination = ZERO_VECTOR;
 	}
 
 	bool IsValidPath() const
 	{
-		return CurrentNodeIndex < PathNodes.size();
+		return !vIsZero(DesiredDestination) && CurrentNodeIndex < PathNodes.size();
 	}
 
 	const AvHAIPathNode* GetCurrentPathNode() const
@@ -420,6 +423,47 @@ struct AvHAIPath
 		if (IsValidPath()) { return nullptr; }
 
 		return &PathNodes[CurrentNodeIndex];
+	}
+
+	void JumpToPathNode(const AvHAIPathNode* PathNode)
+	{
+		if (!PathNode) { return; }
+
+		for (int32 i = 0; i < GetPathSize(); i++)
+		{
+			if (PathNode == &PathNodes[i])
+			{
+				CurrentNodeIndex = i;
+			}
+		}
+	}
+
+	AvHAIPathNodeList GetFuturePathNodeList() const
+	{
+		AvHAIPathNodeList Result;
+
+		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
+		{
+			if (!PathNodes[i].IsValidMove()) { break; }
+
+			Result.push_back(&PathNodes[i]);
+		}
+
+		return Result;
+	}
+
+	AvHAIMutablePathNodeList GetMutableFuturePathNodeList()
+	{
+		AvHAIMutablePathNodeList Result;
+
+		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
+		{
+			if (!PathNodes[i].IsValidMove()) { break; }
+
+			Result.push_back(&PathNodes[i]);
+		}
+
+		return Result;
 	}
 
 	const AvHAIPathNode* GetNextPathNode() const
@@ -470,6 +514,16 @@ struct AvHAIPath
 		if (!IsValidPath()) { return ZERO_VECTOR; }
 
 		return PathNodes[PathNodes.size() - 1].ToLocation;
+	}
+
+	void OnPathNodeComplete()
+	{
+		if (!IsValidPath()) { return; }
+
+		if (CurrentNodeIndex < GetPathSize() - 1)
+		{
+			CurrentNodeIndex++;
+		}
 	}
 };
 
@@ -546,15 +600,20 @@ struct AvHAIMoveTask
 	Vector TaskLocation = ZERO_VECTOR;
 	const edict_t* TaskTarget = nullptr;
 	const edict_t* TriggerToActivate = nullptr;
-	bool bPathGenerated = false;
+	AvHAIPath TaskPath;
 
 	void Clear()
 	{
+		TaskPath.Clear();
 		TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
 		TaskLocation = ZERO_VECTOR;
 		TaskTarget = nullptr;
 		TriggerToActivate = nullptr;
-		bPathGenerated = false;
+	}
+
+	bool HasPath() const
+	{
+		return TaskPath.IsValidPath();
 	}
 };
 typedef std::vector<AvHAIMoveTask> AIMoveTaskList;
@@ -580,12 +639,6 @@ struct AvHAIStuckTracker
 // Contains the bot's current navigation info, such as current path
 struct AvHAINavStatus
 {
-	AvHAIPath CurrentPath; // Bot's path nodes
-
-	Vector TargetDestination = ZERO_VECTOR; // Desired destination
-	Vector ActualMoveDestination = ZERO_VECTOR; // Actual destination on nav mesh
-	Vector PathDestination = ZERO_VECTOR; // Where the path is currently headed to
-
 	Vector LastNavMeshCheckPosition = ZERO_VECTOR;
 	Vector LastNavMeshPosition = ZERO_VECTOR; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
 	Vector LastOpenLocation = ZERO_VECTOR; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
@@ -629,8 +682,6 @@ struct AvHAINavStatus
 
 	void Reset()
 	{
-		CurrentPath.Clear();
-		CurrentPathPoint = 0;
 		StuckInfo.Clear();
 		MovementTasks.clear();
 		UnstuckTask.Clear();
@@ -638,8 +689,6 @@ struct AvHAINavStatus
 
 	void ClearPath()
 	{
-		CurrentPath.Clear();
-		CurrentPathPoint = 0;
 		MovementTasks.clear();
 		UnstuckTask.Clear();
 	}
@@ -782,6 +831,10 @@ struct AvHAIPlayer
 	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
 	bool IsOnGround() const;
 	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
+	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
+	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
+	EAINavMoveResult ProgressMovementTasks();
+	EAINavMoveResult FollowPath(AvHAIPath* Path);
 };
 
 struct AvHAISquad

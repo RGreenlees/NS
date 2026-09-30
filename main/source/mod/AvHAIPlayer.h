@@ -24,6 +24,11 @@ static const float f_ffheight = 2.0f * tan((BOT_FOV * 0.0174532925f) * 0.5f) * B
 static const float f_ffwidth = f_ffheight * BOT_ASPECT_RATIO;
 
 
+
+
+
+
+
 void BotJump(AvHAIPlayer* pBot);
 void BotSuicide(AvHAIPlayer* pBot);
 void BotLookAt(AvHAIPlayer* pBot, Vector NewLocation, bool bSnap = false);

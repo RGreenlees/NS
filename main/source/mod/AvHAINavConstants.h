@@ -28,7 +28,7 @@ constexpr float max_ai_jump_height = 62.0f;
 constexpr auto MAX_PATH_POLY = 512;
 
 // Possible movement types. Defines the actions the bot needs to take to traverse this node
-enum EAINavMovementFlag : uint16
+enum class EAINavMovementFlag : uint16
 {
 	NAV_FLAG_NONE = 0,
 	NAV_FLAG_DISABLED = 1 << 31,		// Disabled
@@ -61,7 +61,7 @@ inline EAINavMovementFlag operator&(EAINavMovementFlag a, EAINavMovementFlag b)
 }
 
 // Nav hint types
-enum EAINavHintType : uint16
+enum class EAINavHintType : uint16
 {
 	NAV_HINT_BUILD_COMMCHAIR = 1 << 0,		// Place Command Chair
 	NAV_HINT_BUILD_INFPORTAL = 1 << 1,		// Place Infantry Portal
@@ -91,7 +91,7 @@ inline EAINavHintType operator&(EAINavHintType a, EAINavHintType b)
 }
 
 // Area types. Defines the cost of movement through an area and which flag to use
-enum EAINavArea
+enum class EAINavArea : uint16
 {
 	NAV_AREA_NULL = 0,		// Null area, cuts a hole in the mesh
 	NAV_AREA_UNWALKABLE = 60,		// Unwalkable
@@ -107,8 +107,19 @@ enum EAINavArea
 	NAV_AREA_LADDER = 10,		// Ladder
 };
 
+// Area types. Defines the cost of movement through an area and which flag to use
+enum class EAINavMoveResult : uint8
+{
+	NAV_MOVE_SUCCESS = 0,  // Succeeded in moving this tick
+	NAV_MOVE_NOPATH,       // Could not generate a path to the destination
+	NAV_MOVE_OFFPATH,      // Bot has unfortunately fallen off the path somehow
+	NAV_MOVE_STUCK,        // Has a path but is blocked by something
+	NAV_MOVE_NOTASK,       // No task to pursue
+	NAV_MOVE_PATH_COMPLETE // Path is fully completed, no more to do
+};
+
 // Profile indices. Use these when retrieving base agent profile information
-enum EAINavProfileIndex
+enum class EAINavProfileIndex : uint16
 {
 	NAV_PROFILE_MARINE = 0,		// Marine
 	NAV_PROFILE_SKULK = 1,		// Skulk
@@ -121,7 +132,7 @@ enum EAINavProfileIndex
 };
 
 // Profile indices. Use these when retrieving base agent profile information
-enum EAINavMeshIndex
+enum class EAINavMeshIndex : uint8
 {
 	NAV_MESH_REGULAR = 0,		// Regular Nav Mesh
 	NAV_MESH_ONOS = 1,		// Onos Nav Mesh
@@ -133,9 +144,10 @@ enum EAINavMeshIndex
 // Agent profile definition. Holds all information an agent needs when querying the nav mesh
 struct NavAgentProfile
 {
-	EAINavMeshIndex MeshIndex = NAV_MESH_INVALID;
+	EAINavMeshIndex MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
 	class dtQueryFilter Filters;
 	bool bFlyingProfile = false;
+	enum_hull PlayerHullIndex = human_hull;
 
 	NavAgentProfile() = default;
 
@@ -144,12 +156,12 @@ struct NavAgentProfile
 		, bFlyingProfile(bInFlyingProfile)
 	{
 		Filters.setExcludeFlags(0);
-		Filters.setIncludeFlags(InFlags);
+		Filters.setIncludeFlags(static_cast<unsigned int>(InFlags));
 	}
 
 	bool IsValid() const
 	{
-		return MeshIndex != NAV_MESH_INVALID;
+		return MeshIndex != EAINavMeshIndex::NAV_MESH_INVALID;
 	}
 };
 
@@ -166,8 +178,8 @@ std::vector<NavAgentProfile> BaseAgentProfiles;
 
 inline bool IsValidNavMeshIndex(int CheckIndex)
 {
-	return CheckIndex >= static_cast<int>(NAV_MESH_REGULAR)
-		&& CheckIndex < static_cast<int>(NAV_MESH_INVALID);
+	return CheckIndex >= static_cast<int>(EAINavMeshIndex::NAV_MESH_REGULAR)
+		&& CheckIndex < static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 }
 
 // Retrieve appropriate flag for area (See process() in the MeshProcess struct)
@@ -175,30 +187,30 @@ inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)
 {
 	switch (Area)
 	{
-		case NAV_AREA_UNWALKABLE:
-			return NAV_FLAG_DISABLED;
-		case NAV_AREA_WALK:
-			return NAV_FLAG_WALK;
-		case NAV_AREA_CROUCH:
-			return NAV_FLAG_CROUCH;
-		case NAV_AREA_OBSTRUCTED:
-			return NAV_FLAG_JUMP;
-		case NAV_AREA_HAZARD:
-			return NAV_FLAG_WALK;
-		case NAV_AREA_TELEPORT:
-			return NAV_FLAG_TELEPORT;
-		case NAV_AREA_BLOCKAGE_TEAM1:
-			return NAV_FLAG_BLOCKAGE_TEAM1;
-		case NAV_AREA_BLOCKAGE_TEAM2:
-			return NAV_FLAG_BLOCKAGE_TEAM2;
-		case NAV_AREA_WELDABLE:
-			return NAV_FLAG_WELD;
-		case NAV_AREA_WALLCLIMB:
-			return NAV_FLAG_WALLCLIMB;
-		case NAV_AREA_LADDER:
-			return NAV_FLAG_LADDER;
+		case EAINavArea::NAV_AREA_UNWALKABLE:
+			return EAINavMovementFlag::NAV_FLAG_DISABLED;
+		case EAINavArea::NAV_AREA_WALK:
+			return EAINavMovementFlag::NAV_FLAG_WALK;
+		case EAINavArea::NAV_AREA_CROUCH:
+			return EAINavMovementFlag::NAV_FLAG_CROUCH;
+		case EAINavArea::NAV_AREA_OBSTRUCTED:
+			return EAINavMovementFlag::NAV_FLAG_JUMP;
+		case EAINavArea::NAV_AREA_HAZARD:
+			return EAINavMovementFlag::NAV_FLAG_WALK;
+		case EAINavArea::NAV_AREA_TELEPORT:
+			return EAINavMovementFlag::NAV_FLAG_TELEPORT;
+		case EAINavArea::NAV_AREA_BLOCKAGE_TEAM1:
+			return EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM1;
+		case EAINavArea::NAV_AREA_BLOCKAGE_TEAM2:
+			return EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM2;
+		case EAINavArea::NAV_AREA_WELDABLE:
+			return EAINavMovementFlag::NAV_FLAG_WELD;
+		case EAINavArea::NAV_AREA_WALLCLIMB:
+			return EAINavMovementFlag::NAV_FLAG_WALLCLIMB;
+		case EAINavArea::NAV_AREA_LADDER:
+			return EAINavMovementFlag::NAV_FLAG_LADDER;
 		default:
-			return NAV_FLAG_DISABLED;
+			return EAINavMovementFlag::NAV_FLAG_DISABLED;
 	}
 }
 
@@ -207,71 +219,71 @@ inline void GetDebugColorForArea(EAINavArea Area, unsigned char& R, unsigned cha
 {
 	switch (Area)
 	{
-	case NAV_AREA_NULL:
-		R = 128;
-		G = 128;
-		B = 128;
-		break;
-	case NAV_AREA_UNWALKABLE:
-		R = 10;
-		G = 10;
-		B = 10;
-		break;
-	case NAV_AREA_WALK:
-		R = 0;
-		G = 192;
-		B = 255;
-		break;
-	case NAV_AREA_CROUCH:
-		R = 9;
-		G = 130;
-		B = 150;
-		break;
-	case NAV_AREA_OBSTRUCTED:
-		R = 255;
-		G = 64;
-		B = 64;
-		break;
-	case NAV_AREA_HAZARD:
-		R = 192;
-		G = 32;
-		B = 32;
-		break;
-	case NAV_AREA_TELEPORT:
-		R = 255;
-		G = 255;
-		B = 255;
-		break;
-	case NAV_AREA_BLOCKAGE_TEAM1:
-		R = 255;
-		G = 0;
-		B = 0;
-		break;
-	case NAV_AREA_BLOCKAGE_TEAM2:
-		R = 165;
-		G = 0;
-		B = 52;
-		break;
-	case NAV_AREA_WELDABLE:
-		R = 205;
-		G = 96;
-		B = 0;
-		break;
-	case NAV_AREA_WALLCLIMB:
-		R = 0;
-		G = 63;
-		B = 0;
-		break;
-	case NAV_AREA_LADDER:
-		R = 0;
-		G = 0;
-		B = 159;
-		break;
-	default:
-		R = 255;
-		G = 255;
-		B = 255;
-		break;
+		case EAINavArea::NAV_AREA_NULL:
+			R = 128;
+			G = 128;
+			B = 128;
+			break;
+		case EAINavArea::NAV_AREA_UNWALKABLE:
+			R = 10;
+			G = 10;
+			B = 10;
+			break;
+		case EAINavArea::NAV_AREA_WALK:
+			R = 0;
+			G = 192;
+			B = 255;
+			break;
+		case EAINavArea::NAV_AREA_CROUCH:
+			R = 9;
+			G = 130;
+			B = 150;
+			break;
+		case EAINavArea::NAV_AREA_OBSTRUCTED:
+			R = 255;
+			G = 64;
+			B = 64;
+			break;
+		case EAINavArea::NAV_AREA_HAZARD:
+			R = 192;
+			G = 32;
+			B = 32;
+			break;
+		case EAINavArea::NAV_AREA_TELEPORT:
+			R = 255;
+			G = 255;
+			B = 255;
+			break;
+		case EAINavArea::NAV_AREA_BLOCKAGE_TEAM1:
+			R = 255;
+			G = 0;
+			B = 0;
+			break;
+		case EAINavArea::NAV_AREA_BLOCKAGE_TEAM2:
+			R = 165;
+			G = 0;
+			B = 52;
+			break;
+		case EAINavArea::NAV_AREA_WELDABLE:
+			R = 205;
+			G = 96;
+			B = 0;
+			break;
+		case EAINavArea::NAV_AREA_WALLCLIMB:
+			R = 0;
+			G = 63;
+			B = 0;
+			break;
+		case EAINavArea::NAV_AREA_LADDER:
+			R = 0;
+			G = 0;
+			B = 159;
+			break;
+		default:
+			R = 255;
+			G = 255;
+			B = 255;
+			break;
 	}
 }
 
@@ -280,91 +292,91 @@ inline void GetDebugColorForFlag(EAINavMovementFlag Flag, unsigned char& R, unsi
 {
 	switch (Flag)
 	{
-	case NAV_FLAG_DISABLED:
-		R = 8;
-		G = 8;
-		B = 8;
-		break;
-	case NAV_FLAG_WALK:
-		R = 255;
-		G = 255;
-		B = 255;
-		break;
-	case NAV_FLAG_CROUCH:
-		R = 9;
-		G = 130;
-		B = 150;
-		break;
-	case NAV_FLAG_JUMP:
-		R = 200;
-		G = 200;
-		B = 0;
-		break;
-	case NAV_FLAG_LADDER:
-		R = 64;
-		G = 64;
-		B = 255;
-		break;
-	case NAV_FLAG_FALL:
-		R = 149;
-		G = 0;
-		B = 0;
-		break;
-	case NAV_FLAG_PLATFORM:
-		R = 255;
-		G = 32;
-		B = 255;
-		break;
-	case NAV_FLAG_TELEPORT:
-		R = 255;
-		G = 76;
-		B = 68;
-		break;
-	case NAV_FLAG_WALLCLIMB:
-		R = 0;
-		G = 66;
-		B = 0;
-		break;
-	case NAV_FLAG_LEAP:
-		R = 255;
-		G = 255;
-		B = 0;
-		break;
-	case NAV_FLAG_BLOCKAGE_TEAM1:
-		R = 209;
-		G = 0;
-		B = 0;
-		break;
-	case NAV_FLAG_BLOCKAGE_TEAM2:
-		R = 227;
-		G = 0;
-		B = 0;
-		break;
-	case NAV_FLAG_WELD:
-		R = 255;
-		G = 121;
-		B = 0;
-		break;
-	case NAV_FLAG_PHASEGATE_TEAM1:
-		R = 107;
-		G = 0;
-		B = 85;
-		break;
-	case NAV_FLAG_PHASEGATE_TEAM2:
-		R = 93;
-		G = 0;
-		B = 80;
-		break;
-	case NAV_FLAG_FLY:
-		R = 0;
-		G = 156;
-		B = 255;
-		break;
-	default:
-		R = 255;
-		G = 255;
-		B = 255;
-		break;
+		case EAINavMovementFlag::NAV_FLAG_DISABLED:
+			R = 8;
+			G = 8;
+			B = 8;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_WALK:
+			R = 255;
+			G = 255;
+			B = 255;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_CROUCH:
+			R = 9;
+			G = 130;
+			B = 150;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_JUMP:
+			R = 200;
+			G = 200;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_LADDER:
+			R = 64;
+			G = 64;
+			B = 255;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_FALL:
+			R = 149;
+			G = 0;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
+			R = 255;
+			G = 32;
+			B = 255;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_TELEPORT:
+			R = 255;
+			G = 76;
+			B = 68;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
+			R = 0;
+			G = 66;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_LEAP:
+			R = 255;
+			G = 255;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM1:
+			R = 209;
+			G = 0;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM2:
+			R = 227;
+			G = 0;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_WELD:
+			R = 255;
+			G = 121;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+			R = 107;
+			G = 0;
+			B = 85;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+			R = 93;
+			G = 0;
+			B = 80;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_FLY:
+			R = 0;
+			G = 156;
+			B = 255;
+			break;
+		default:
+			R = 255;
+			G = 255;
+			B = 255;
+			break;
 	}
 }
 
@@ -375,52 +387,52 @@ inline void GetFlagName(EAINavMovementFlag Flag, char* outName)
 
 	switch (Flag)
 	{
-		case NAV_FLAG_DISABLED:
+		case EAINavMovementFlag::NAV_FLAG_DISABLED:
 			sprintf(outName, "Disabled");
 			break;
-		case NAV_FLAG_WALK:
+		case EAINavMovementFlag::NAV_FLAG_WALK:
 			sprintf(outName, "Walk");
 			break;
-		case NAV_FLAG_CROUCH:
+		case EAINavMovementFlag::NAV_FLAG_CROUCH:
 			sprintf(outName, "Crouch");
 			break;
-		case NAV_FLAG_JUMP:
+		case EAINavMovementFlag::NAV_FLAG_JUMP:
 			sprintf(outName, "Jump");
 			break;
-		case NAV_FLAG_LADDER:
+		case EAINavMovementFlag::NAV_FLAG_LADDER:
 			sprintf(outName, "Ladder");
 			break;
-		case NAV_FLAG_FALL:
+		case EAINavMovementFlag::NAV_FLAG_FALL:
 			sprintf(outName, "Fall");
 			break;
-		case NAV_FLAG_PLATFORM:
+		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 			sprintf(outName, "Platform");
 			break;
-		case NAV_FLAG_TELEPORT:
+		case EAINavMovementFlag::NAV_FLAG_TELEPORT:
 			sprintf(outName, "Teleport");
 			break;
-		case NAV_FLAG_WALLCLIMB:
+		case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
 			sprintf(outName, "Wall Climb");
 			break;
-		case NAV_FLAG_LEAP:
+		case EAINavMovementFlag::NAV_FLAG_LEAP:
 			sprintf(outName, "Leap");
 			break;
-		case NAV_FLAG_BLOCKAGE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM1:
 			sprintf(outName, "Destroy Team 1 Blockage");
 			break;
-		case NAV_FLAG_BLOCKAGE_TEAM2:
+		case EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM2:
 			sprintf(outName, "Destroy Team 2 Blockage");
 			break;
-		case NAV_FLAG_WELD:
+		case EAINavMovementFlag::NAV_FLAG_WELD:
 			sprintf(outName, "Weld");
 			break;
-		case NAV_FLAG_PHASEGATE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
 			sprintf(outName, "Team 1 Phase Gate");
 			break;
-		case NAV_FLAG_PHASEGATE_TEAM2:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
 			sprintf(outName, "Team 2 Phase Gate");
 			break;
-		case NAV_FLAG_FLY:
+		case EAINavMovementFlag::NAV_FLAG_FLY:
 			sprintf(outName, "Fly");
 			break;
 		default:
@@ -434,40 +446,12 @@ inline bool IsFlagTeleportType(EAINavMovementFlag Flag)
 {
 	switch (Flag)
 	{
-	case NAV_FLAG_DISABLED:
-		return false;
-	case NAV_FLAG_WALK:
-		return false;
-	case NAV_FLAG_CROUCH:
-		return false;
-	case NAV_FLAG_JUMP:
-		return false;
-	case NAV_FLAG_LADDER:
-		return false;
-	case NAV_FLAG_FALL:
-		return false;
-	case NAV_FLAG_PLATFORM:
-		return false;
-	case NAV_FLAG_TELEPORT:
-		return true;
-	case NAV_FLAG_WALLCLIMB:
-		return false;
-	case NAV_FLAG_LEAP:
-		return false;
-	case NAV_FLAG_BLOCKAGE_TEAM1:
-		return false;
-	case NAV_FLAG_BLOCKAGE_TEAM2:
-		return false;
-	case NAV_FLAG_WELD:
-		return false;
-	case NAV_FLAG_PHASEGATE_TEAM1:
-		return true;
-	case NAV_FLAG_PHASEGATE_TEAM2:
-		return true;
-	case NAV_FLAG_FLY:
-		return false;
-	default:
-		return false;
+		case EAINavMovementFlag::NAV_FLAG_TELEPORT:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+			return true;
+		default:
+			return false;
 	}
 }
 
@@ -478,42 +462,42 @@ inline void GetAreaName(EAINavArea Area, char* outName)
 
 	switch (Area)
 	{
-	case NAV_AREA_UNWALKABLE:
-		sprintf(outName, "Unwalkable");
-		break;
-	case NAV_AREA_WALK:
-		sprintf(outName, "Walk");
-		break;
-	case NAV_AREA_CROUCH:
-		sprintf(outName, "Crouch");
-		break;
-	case NAV_AREA_OBSTRUCTED:
-		sprintf(outName, "Obstructed");
-		break;
-	case NAV_AREA_HAZARD:
-		sprintf(outName, "Hazard");
-		break;
-	case NAV_AREA_TELEPORT:
-		sprintf(outName, "Teleport");
-		break;
-	case NAV_AREA_BLOCKAGE_TEAM1:
-		sprintf(outName, "Team 1 Structure Blockage");
-		break;
-	case NAV_AREA_BLOCKAGE_TEAM2:
-		sprintf(outName, "Team 2 Structure Blockage");
-		break;
-	case NAV_AREA_WELDABLE:
-		sprintf(outName, "Weldable");
-		break;
-	case NAV_AREA_WALLCLIMB:
-		sprintf(outName, "Wall Climb");
-		break;
-	case NAV_AREA_LADDER:
-		sprintf(outName, "Ladder");
-		break;
-	default:
-		sprintf(outName, "Undefined");
-		break;
+		case EAINavArea::NAV_AREA_UNWALKABLE:
+			sprintf(outName, "Unwalkable");
+			break;
+		case EAINavArea::NAV_AREA_WALK:
+			sprintf(outName, "Walk");
+			break;
+		case EAINavArea::NAV_AREA_CROUCH:
+			sprintf(outName, "Crouch");
+			break;
+		case EAINavArea::NAV_AREA_OBSTRUCTED:
+			sprintf(outName, "Obstructed");
+			break;
+		case EAINavArea::NAV_AREA_HAZARD:
+			sprintf(outName, "Hazard");
+			break;
+		case EAINavArea::NAV_AREA_TELEPORT:
+			sprintf(outName, "Teleport");
+			break;
+		case EAINavArea::NAV_AREA_BLOCKAGE_TEAM1:
+			sprintf(outName, "Team 1 Structure Blockage");
+			break;
+		case EAINavArea::NAV_AREA_BLOCKAGE_TEAM2:
+			sprintf(outName, "Team 2 Structure Blockage");
+			break;
+		case EAINavArea::NAV_AREA_WELDABLE:
+			sprintf(outName, "Weldable");
+			break;
+		case EAINavArea::NAV_AREA_WALLCLIMB:
+			sprintf(outName, "Wall Climb");
+			break;
+		case EAINavArea::NAV_AREA_LADDER:
+			sprintf(outName, "Ladder");
+			break;
+		default:
+			sprintf(outName, "Undefined");
+			break;
 	}
 }
 
@@ -523,9 +507,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.clear();
 
 	NavAgentProfile NewProfile0;
-	NewProfile0.MeshIndex = NAV_MESH_REGULAR;
+	NewProfile0.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
 	NewProfile0.Filters.setIncludeFlags(127);
-	NewProfile0.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile0.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile0.Filters.setAreaCost(0, 0.0);
 	NewProfile0.Filters.setAreaCost(1, 1.0);
 	NewProfile0.Filters.setAreaCost(2, 2.0);
@@ -540,9 +524,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile0);
 
 	NavAgentProfile NewProfile1;
-	NewProfile1.MeshIndex = NAV_MESH_REGULAR;
+	NewProfile1.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
 	NewProfile1.Filters.setIncludeFlags(255);
-	NewProfile1.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile1.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile1.Filters.setAreaCost(0, 0.0);
 	NewProfile1.Filters.setAreaCost(1, 1.0);
 	NewProfile1.Filters.setAreaCost(2, 1.0);
@@ -557,9 +541,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile1);
 
 	NavAgentProfile NewProfile2;
-	NewProfile2.MeshIndex = NAV_MESH_REGULAR;
+	NewProfile2.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
 	NewProfile2.Filters.setIncludeFlags(127);
-	NewProfile2.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile2.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile2.Filters.setAreaCost(0, 0.0);
 	NewProfile2.Filters.setAreaCost(1, 1.0);
 	NewProfile2.Filters.setAreaCost(2, 1.0);
@@ -574,9 +558,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile2);
 
 	NavAgentProfile NewProfile3;
-	NewProfile3.MeshIndex = NAV_MESH_REGULAR;
+	NewProfile3.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
 	NewProfile3.Filters.setIncludeFlags(16895);
-	NewProfile3.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile3.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile3.Filters.setAreaCost(0, 0.0);
 	NewProfile3.Filters.setAreaCost(1, 1.0);
 	NewProfile3.Filters.setAreaCost(2, 1.0);
@@ -591,9 +575,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile3);
 
 	NavAgentProfile NewProfile4;
-	NewProfile4.MeshIndex = NAV_MESH_REGULAR;
+	NewProfile4.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
 	NewProfile4.Filters.setIncludeFlags(16767);
-	NewProfile4.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile4.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile4.Filters.setAreaCost(0, 0.0);
 	NewProfile4.Filters.setAreaCost(1, 1.0);
 	NewProfile4.Filters.setAreaCost(2, 2.0);
@@ -608,9 +592,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile4);
 
 	NavAgentProfile NewProfile5;
-	NewProfile5.MeshIndex = NAV_MESH_ONOS;
+	NewProfile5.MeshIndex = EAINavMeshIndex::NAV_MESH_ONOS;
 	NewProfile5.Filters.setIncludeFlags(127);
-	NewProfile5.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile5.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile5.Filters.setAreaCost(0, 0.0);
 	NewProfile5.Filters.setAreaCost(1, 1.0);
 	NewProfile5.Filters.setAreaCost(2, 2.0);
@@ -625,9 +609,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile5);
 
 	NavAgentProfile NewProfile6;
-	NewProfile6.MeshIndex = NAV_MESH_CONSTRUCTION;
-	NewProfile6.Filters.setIncludeFlags(NAV_FLAG_ALL);
-	NewProfile6.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	NewProfile6.MeshIndex = EAINavMeshIndex::NAV_MESH_CONSTRUCTION;
+	NewProfile6.Filters.setIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_ALL));
+	NewProfile6.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile6.Filters.setAreaCost(0, 1.0);
 	NewProfile6.Filters.setAreaCost(1, 1.0);
 	NewProfile6.Filters.setAreaCost(2, 1.0);
@@ -642,9 +626,9 @@ inline void PopulateBaseAgentProfiles()
 	BaseAgentProfiles.push_back(NewProfile6);
 
 	NavAgentProfile DefaultProfile;
-	DefaultProfile.MeshIndex = NAV_MESH_REGULAR;
-	DefaultProfile.Filters.setIncludeFlags(NAV_FLAG_ALL);
-	DefaultProfile.Filters.setExcludeFlags(NAV_FLAG_DISABLED);
+	DefaultProfile.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
+	DefaultProfile.Filters.setIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_ALL));
+	DefaultProfile.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	DefaultProfile.Filters.setAreaCost(0, 1.0);
 	DefaultProfile.Filters.setAreaCost(1, 1.0);
 	DefaultProfile.Filters.setAreaCost(2, 1.0);
@@ -690,7 +674,7 @@ inline const NavAgentProfile* GetBaseAgentProfile(const EAINavProfileIndex Index
 
 	if (NavIndex > static_cast<unsigned int>(EAINavProfileIndex::NAV_PROFILE_DEFAULT)) { return nullptr; }
 
-	return &BaseAgentProfiles[Index];
+	return &BaseAgentProfiles[NavIndex];
 }
 
 #endif

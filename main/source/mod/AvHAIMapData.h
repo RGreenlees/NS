@@ -51,6 +51,7 @@ struct DynamicMapObjectStop
 
 struct DynamicMapObject
 {
+	CBaseEntity* ObjectRef = nullptr;
 	int EdictIndex = -1;
 	edict_t* Edict = nullptr;
 	const char* ObjectName = nullptr;
@@ -72,7 +73,7 @@ struct DynamicMapObject
 
 	bool IsValid() const
 	{
-		return EdictIndex > -1 && !FNullEnt(Edict);
+		return ObjectRef != nullptr && EdictIndex > -1 && !FNullEnt(Edict);
 	}
 
 	const DynamicMapObjectStop* GetCurrentStop() const
@@ -154,23 +155,26 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject);
 void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject);
 void AIMAP_UpdateDynamicInactiveObject(DynamicMapObject* InactiveObject);
 
+const DynamicMapObject* AIMAP_TraceForDynamicObject(const Vector& TraceFrom, const Vector& TraceTo);
+
 void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject);
 
-DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict);
+const DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict);
+DynamicMapObject* AIMAP_GetDynamicObjectByEdict_Mutable(const edict_t* SearchEdict);
 void AIMAP_LinkDynamicMapObjectsToTriggers();
 void AIMAP_LinkDynamicMapObjectsToOffMeshConnections();
 void AIMAP_SetTrainStartPoints();
 void AIMAP_PopulateAllConnectionsAffectedByDynamicObjects();
 bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* TargetObject, vector<edict_t*> CheckedObjects);
 void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object);
-DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, const Vector EndPoint);
+const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, const Vector EndPoint);
 
 bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObject, const Vector& ObjectPosition, const NavOffMeshConnection* Connection);
 
 const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const AvHAIPlayer* PlayerToTrigger);
 const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const Vector& ActivateLocation);
 Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, const edict_t* ButtonEdict);
-Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const DynamicMapObject* LiftReference);
+Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const Vector& RiderPosition, const DynamicMapObject* LiftReference);
 const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* PlatformRef);
 bool AIMAP_PlatformNeedsActivating(const AvHAIPlayer* AIPlayer, const DynamicMapObject* Platform, const Vector& EmbarkPoint, const Vector& DisembarkPoint);
 void AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, const DynamicMapObjectStop* EmbarkStop, const DynamicMapObjectStop* DisembarkStop);
@@ -180,6 +184,8 @@ const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapOb
 bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector StartLoc, const Vector EndLoc, const DynamicMapObject* SearchObject);
 
 Vector AIMAP_GetTriggerFloorLocation(const NavAgentProfile* NavProfile, const DynamicMapObject* TriggerObject, const Vector& UserLocation);
+
+void AIMAP_ForceActivateTrigger(const AvHAIPlayer* AIPlayer, const DynamicMapObject* TriggerObject);
 
 DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, const DynamicMapObject* SearchObject, const DynamicMapObject* IgnoreObject);
 

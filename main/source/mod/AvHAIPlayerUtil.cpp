@@ -383,6 +383,21 @@ float GetPlayerHeight(const edict_t* Player, const bool bIsCrouching)
 	return GetPlayerOriginOffsetFromFloor(Player, bIsCrouching).z * 2.0f;
 }
 
+Vector UTIL_GetHullOffsetFromFloor(enum_hull HullType)
+{
+	switch (HullType)
+	{
+		case head_hull:
+			return Vector(0.0f, 0.0f, 18.0f);
+		case human_hull:
+			return Vector(0.0f, 0.0f, 36.0f);
+		case large_hull:
+			return Vector(0.0f, 0.0f, 54.0f);
+		default:
+			return Vector(0.0f, 0.0f, 36.0f);
+	}
+}
+
 Vector GetPlayerOriginOffsetFromFloor(const edict_t* pEdict, const bool bIsCrouching)
 {
 	if (FNullEnt(pEdict)) { return g_vecZero; }
@@ -391,33 +406,33 @@ Vector GetPlayerOriginOffsetFromFloor(const edict_t* pEdict, const bool bIsCrouc
 
 	switch (iuser3)
 	{
-	case AVH_USER3_MARINE_PLAYER:
-		return (bIsCrouching) ? Vector(0.0f, 0.0f, 18.0f) : Vector(0.0f, 0.0f, 36.0f);
-		break;
-	case AVH_USER3_COMMANDER_PLAYER:
-		return Vector(0.0f, 0.0f, 36.0f);
-		break;
-	case AVH_USER3_ALIEN_EMBRYO:
-		return Vector(0.0f, 0.0f, 18.0f);
-		break;
-	case AVH_USER3_ALIEN_PLAYER1:
-		return Vector(0.0f, 0.0f, 18.0f);
-		break;
-	case AVH_USER3_ALIEN_PLAYER2:
-		return Vector(0.0f, 0.0f, 18.0f);
-		break;
-	case AVH_USER3_ALIEN_PLAYER3:
-		return Vector(0.0f, 0.0f, 18.0f);
-		break;
-	case AVH_USER3_ALIEN_PLAYER4:
-		return (bIsCrouching) ? Vector(0.0f, 0.0f, 18.0f) : Vector(0.0f, 0.0f, 36.0f);
-		break;
-	case AVH_USER3_ALIEN_PLAYER5:
-		return (bIsCrouching) ? Vector(0.0f, 0.0f, 36.0f) : Vector(0.0f, 0.0f, 54.0f);
-		break;
-	default:
-		return Vector(0.0f, 0.0f, 36.0f);
-		break;
+		case AVH_USER3_MARINE_PLAYER:
+			return (bIsCrouching) ? Vector(0.0f, 0.0f, 18.0f) : Vector(0.0f, 0.0f, 36.0f);
+			break;
+		case AVH_USER3_COMMANDER_PLAYER:
+			return Vector(0.0f, 0.0f, 36.0f);
+			break;
+		case AVH_USER3_ALIEN_EMBRYO:
+			return Vector(0.0f, 0.0f, 18.0f);
+			break;
+		case AVH_USER3_ALIEN_PLAYER1:
+			return Vector(0.0f, 0.0f, 18.0f);
+			break;
+		case AVH_USER3_ALIEN_PLAYER2:
+			return Vector(0.0f, 0.0f, 18.0f);
+			break;
+		case AVH_USER3_ALIEN_PLAYER3:
+			return Vector(0.0f, 0.0f, 18.0f);
+			break;
+		case AVH_USER3_ALIEN_PLAYER4:
+			return (bIsCrouching) ? Vector(0.0f, 0.0f, 18.0f) : Vector(0.0f, 0.0f, 36.0f);
+			break;
+		case AVH_USER3_ALIEN_PLAYER5:
+			return (bIsCrouching) ? Vector(0.0f, 0.0f, 36.0f) : Vector(0.0f, 0.0f, 54.0f);
+			break;
+		default:
+			return Vector(0.0f, 0.0f, 36.0f);
+			break;
 	}
 }
 

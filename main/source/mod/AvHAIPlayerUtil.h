@@ -130,6 +130,8 @@ Vector GetPlayerTopOfCollisionHull(const edict_t* pEdict);
 // The top-centre of the player's collision box based on their player class, manually specifying if they're crouching or not
 Vector GetPlayerTopOfCollisionHull(const edict_t* pEdict, const bool bIsCrouching);
 
+Vector UTIL_GetHullOffsetFromFloor(enum_hull HullType);
+
 // Based on current movement inputs from the player, what direction are they trying to move? Ignores actual velocity.
 Vector GetPlayerAttemptedMoveDirection(const edict_t* Player);
 

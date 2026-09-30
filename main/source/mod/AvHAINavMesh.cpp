@@ -1122,7 +1122,7 @@ void NavMesh::RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionTo
 	{
 		NavOffMeshConnection* CheckRef = &(*it);
 
-		if (CheckRef->ConnectionRef == ConnectionToRemove->ConnectionRef)
+		if (!CheckRef || !CheckRef->IsValid() || CheckRef->ConnectionRef == ConnectionToRemove->ConnectionRef)
 		{
 			it = MeshConnections.erase(it);
 		}

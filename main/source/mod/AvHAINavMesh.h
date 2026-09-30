@@ -66,7 +66,7 @@ struct NavOffMeshConnection
 	unsigned int ConnectionRef = 0; // References to this connection on all defined nav meshes
 	edict_t* LinkedObject = nullptr;
 
-	bool IsValid()
+	bool IsValid() const
 	{
 		return ConnectionRef > 0 && IsValidNavMeshIndex(NavMeshIndex) && !vEquals(FromLocation, ToLocation);
 	}
