@@ -657,7 +657,6 @@ struct AvHAINavStatus
 	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
 	float AirStartedTime = 0.0f; // When the bot left the ground if in the air
 	float LeapAttemptedTime = 0.0f; // When the bot last attempted to leap/blink. Avoid spam that sends it flying around too fast
-	bool bIsJumping = false; // Is the bot in the air from a jump? Will duck so it can duck-jump
 	bool IsOnGround = true; // Is the bot currently on the ground, or on a ladder?
 	bool bHasAttemptedJump = false; // Last frame, the bot tried a jump. If the bot is still on the ground, it probably tried to jump in a vent or something
 	float LastFlapTime = 0.0f; // When the bot last flapped its wings (if Lerk). Prevents per-frame spam draining adrenaline
@@ -717,6 +716,7 @@ struct AvHAIMovementInput
 	Vector			DesiredLookDirection = ZERO_VECTOR;  // Where the bot might want to look if they're not focused on something else (e.g. enemy)
 	EAIWeaponId		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot might need to continue moving
 	Vector			DesiredMoveDirection = ZERO_VECTOR;
+	Vector			VelocityOverride = ZERO_VECTOR; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
 
 	void Clear()
 	{
@@ -729,6 +729,7 @@ struct AvHAIMovementInput
 		DesiredLookDirection = ZERO_VECTOR;
 		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID;
 		DesiredMoveDirection = ZERO_VECTOR;
+		VelocityOverride = ZERO_VECTOR;
 	}
 };
 
@@ -759,7 +760,7 @@ struct AvHAIPlayer
 	AvHPlayer* Player = nullptr;
 	edict_t* Edict = nullptr;
 	AvHTeamNumber	Team = TEAM_IND;
-	AvHAIMovementInput MovementInput;
+	AvHAIMovementInput NextFrameMovementInput;
 	byte			AdjustedMsec = 0;
 
 	bool bIsPendingKill = false;
@@ -861,6 +862,11 @@ struct AvHAIPlayer
 	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
 	EAINavMoveResult ProgressMovementTasks();
 	EAINavMoveResult FollowPath(AvHAIPath* Path);
+	Vector GetLocation() const { return Edict->v.origin; }
+	Vector GetVelocity() const { return Edict->v.velocity; }
+	void Jump(bool bDuckJump);
+	void Suicide();
+	bool IsDead() const;
 };
 
 struct AvHAISquad

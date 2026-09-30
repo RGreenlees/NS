@@ -1420,12 +1420,71 @@ bool AINAV_NewGroundMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMov
 
 bool AINAV_NewFallMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	const Vector AIPlayerLocation = AIPlayer->GetLocation();
+	const Vector vBotOrientation = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - AIPlayerLocation);
+	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
 
+	if (!AIPlayer->IsOnGround())
+	{
+		OutMovementInput.DesiredMoveDirection = vBotOrientation;
+		return true;
+	}
+
+	if (vDist2DSq(AIPlayerLocation, CurrentPathNode->ToLocation) > sqrf(AIPlayer->GetPlayerRadius()))
+	{
+		OutMovementInput.DesiredMoveDirection = vBotOrientation;
+	}
+	else
+	{
+		OutMovementInput.DesiredMoveDirection = vForward;
+	}
+
+	if (!AIPlayer->CanCrouch()) { return; }
+
+	const Vector HeadLocation = GetPlayerTopOfCollisionHull(AIPlayer->Edict, false);
+
+	if (!UTIL_QuickTrace(AIPlayer->Edict, HeadLocation, (HeadLocation + (OutMovementInput.DesiredMoveDirection * 50.0f))))
+	{
+		OutMovementInput.Button |= IN_DUCK;
+	}
 }
 
 bool AINAV_NewJumpMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - AIPlayer->GetLocation());
 
+	if (vIsZero(vForward))
+	{
+		vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+	}
+
+	const Vector CurrentVelocity = AIPlayer->GetVelocity();
+	const Vector CurrentVelocity2D = UTIL_GetVectorNormal2D(CurrentVelocity);
+
+	OutMovementInput.DesiredMoveDirection = vForward;
+
+	float Dot = UTIL_GetDotProduct2D(vForward, CurrentVelocity2D);
+
+	// Yes this is cheating, but I'm up against millions of years of human evolution here...
+	if (AIPlayer->IsOnGround() && Dot < 0.95f)
+	{
+		float MoveSpeed = vSize2D(AIPlayer->GetVelocity());
+		Vector NewVelocity = vForward * fmaxf(MoveSpeed, GetDesiredBotMovementSpeed(pBot));
+		NewVelocity.z = CurrentVelocity.z;
+
+		OutMovementInput.VelocityOverride = NewVelocity;
+	}
+
+	BotJump(pBot);
+
+	if (!AIPlayer->CanCrouch()) { return; }
+
+	Vector HeadLocation = GetPlayerTopOfCollisionHull(AIPlayer->Edict, false);
+
+	if (!UTIL_QuickTrace(pBot->Edict, HeadLocation, (HeadLocation + (OutMovementInput.DesiredMoveDirection * 50.0f))))
+	{
+		pBot->Button |= IN_DUCK;
+	}
 }
 
 bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)

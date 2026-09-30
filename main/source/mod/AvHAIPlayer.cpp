@@ -156,6 +156,25 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 	}
 }
 
+void AvHAIPlayer::Jump(bool bDuckJump)
+{
+	if (IsOnGround())
+	{
+		if (gpGlobals->time - BotNavInfo.LandedTime >= 0.1f)
+		{
+			NextFrameMovementInput.Button |= IN_JUMP;
+			BotNavInfo.bHasAttemptedJump = true;
+		}
+	}
+	else
+	{
+		if (bDuckJump)
+		{
+			pBot->Button |= IN_DUCK;
+		}
+	}
+}
+
 EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
@@ -230,49 +249,32 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	if (IsInWater())
 	{
-		AINAV_NewSwimMove(AIPlayer);
+		AINAV_NextSwimMove(this, this->NextFrameMovementInput, CurrentPathNode, NextPathNode);
 	}
 	else
 	{
-		AINAV_NewMove(AIPlayer);
+		AINAV_NextMove(this, this->NextFrameMovementInput, CurrentPathNode, NextPathNode);
 	}
 }
 
-
-
-
-void BotJump(AvHAIPlayer* pBot)
+void AvHAIPlayer::Suicide()
 {
-	if (pBot->BotNavInfo.IsOnGround)
+	if (!bIsPendingKill && !IsDead())
 	{
-		if (gpGlobals->time - pBot->BotNavInfo.LandedTime >= 0.5f)
-		{
-			pBot->Button |= IN_JUMP;
-			pBot->BotNavInfo.bIsJumping = true;
-			pBot->BotNavInfo.bHasAttemptedJump = true;
-		}
-	}
-	else
-	{
-		if (pBot->BotNavInfo.bIsJumping)
-		{
-			// Skulks, gorges and lerks can't duck jump...
-			if (!IsPlayerSkulk(pBot->Edict) && !IsPlayerGorge(pBot->Edict) && !IsPlayerLerk(pBot->Edict))
-			{
-				pBot->Button |= IN_DUCK;
-			}
-		}
+		Player->Suicide();
+		bIsPendingKill = true;
 	}
 }
 
-void BotSuicide(AvHAIPlayer* pBot)
+bool AvHAIPlayer::IsDead() const
 {
-	if (pBot && !IsPlayerDead(pBot->Edict) && !pBot->bIsPendingKill)
-	{
-		pBot->bIsPendingKill = true;
-		pBot->Player->Suicide();
-	}
+	return (Edict->v.deadflag != DEAD_NO || Edict->v.health <= 0.0f);
 }
+
+
+
+
+
 
 /* Makes the bot look at the specified position */
 void BotLookAt(AvHAIPlayer* pBot, const Vector target, bool bSnap)
