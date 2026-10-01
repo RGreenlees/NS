@@ -392,6 +392,12 @@ struct AvHAIPathNode
 		EAINavMovementFlag PrecisionFlags = (EAINavMovementFlag::NAV_FLAG_WALLCLIMB | EAINavMovementFlag::NAV_FLAG_LADDER | EAINavMovementFlag::NAV_FLAG_JUMP | EAINavMovementFlag::NAV_FLAG_FALL);
 		return EnumHasAnyFlags(MovementFlag, PrecisionFlags);
 	}
+
+	bool IsTeleportMove() const
+	{
+		EAINavMovementFlag TeleportFlags = (EAINavMovementFlag::NAV_FLAG_TELEPORT | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
+		return EnumHasAnyFlags(MovementFlag, TeleportFlags);
+	}
 };
 typedef std::vector<AvHAIPathNode> AvHAIPathList;
 typedef std::vector<const AvHAIPathNode*> AvHAIPathNodeList;
@@ -848,9 +854,6 @@ struct AvHAIPlayer
 
 	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free; }
 	bool HasValidPath() const;
-	const AvHAIPathNode* GetCurrentPathNode() const;
-	const AvHAIPathNode* GetNextPathNode() const;
-	bool HasNextPathPoint() const;
 	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
 	bool IsOnGround() const;
 	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
@@ -858,10 +861,10 @@ struct AvHAIPlayer
 	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
 	enum_hull GetPlayerHull() const;
 	float GetPlayerRadius() const;
+	void AddMovementTask(AvHAIMoveTask& NewTask);
 	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
 	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
 	EAINavMoveResult ProgressMovementTasks();
-	EAINavMoveResult FollowPath(AvHAIPath* Path);
 	Vector GetLocation() const { return Edict->v.origin; }
 	Vector GetVelocity() const { return Edict->v.velocity; }
 	void Jump(bool bDuckJump);

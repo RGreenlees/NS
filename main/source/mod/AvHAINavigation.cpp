@@ -1015,71 +1015,58 @@ bool AINAV_IsBotOffPlatformNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode
 	return false;
 }
 
-
-
-
-
-
-void AINAV_FollowPath(AvHAIPlayer* AIPlayer)
+EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 {
-	if (!AIPlayer || !AIPlayer->IsValid()) { return; }
+	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
 
-	if (!AIPlayer->HasValidPath())
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
+
+	if (AINAV_HasBotCompletedPathPoint(AIPlayer, CurrentPathNode, NextPathNode))
 	{
-		AIPlayer->BotNavInfo.Reset();
-		return;
-	}
-
-	AvHAIPath* CurrentPath = &AIPlayer->BotNavInfo.CurrentPath;
-	AvHAINavStatus* NavInfo = &AIPlayer->BotNavInfo;
-	AvHAIStuckTracker* StuckInfo = &NavInfo->StuckInfo;
-
-	edict_t* PlayerEdict = AIPlayer->Edict;
-
-	if (AINAV_HasBotCompletedPathPoint(AIPlayer))
-	{
-		StuckInfo->Clear();
-
 		// We have reached the end of our path. Job done.
-		if (!AIPlayer->HasNextPathPoint())
+		if (!NextPathNode)
 		{
-			NavInfo->Reset();
-			return;
+			return EAINavMoveResult::NAV_MOVE_PATH_COMPLETE;
 		}
 
-		CurrentPath->CurrentNodeIndex++;
+		Path->OnPathNodeComplete();
+
+		CurrentPathNode = Path->GetCurrentPathNode();
+		NextPathNode = Path->GetNextPathNode();
 	}
 
-	if (PlayerEdict->v.flags & FL_INWATER)
+	if (AIPlayer->IsInWater())
 	{
 		TraceResult Hit;
 
-		for (int32 i = CurrentPath->CurrentNodeIndex + 1; i < CurrentPath->GetPathSize(); i++)
+		AvHAIMutablePathNodeList FutureNodeList = Path->GetMutableFuturePathNodeList();
+
+		for (AvHAIPathNode* ThisNode : FutureNodeList)
 		{
-			AvHAIPathNode* ThisNode = CurrentPath->GetNodeAtIndex_Mutable(i);
-
-			if (!ThisNode || !ThisNode->IsValidMove()) { break; }
-
 			if (!UTIL_IsPointInSwimArea(ThisNode->ToLocation)) { break; }
 
-			UTIL_TraceHull(AIPlayer->Edict->v.origin, ThisNode->ToLocation, ignore_monsters, head_hull, nullptr, &Hit);
+			UTIL_TraceHull(AIPlayer->GetLocation(), ThisNode->ToLocation, ignore_monsters, head_hull, nullptr, &Hit);
 
 			if (!Hit.fAllSolid && !Hit.fStartSolid && Hit.flFraction >= 1.0f)
 			{
-				CurrentPath->CurrentNodeIndex = i;
-				ThisNode->FromLocation = AIPlayer->Edict->v.origin;
+				Path->JumpToPathNode(ThisNode);
+				ThisNode->FromLocation = AIPlayer->GetLocation();
 			}
 		}
-	}
 
-	const AvHAIPathNode* CurrentPathNode = CurrentPath->GetCurrentPathNode();
+		CurrentPathNode = Path->GetCurrentPathNode();
+		NextPathNode = Path->GetNextPathNode();
+	}
 
 	if (IsPlayerStandingOnPlayer(AIPlayer->Edict) && CurrentPathNode->MovementFlag != EAINavMovementFlag::NAV_FLAG_LADDER)
 	{
-		if (PlayerEdict->v.groundentity->v.velocity.Length2D() > 10.0f)
+		if (AIPlayer->GetVelocity().Length2D() > 10.0f)
 		{
-			AIPlayer->desiredMovementDir = UTIL_GetVectorNormal2D(-PlayerEdict->v.groundentity->v.velocity);
-			return;
+			AIPlayer->NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(-AIPlayer->Edict->v.groundentity->v.velocity);
+			return EAINavMoveResult::NAV_MOVE_SUCCESS;
 		}
 
 		MoveToWithoutNav(AIPlayer, CurrentPathNode->ToLocation);
@@ -1094,224 +1081,240 @@ void AINAV_FollowPath(AvHAIPlayer* AIPlayer)
 		// TODO: Something here
 	}
 
-	if (AINAV_IsBothOffCurrentPathNode(AIPlayer))
+	if (AINAV_IsBotOffPathNode(AIPlayer, CurrentPathNode))
 	{
-		StuckInfo->bPathFollowFailed = true;
-		NavInfo->ClearPath();
+		return EAINavMoveResult::NAV_MOVE_OFFPATH;
+	}
+
+	AvHAIMoveTask NewMoveTask;
+
+	if (AINAV_CheckAndAddRequiredMovementTasks(AIPlayer->GetNavProfile(), Path, NewMoveTask))
+	{
+		AIPlayer->AddMovementTask(NewMoveTask);
 		return;
 	}
 
-	StuckInfo->bPathFollowFailed = false;
-
-	const bool bAddedATask = AINAV_CheckAndAddRequiredMovementTasks(AIPlayer);
-
-	if (bAddedATask) { return; }
-
 	if (AIPlayer->IsInWater())
 	{
-		AINAV_NewSwimMove(AIPlayer);
+		AINAV_NextSwimMove(AIPlayer, AIPlayer->NextFrameMovementInput, CurrentPathNode, NextPathNode);
 	}
 	else
 	{
-		AINAV_NewMove(AIPlayer);
+		AINAV_NextMove(AIPlayer, AIPlayer->NextFrameMovementInput, CurrentPathNode, NextPathNode);
 	}
 }
 
-bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer)
+bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, AvHAIPath* Path, AvHAIMoveTask& NewMoveTask)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || !AIPlayer->HasValidPath()) { return false; }
+	if (!NavProfile || !NavProfile->IsValid() || !Path->IsValidPath()) { return false; }
 
-	const AvHAIPathNode* CurrentPathNode = AIPlayer->GetCurrentPathNode();
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
 	// If we are currently navigating a platform, don't run the checks in case we screw up our current move
 	if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM) { return false; }
 
-	const AvHAIPath* AIPlayerPath = &AIPlayer->BotNavInfo.CurrentPath;
-	const NavAgentProfile* NavProfile = AIPlayer->GetNavProfile();
+	AvHAIPathNodeList FuturePathNodes = Path->GetFuturePathNodeList();
 
-	for (int32 i = AIPlayerPath->CurrentNodeIndex; i < AIPlayerPath->GetPathSize(); i++)
+	for (const AvHAIPathNode* FutureNode : FuturePathNodes)
 	{
-		const AvHAIPathNode* FutureNode = AIPlayerPath->GetNodeAtIndex(i);
-
 		if (!FutureNode || !FutureNode->IsValidMove()) { return false; }
 
 		if (FutureNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
 		{
 			const DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->Platform);
 
-			if (!PlatformObject || !AIMAP_PlatformNeedsActivating(AIPlayer, PlatformObject, FutureNode->FromLocation, FutureNode->ToLocation)) { continue; }
+			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject, NewMoveTask);
+		}
 
-			const DynamicMapObjectStop* DesiredStartStop;
-			const DynamicMapObjectStop* DesiredEndStop;
+		const DynamicMapObject* BlockingObject = AIMAP_FindObjectBlockingPathPoint(FutureNode, nullptr);
 
-			AIMAP_GetDesiredPlatformStops(PlatformObject, FutureNode->FromLocation, FutureNode->ToLocation, DesiredStartStop, DesiredEndStop);
+		if (BlockingObject)
+		{
+			return AINAV_CheckMapObjectForMovementTasks(NavProfile, FutureNode, BlockingObject, NewMoveTask);
+		}
+	}
 
-			if (!DesiredStartStop || !DesiredEndStop) { continue; }
+	return false;
+}
 
-			const DynamicMapObject* Trigger = nullptr;
+bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const DynamicMapObject* ImpactingObject, AvHAIMoveTask& NewMoveTask)
+{
+	if (!NavProfile || !NavProfile->IsValid()) { return false; }
+	if (!ImpactedPathNode || !ImpactedPathNode->IsValidMove()) { return false; }
+	if (!ImpactingObject || !ImpactingObject->IsValid()) { return false; }
 
-			if (vEquals(UTIL_GetCentreOfEntity(PlatformObject->Edict), DesiredStartStop->StopLocation, 5.0f))
+	switch (ImpactingObject->Type)
+	{
+		case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
+		case EAIDynamicMapObjectType::MAPOBJECT_TRAIN:
+			return AINAV_CheckPlatformForMovementTasks(NavProfile, ImpactedPathNode, ImpactingObject, NewMoveTask);
+		case EAIDynamicMapObjectType::TRIGGER_BREAK:
+		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
+			return AINAV_AddBreakMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject->Edict, ImpactingObject, NewMoveTask);
+		case EAIDynamicMapObjectType::TRIGGER_WELD:
+			return AINAV_AddWeldMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject->Edict, ImpactingObject, NewMoveTask);
+		default:
+			break;
+	}
+
+	if (ImpactingObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return false; }
+
+	const DynamicMapObject* Trigger = AIMAP_GetBestTriggerForObject(NavProfile, ImpactingObject, ImpactedPathNode->FromLocation);
+
+	if (!Trigger) { return false; }
+
+	return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger, ImpactingObject, NewMoveTask);
+}
+
+bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const DynamicMapObject* Platform, AvHAIMoveTask& NewMoveTask)
+{
+	if (!NavProfile || !ImpactedPathNode || !Platform) { return false; }
+
+	if (!AIMAP_PlatformNeedsActivating(NavProfile, Platform, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation)) { return false; }
+
+	const DynamicMapObjectStop* DesiredEmbarkStop = nullptr;
+	const DynamicMapObjectStop* DesiredDisembarkStop = nullptr;
+
+	AIMAP_GetDesiredPlatformStops(Platform, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
+
+	const DynamicMapObject* Trigger = nullptr;
+
+	if (vEquals(UTIL_GetCentreOfEntity(Platform->Edict), DesiredEmbarkStop->StopLocation, 5.0f))
+	{
+		Trigger = AIMAP_GetTriggerReachableFromPlatform(Platform, ImpactedPathNode->FromLocation.z + 32.0f);
+	}
+
+	if (!Trigger)
+	{
+		Trigger = AIMAP_GetBestTriggerForObject(NavProfile, Platform, ImpactedPathNode->FromLocation);
+
+		if (Trigger)
+		{
+			if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 			{
-				Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformObject, FutureNode->FromLocation.z + 32.0f);
+				return AINAV_AddUseMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, Trigger, NewMoveTask);
 			}
-
-			if (!Trigger)
+			else
 			{
-				Trigger = AIMAP_GetBestTriggerForObject(NavProfile, PlatformObject, AIPlayer);
-
-				if (Trigger)
-				{
-					if (PlatformObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-					{
-						AINAV_AddTriggerMovementTask(AIPlayer, Trigger, PlatformObject);
-					}
-					else
-					{
-						AINAV_AddMoveMovementTask(AIPlayer, AIMAP_GetButtonFloorLocation(NavProfile, AIPlayer->Edict->v.origin, Trigger->Edict), nullptr);
-					}
-
-					return true;
-				}
+				return AINAV_AddMoveMovementTask(NavProfile, AIMAP_GetButtonFloorLocation(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict), nullptr, NewMoveTask);
 			}
 		}
 	}
+
+	return false;
 }
 
-void AINAV_AddTriggerMovementTask(AvHAIPlayer* AIPlayer, const DynamicMapObject* Trigger, const DynamicMapObject* TriggerTarget)
+
+
+
+bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const DynamicMapObject* Trigger, const DynamicMapObject* TriggerTarget, AvHAIMoveTask& NewTask)
 {
-	if (!AIPlayer || !AIPlayer->IsValid()) { return; }
-	if (!Trigger || !Trigger->IsValid()) { return; }
-	if (!TriggerTarget || !TriggerTarget->IsValid()) { return; }
+	NewTask.Clear();
+
+	if (!NavProfile || !NavProfile->IsValid()) { return false; }
+	if (!Trigger || !Trigger->IsValid()) { return false; }
+	if (!TriggerTarget || !TriggerTarget->IsValid()) { return false; }
 
 	switch (Trigger->Type)
 	{
 		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
 		case EAIDynamicMapObjectType::TRIGGER_BREAK:
-			AINAV_AddBreakMovementTask(AIPlayer, Trigger->Edict, TriggerTarget);
+			return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
 			break;
 		case EAIDynamicMapObjectType::TRIGGER_TOUCH:
-			AINAV_AddTouchMovementTask(AIPlayer, Trigger->Edict, TriggerTarget);
+			return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
 			break;
 		case EAIDynamicMapObjectType::TRIGGER_USE:
-			AINAV_AddUseMovementTask(AIPlayer, Trigger->Edict, TriggerTarget);
+			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
 			break;
 		default:
-			AINAV_AddUseMovementTask(AIPlayer, Trigger->Edict, TriggerTarget);
+			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
 			break;
 	}
 }
 
-void AINAV_AddPickupMovementTask(AvHAIPlayer* AIPlayer, const edict_t* ThingToPickup, const DynamicMapObject* TriggerToActivate)
+bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
-	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
-
-	AvHAIMoveTask NewTask;
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_PICKUP;
 	NewTask.TaskTarget = ThingToPickup;
 	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
 	NewTask.TaskLocation = ThingToPickup->v.origin;
 
-	AIPlayer->BotNavInfo.MovementTasks.push_back(NewTask);
+	return true;
 }
 
-void AINAV_AddTouchMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToTouch, const DynamicMapObject* TriggerToActivate)
+bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || FNullEnt(EntityToTouch)) { return; }
+	NewTask.Clear();
 
-	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
+	AvHAIPath TestPath;
+	bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartPoint, UTIL_GetCentreOfEntity(EntityToTouch), &TestPath, 200.0f);
 
-	AvHAIMoveTask NewTask;
+	if (!bFoundPath) { return false; }
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_TOUCH;
 	NewTask.TaskTarget = EntityToTouch;
 	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TaskLocation = TestPath.GetFinalDestination();
 
-	AvHAIPath TestPath;
-	bool bFoundPath = AINAV_FindPathClosestToPoint(AIPlayer->GetNavProfile(), AIPlayer->CurrentFloorPosition, UTIL_GetCentreOfEntity(EntityToTouch), &TestPath, 200.0f);
-
-	if (bFoundPath && TestPath.GetPathSize() > 0)
-	{
-		NewTask.TaskLocation = TestPath.GetFinalDestination();
-		AIPlayer->BotNavInfo.MovementTasks.push_back(NewTask);
-	}
+	return true;
 }
 
-void AINAV_AddBreakMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToBreak, const DynamicMapObject* TriggerToActivate)
+bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || FNullEnt(EntityToBreak)) { return; }
-
-	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
-
-	AvHAIMoveTask NewTask;
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
 	NewTask.TaskTarget = EntityToBreak;
 	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToBreak);
 
-	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(AIPlayer->GetNavProfile(), AIPlayer->CurrentFloorPosition, EntityToBreak);
-
-	AIPlayer->BotNavInfo.MovementTasks.push_back(NewTask);
+	return true;
 }
 
-void AINAV_AddWeldMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToWeld, const DynamicMapObject* TriggerToActivate)
+bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || FNullEnt(EntityToWeld)) { return; }
-
-	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
-
-	AvHAIMoveTask NewTask;
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
 	NewTask.TaskTarget = EntityToWeld;
 	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToWeld);
 
-	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(AIPlayer->GetNavProfile(), AIPlayer->CurrentFloorPosition, EntityToWeld);
-
-	AIPlayer->BotNavInfo.MovementTasks.push_back(NewTask);
+	return true;
 }
 
-void AINAV_AddUseMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate)
+bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || FNullEnt(EntityToUse)) { return; }
-
-	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return; }
-
-	AvHAIMoveTask NewTask;
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_USE;
 	NewTask.TaskTarget = EntityToUse;
 	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
-	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(AIPlayer->GetNavProfile(), AIPlayer->CurrentFloorPosition, EntityToUse);
-
-	AIPlayer->BotNavInfo.MovementTasks.push_back(NewTask);
-}
-
-bool AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate)
-{
-	if (AIPlayer->BotNavInfo.MovementTasks.size() >= 10) { return false; }
-
-	if (vIsZero(MoveLocation)) { return false; }
-
-	if (vDist2DSq(AIPlayer->CurrentFloorPosition, MoveLocation) < sqrf(GetPlayerRadius(AIPlayer->Edict)) && fabsf(AIPlayer->CollisionHullBottomLocation.z - MoveLocation.z) < 50.0f) { return false; }
-
-	AvHAIMoveTask NewTask;
-
-	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
-	NewTask.TaskLocation = MoveLocation;
-
-	AvHAIPath TaskPath;
-	const bool bFoundPath = AINAV_FindPathClosestToPoint(AIPlayer->GetNavProfile(), AIPlayer->CurrentFloorPosition, MoveLocation, &TaskPath, 200.0f);
-
-	if (bFoundPath && TaskPath.IsValidPath())
-	{
-		NewTask.TaskLocation = TaskPath.GetFinalDestination();
-	}
-
-	AIPlayer->BotNavInfo.MovementTasks.push_back(NewTask);
+	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToUse);
 
 	return true;
 }
+
+bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+{
+	NewTask.Clear();
+
+	AvHAIPath TestPath;
+	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartPoint, MoveLocation, &TestPath, 200.0f);
+
+	if (!bFoundPath) { return false; }
+
+	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
+	NewTask.TaskLocation = MoveLocation;
+	NewTask.TaskLocation = TestPath.GetFinalDestination();
+
+	return true;
+}
+
+
 
 AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer)
 {

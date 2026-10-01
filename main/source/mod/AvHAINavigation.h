@@ -48,15 +48,18 @@ AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer);
 
 // Checks the bot's current path and sees if there are any necessary movement tasks to progress (e.g. press button, break something)
 // Returns true if a movement task was required and added.
-bool AINAV_CheckAndAddRequiredMovementTasks(AvHAIPlayer* AIPlayer);
+bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPath* Path, AvHAIMoveTask& NewMoveTask);
 
-void AINAV_AddTriggerMovementTask(AvHAIPlayer* AIPlayer, const DynamicMapObject* Trigger, const DynamicMapObject* TriggerTarget);
-void AINAV_AddPickupMovementTask(AvHAIPlayer* AIPlayer, const edict_t* ThingToPickup, const DynamicMapObject* TriggerToActivate);
-bool AINAV_AddMoveMovementTask(AvHAIPlayer* AIPlayer, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate);
-void AINAV_AddTouchMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToTouch, const DynamicMapObject* TriggerToActivate);
-void AINAV_AddUseMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate);
-void AINAV_AddBreakMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToBreak, const DynamicMapObject* TriggerToActivate);
-void AINAV_AddWeldMovementTask(AvHAIPlayer* AIPlayer, const edict_t* EntityToWeld, const DynamicMapObject* TriggerToActivate);
+bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const DynamicMapObject* ImpactingObject, AvHAIMoveTask& NewMoveTask);
+bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const DynamicMapObject* Platform, AvHAIMoveTask& NewMoveTask);
+
+bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const DynamicMapObject* Trigger, const DynamicMapObject* TriggerTarget, AvHAIMoveTask& NewTask);
+bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask);
+bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask);
+bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask);
+bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask);
+bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask);
+bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask);
 
 bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool AINAV_HasBotCompletedWalkMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
@@ -85,6 +88,8 @@ bool AINAV_IsBotOffPlatformNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode
 
 bool AINAV_NextMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool AINAV_NextSwimMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+
+EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path);
 
 
 

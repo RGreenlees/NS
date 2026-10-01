@@ -1384,6 +1384,86 @@ const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint
 	return Result;
 }
 
+const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* PathNode, const DynamicMapObject* IgnoreObject)
+{
+	if (!PathNode || !PathNode->IsValidMove() || PathNode->IsTeleportMove()) { return nullptr; }
+
+	Vector FromLoc = PathNode->FromLocation;
+	Vector ToLoc = PathNode->ToLocation;
+
+	TraceResult doorHit;
+
+	if (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_LADDER)
+	{
+		const Vector TargetLoc = (ToLoc.z > FromLoc.z) ? Vector(FromLoc.x, FromLoc.y, ToLoc.z) : Vector(ToLoc.x, ToLoc.y, FromLoc.z);
+
+		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
+		{
+			const DynamicMapObject* ThisObject = &(*it);
+
+			if (!ThisObject || !ThisObject->IsValid()) { continue; }
+
+			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+			{
+				return ThisObject;
+			}
+
+			if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+			{
+				return ThisObject;
+			}
+		}
+
+		return nullptr;
+	}
+
+	if (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_FALL)
+	{
+		const Vector TargetLoc = Vector(ToLoc.x, ToLoc.y, FromLoc.z);
+
+		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
+		{
+			const DynamicMapObject* ThisObject = &(*it);
+
+			if (!ThisObject || !ThisObject->IsValid()) { continue; }
+
+			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
+
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			{
+				return ThisObject);
+			}
+
+			if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			{
+				return ThisObject;
+			}
+		}
+
+		return nullptr;
+	}
+
+	Vector TargetLoc = ToLoc + Vector(0.0f, 0.0f, 10.0f);
+
+	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
+	{
+		const DynamicMapObject* ThisObject = &(*it);
+
+		if (!ThisObject || !ThisObject->IsValid()) { continue; }
+
+		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
+
+		if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+		{
+			return ThisObject;
+		}
+	}
+
+	return nullptr;
+}
+
 void AIMAP_PopulateAllConnectionsAffectedByDynamicObjects()
 {
 	for (auto objectIt = DynamicMapObjects.begin(); objectIt != DynamicMapObjects.end(); objectIt++)
@@ -1849,13 +1929,9 @@ const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgent
 	}
 }
 
-bool AIMAP_CanBoardPlatform(const AvHAIPlayer* AIPlayer, const DynamicMapObject* Platform, const Vector& BoardingPoint, const Vector& DesiredStop)
+bool AIMAP_CanBoardPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& BoardingPoint, const Vector& DesiredStop)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || !Platform) { return false; }
-
-	const NavAgentProfile* CheckProfile = AIPlayer->GetNavProfile();
-
-	if (!CheckProfile) { return false; }
+	if (!NavProfile || !NavProfile->IsValid() || !Platform || !Platform->IsValid()) { return false; }
 
 	Vector IdealClosestPoint = UTIL_GetClosestPointOnEntityToLocation(BoardingPoint, Platform->Edict, DesiredStop);
 
@@ -1864,14 +1940,14 @@ bool AIMAP_CanBoardPlatform(const AvHAIPlayer* AIPlayer, const DynamicMapObject*
 	Vector ClosestCurrentPoint = UTIL_GetClosestPointOnEntityToLocation(BoardingPoint, Platform->Edict);
 	ClosestCurrentPoint.z = BoardingPoint.z;
 
-	Vector ProjectedLocation = AIMESH_ProjectPointToNavmesh(CheckProfile, ClosestCurrentPoint, Vector(Dist, Dist, 50.0f));
+	Vector ProjectedLocation = AIMESH_ProjectPointToNavmesh(NavProfile, ClosestCurrentPoint, Vector(Dist, Dist, 50.0f));
 
-	return (!vIsZero(ProjectedLocation) && AINAV_IsPointDirectlyReachable(CheckProfile, BoardingPoint, ProjectedLocation) && vDist2DSq(BoardingPoint, ProjectedLocation) <= sqrf(Dist + 16.0f));
+	return (!vIsZero(ProjectedLocation) && AINAV_IsPointDirectlyReachable(NavProfile, BoardingPoint, ProjectedLocation) && vDist2DSq(BoardingPoint, ProjectedLocation) <= sqrf(Dist + 16.0f));
 }
 
-bool AIMAP_PlatformNeedsActivating(const AvHAIPlayer* AIPlayer, const DynamicMapObject* Platform, const Vector& EmbarkPoint, const Vector& DisembarkPoint)
+bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& EmbarkPoint, const Vector& DisembarkPoint)
 {
-	if (!AIPlayer || !AIPlayer->IsValid() || !Platform) { return false; }
+	if (!NavProfile || !NavProfile->IsValid() || !Platform || !Platform->IsValid()) { return false; }
 
 	if (Platform->Triggers.size() <= 1 || Platform->Triggers[0] == Platform->Edict) { return false; }
 
@@ -1891,7 +1967,7 @@ bool AIMAP_PlatformNeedsActivating(const AvHAIPlayer* AIPlayer, const DynamicMap
 	// Platform is at or leaving our desired stop, check if we can get on. If so then we don't need to retrigger
 	if (PreviousStop == DesiredEmbarkStop)
 	{
-		if (AIMAP_CanBoardPlatform(AIPlayer, Platform, EmbarkPoint, DesiredEmbarkStop->StopLocation)) { return false; }
+		if (AIMAP_CanBoardPlatform(NavProfile, Platform, EmbarkPoint, DesiredEmbarkStop->StopLocation)) { return false; }
 	}
 
 	// If the platform is going to wait at our embark point then we must need to activate it regardless. If we can activate it from the platform then carry on as normal

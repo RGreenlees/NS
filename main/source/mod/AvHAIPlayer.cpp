@@ -23,34 +23,9 @@ extern cvar_t avh_botdebugmode;
 extern edict_t* DebugBots[MAX_PLAYERS];
 #endif
 
-const AvHAIPathNode* AvHAIPlayer::GetCurrentPathNode() const
-{
-	if (BotNavInfo.CurrentPath.PathNodes.empty()) { return nullptr; }
-
-	if (BotNavInfo.CurrentPath.CurrentNodeIndex >= BotNavInfo.CurrentPath.PathNodes.size()) { return nullptr; }
-
-	return &BotNavInfo.CurrentPath.PathNodes[BotNavInfo.CurrentPath.CurrentNodeIndex];
-}
-
-const AvHAIPathNode* AvHAIPlayer::GetNextPathNode() const
-{
-	if (BotNavInfo.CurrentPath.PathNodes.empty()) { return nullptr; }
-
-	if (BotNavInfo.CurrentPath.CurrentNodeIndex + 1 >= BotNavInfo.CurrentPath.PathNodes.size()) { return nullptr; }
-
-	return &BotNavInfo.CurrentPath.PathNodes[BotNavInfo.CurrentPath.CurrentNodeIndex + 1];
-}
-
 bool AvHAIPlayer::HasValidPath() const
 {
-	const AvHAIPathNode* CurrentPathNode = GetCurrentPathNode();
-
-	return (CurrentPathNode && CurrentPathNode->IsValidMove());
-}
-
-bool AvHAIPlayer::HasNextPathPoint() const
-{
-	return ((BotNavInfo.CurrentPath.CurrentNodeIndex + 1) < BotNavInfo.CurrentPath.PathNodes.size());
+	return BotNavInfo.MovementTasks.size() > 0;
 }
 
 bool AvHAIPlayer::IsOnGround() const
@@ -117,6 +92,11 @@ float AvHAIPlayer::GetPlayerRadius() const
 	}
 }
 
+void AvHAIPlayer::AddMovementTask(AvHAIMoveTask& NewTask)
+{
+	BotNavInfo.MovementTasks.push_back(NewTask);
+}
+
 EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 {
 	// If the destination is close enough to our core movement task, then we are continuing with our existing movement tasks
@@ -132,13 +112,6 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 
 	// This is a brand new destination
 	BotNavInfo.ClearPath();
-
-	const bool bAddedTask = AINAV_AddMoveMovementTask(this, DesiredLocation, nullptr);
-
-	if (bAddedTask)
-	{
-		return ProgressMovementTasks();
-	}
 
 	return EAINavMoveResult::NAV_MOVE_SUCCESS;
 }
@@ -175,87 +148,7 @@ void AvHAIPlayer::Jump(bool bDuckJump)
 	}
 }
 
-EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
-{
-	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
 
-	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
-	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
-
-	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
-
-	if (AINAV_HasBotCompletedPathPoint(this, CurrentPathNode, NextPathNode))
-	{
-		// We have reached the end of our path. Job done.
-		if (!NextPathNode)
-		{
-			return EAINavMoveResult::NAV_MOVE_PATH_COMPLETE;
-		}
-
-		Path->OnPathNodeComplete();
-
-		CurrentPathNode = Path->GetCurrentPathNode();
-		NextPathNode = Path->GetNextPathNode();
-	}
-
-	if (IsInWater())
-	{
-		TraceResult Hit;
-
-		AvHAIMutablePathNodeList FutureNodeList = Path->GetMutableFuturePathNodeList();
-
-		for (AvHAIPathNode* ThisNode : FutureNodeList)
-		{
-			if (!UTIL_IsPointInSwimArea(ThisNode->ToLocation)) { break; }
-
-			UTIL_TraceHull(Edict->v.origin, ThisNode->ToLocation, ignore_monsters, head_hull, nullptr, &Hit);
-
-			if (!Hit.fAllSolid && !Hit.fStartSolid && Hit.flFraction >= 1.0f)
-			{
-				Path->JumpToPathNode(ThisNode);
-				ThisNode->FromLocation = Edict->v.origin;
-			}
-		}
-
-		CurrentPathNode = Path->GetCurrentPathNode();
-		NextPathNode = Path->GetNextPathNode();
-	}
-
-
-	if (IsPlayerStandingOnPlayer(Edict) && CurrentPathNode->MovementFlag != EAINavMovementFlag::NAV_FLAG_LADDER)
-	{
-		if (Edict->v.groundentity->v.velocity.Length2D() > 10.0f)
-		{
-			DesiredMovementDir = UTIL_GetVectorNormal2D(-Edict->v.groundentity->v.velocity);
-			return EAINavMoveResult::NAV_MOVE_SUCCESS;
-		}
-
-		MoveToWithoutNav(CurrentPathNode->ToLocation);
-
-		return;
-	}
-
-	AvHPlayer* RidingPlayer = AINAV_GetPlayerRidingOnBot(this);
-
-	if (RidingPlayer)
-	{
-		// TODO: Something here
-	}
-
-	if (AINAV_IsBotOffPathNode(this, CurrentPathNode))
-	{
-		return EAINavMoveResult::NAV_MOVE_OFFPATH;
-	}
-
-	if (IsInWater())
-	{
-		AINAV_NextSwimMove(this, this->NextFrameMovementInput, CurrentPathNode, NextPathNode);
-	}
-	else
-	{
-		AINAV_NextMove(this, this->NextFrameMovementInput, CurrentPathNode, NextPathNode);
-	}
-}
 
 void AvHAIPlayer::Suicide()
 {
