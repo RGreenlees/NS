@@ -115,6 +115,7 @@ enum class EAINavMoveResult : uint8
 	NAV_MOVE_OFFPATH,      // Bot has unfortunately fallen off the path somehow
 	NAV_MOVE_STUCK,        // Has a path but is blocked by something
 	NAV_MOVE_NOTASK,       // No task to pursue
+	NAV_MOVE_INVALIDTASK,       // No task to pursue
 	NAV_MOVE_PATH_COMPLETE // Path is fully completed, no more to do
 };
 

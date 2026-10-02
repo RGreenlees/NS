@@ -638,58 +638,52 @@ void AIMGR_UpdateAIPlayers()
 
 	for (auto BotIt = ActiveAIPlayers.begin(); BotIt != ActiveAIPlayers.end();)
 	{
-		// If bot has been kicked from the server then remove from active AI player list
-		if (FNullEnt(BotIt->Edict) || BotIt->Edict->free || !BotIt->Player)
+		AvHAIPlayer* Bot = &(*BotIt);
+
+		if (!Bot || !Bot->IsValid())
 		{
 			BotIt = ActiveAIPlayers.erase(BotIt);
 			continue;
 		}
 
-		AvHAIPlayer* bot = &(*BotIt);
-
 		if (bSkillChanged)
 		{
-			const bot_skill NewSkillSettings = CONFIG_GetBotSkillLevel();
-			memcpy(&bot->BotSkillSettings, &NewSkillSettings, sizeof(bot_skill));
+			const AvHAISkillLevel NewSkillSettings = CONFIG_GetBotSkillLevel();
+			memcpy(&Bot->BotSkillSettings, &NewSkillSettings, sizeof(AvHAISkillLevel));
 		}
-
-		BotUpdateViewRotation(bot, FrameDelta);
-
-		// Need to reset this since impulses generally should only be called once at a time, so this
-		// prevents it from being called on consecutive frames if this bot isn't running its think routine every frame
-		bot->Impulse = 0;
 
 		if (bHasRoundStarted)
 		{
-			if (IsPlayerCommander(bot->Edict))
+			if (IsPlayerCommander(Bot->Edict))
 			{
 				if (UpdateIndex == -1)
 				{
-					AIPlayerThink(bot);
+					Bot->Think(FrameDelta);
 				}
 			}
 			else
 			{
 				if (UpdateIndex > -1 && BotIndex >= UpdateIndex && NumBotsThinkThisFrame < BotsPerFrame)
 				{
-					AIPlayerThink(bot);
+					Bot->Think(FrameDelta);
 
 					NumBotsThinkThisFrame++;
 				}
+
 				BotIndex++;
 			}
 		}
 
-		UpdateBotChat(bot);
+		//UpdateBotChat(bot);
 
 		// Needed to correctly handle client prediction and physics calculations
-		byte adjustedmsec = BotThrottledMsec(bot, CurrTime);
+		byte adjustedmsec = BotThrottledMsec(Bot, CurrTime);
 
 		// Simulate PM_PlayerMove so client prediction and stuff can be executed correctly.
-		RUN_AI_MOVE(bot->Edict, bot->Edict->v.v_angle, bot->ForwardMove,
+		RUN_AI_MOVE(Bot->Edict, Bot->Edict->v.v_angle, bot->ForwardMove,
 			bot->SideMove, bot->UpMove, bot->Button, bot->Impulse, adjustedmsec);
 
-		bot->LastServerUpdateTime = CurrTime;
+		Bot->LastServerUpdateTime = CurrTime;
 
 		BotIt++;
 	}

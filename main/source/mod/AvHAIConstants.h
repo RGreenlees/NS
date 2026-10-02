@@ -621,6 +621,11 @@ struct AvHAIMoveTask
 	{
 		return TaskPath.IsValidPath();
 	}
+
+	bool IsValid() const
+	{
+		return TaskType != EAIMovementTaskType::MOVE_TASK_NONE;
+	}
 };
 typedef std::vector<AvHAIMoveTask> AIMoveTaskList;
 
@@ -640,6 +645,21 @@ struct AvHAIStuckTracker
 		MoveDestination = g_vecZero;
 		bPathFollowFailed = false;
 	}
+};
+
+struct AvHAIViewInfo
+{
+	Vector InterpolatingViewTarget = ZERO_VECTOR;
+	Vector CurrentInterpolatedView = ZERO_VECTOR;
+	Vector LookTargetLocation = g_vecZero; // This is the bot's current desired look target. Could be an enemy (see LookTarget), or point of interest
+	Vector MoveLookLocation = g_vecZero; // If the bot has to look somewhere specific for movement (e.g. up for a ladder or wall-climb), this will override LookTargetLocation so the bot doesn't get distracted and mess the move up
+	bool bSnapView = false; // Use for rapid, precise snapping of the bot's view to the target. Useful if the bot requires more precise view angles for movement or other reasons
+	float LastTargetTrackUpdate = 0.0f; // Add a delay to how frequently a bot can track a target's movements
+	float ViewInterpolationSpeed = 0.0f; // How fast should the bot turn its view for this interpolated movement? Depends on distance to turn
+	float ViewInterpStartedTime = 0.0f; // Used for interpolation
+
+	float ViewUpdateRate = 0.2f; // How frequently the bot can react to new sightings of enemies etc.
+	float LastViewUpdateTime = 0.0f; // Used to throttle view updates based on ViewUpdateRate
 };
 
 // Contains the bot's current navigation info, such as current path
@@ -718,11 +738,14 @@ struct AvHAIMovementInput
 	float			UpMove = 0.0f;
 	int				Button = 0;
 	int				Impulse = 0;
-	Vector			RequiredLookDirection = ZERO_VECTOR; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
-	Vector			DesiredLookDirection = ZERO_VECTOR;  // Where the bot might want to look if they're not focused on something else (e.g. enemy)
+	Vector			RequiredLookLocation = ZERO_VECTOR; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
+	Vector			DesiredLookLocation = ZERO_VECTOR;  // Where the bot might want to look if they're not doing a precise movement (e.g. an enemy target)
 	EAIWeaponId		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot might need to continue moving
 	Vector			DesiredMoveDirection = ZERO_VECTOR;
 	Vector			VelocityOverride = ZERO_VECTOR; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
+	bool			bHasAttemptedJump = false;
+	bool			bShouldWalk = false;
+	bool			bShouldCrouch = false;
 
 	void Clear()
 	{
@@ -731,11 +754,14 @@ struct AvHAIMovementInput
 		UpMove = 0.0f;
 		Button = 0;
 		Impulse = 0;
-		RequiredLookDirection = ZERO_VECTOR;
-		DesiredLookDirection = ZERO_VECTOR;
+		RequiredLookLocation = ZERO_VECTOR;
+		DesiredLookLocation = ZERO_VECTOR;
 		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID;
 		DesiredMoveDirection = ZERO_VECTOR;
 		VelocityOverride = ZERO_VECTOR;
+		bHasAttemptedJump = false;
+		bShouldWalk = false;
+		bShouldCrouch = false;
 	}
 };
 
@@ -821,6 +847,8 @@ struct AvHAIPlayer
 
 	float LastTeleportTime = 0.0f; // Last time the bot teleported somewhere
 
+	AvHAIViewInfo ViewInfo;
+
 	Vector DesiredLookDirection = g_vecZero; // What view angle is the bot currently turning towards
 	Vector InterpolatedLookDirection = g_vecZero; // Used to smoothly interpolate the bot's view rather than snap instantly like an aimbot
 	edict_t* LookTarget = nullptr; // Used to work out what view angle is needed to look at the desired entity
@@ -852,24 +880,35 @@ struct AvHAIPlayer
 
 	int DebugValue = 0; // Used for debugging the bot
 
-	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free; }
+	bool IsValid() const { return Player != nullptr && !FNullEnt(Edict) && !Edict->free; }
 	bool HasValidPath() const;
 	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
 	bool IsOnGround() const;
+	bool IsOnLadder() const;
 	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
 	bool CanCrouch() const;
 	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
 	enum_hull GetPlayerHull() const;
 	float GetPlayerRadius() const;
+	float GetPlayerHeight() const;
 	void AddMovementTask(AvHAIMoveTask& NewTask);
 	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
-	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
+	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation, AvHAIMovementInput& OutMovementInput);
 	EAINavMoveResult ProgressMovementTasks();
 	Vector GetLocation() const { return Edict->v.origin; }
 	Vector GetVelocity() const { return Edict->v.velocity; }
-	void Jump(bool bDuckJump);
+	Vector GetEyePosition() const;
+	void Jump(AvHAIMovementInput& Outputs, bool bDuckJump) const;
 	void Suicide();
 	bool IsDead() const;
+	float GetDesiredMovementSpeed(bool bShouldWalk) const;
+	Vector GetBottomOfHitbox() const;
+	Vector GetTopOfHitbox() const;
+	void Think(float DeltaTime);
+	void BotUpdateDesiredViewRotation();
+	void InterpolateView(float DeltaTime);
+	void LookAt(const Vector& LocationTarget);
+	void LookAt(const edict_t* Target);
 };
 
 struct AvHAISquad

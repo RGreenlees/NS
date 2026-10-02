@@ -30,7 +30,12 @@ bool AvHAIPlayer::HasValidPath() const
 
 bool AvHAIPlayer::IsOnGround() const
 {
-	!FNullEnt(Edict) && ((Edict->v.flags & FL_ONGROUND) || IsPlayerOnLadder(Edict));
+	return (!FNullEnt(Edict) && ((Edict->v.flags & FL_ONGROUND) || IsOnLadder()));
+}
+
+bool AvHAIPlayer::IsOnLadder() const
+{
+	return (!FNullEnt(Edict) && Edict->v.movetype == MOVETYPE_FLY);
 }
 
 bool AvHAIPlayer::CanCrouch() const
@@ -92,6 +97,32 @@ float AvHAIPlayer::GetPlayerRadius() const
 	}
 }
 
+float AvHAIPlayer::GetPlayerHeight() const
+{
+	if (!IsValid()) { return 0.0f; }
+
+	enum_hull PlayerHull = GetPlayerHull();
+
+	switch (PlayerHull)
+	{
+		case head_hull:
+			return 36.0f;
+		case human_hull:
+			return 72.0f;
+		case large_hull:
+			return 108.0f;
+		default:
+			return 72.0f;
+	}
+}
+
+Vector AvHAIPlayer::GetEyePosition() const
+{
+	if (FNullEnt(Edict)) { return ZERO_VECTOR; }
+
+	return (Edict->v.origin + Edict->v.view_ofs);
+}
+
 void AvHAIPlayer::AddMovementTask(AvHAIMoveTask& NewTask)
 {
 	BotNavInfo.MovementTasks.push_back(NewTask);
@@ -113,10 +144,17 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 	// This is a brand new destination
 	BotNavInfo.ClearPath();
 
-	return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	AvHAIMoveTask NewDestinationTask;
+
+	if (AINAV_AddMoveMovementTask(GetNavProfile(), GetBottomOfHitbox(), DesiredLocation, nullptr, NewDestinationTask))
+	{
+		return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
+	return EAINavMoveResult::NAV_MOVE_NOTASK;
 }
 
-EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
+EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation, AvHAIMovementInput& OutMovementInput)
 {
 
 }
@@ -127,16 +165,26 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 	{
 		return EAINavMoveResult::NAV_MOVE_NOTASK;
 	}
+
+	AvHAIMoveTask* CurrentMoveTask = &BotNavInfo.MovementTasks.at(BotNavInfo.MovementTasks.size() - 1);
+
+	switch (CurrentMoveTask->TaskType)
+	{
+		case EAIMovementTaskType::MOVE_TASK_MOVE:
+			return AINAV_ProgressMoveTask(this, CurrentMoveTask, NextFrameMovementInput);
+		default:
+			return EAINavMoveResult::NAV_MOVE_NOPATH;
+	}
 }
 
-void AvHAIPlayer::Jump(bool bDuckJump)
+void AvHAIPlayer::Jump(AvHAIMovementInput& Outputs, bool bDuckJump) const
 {
 	if (IsOnGround())
 	{
 		if (gpGlobals->time - BotNavInfo.LandedTime >= 0.1f)
 		{
-			NextFrameMovementInput.Button |= IN_JUMP;
-			BotNavInfo.bHasAttemptedJump = true;
+			Outputs.Button |= IN_JUMP;
+			Outputs.bHasAttemptedJump = true;
 		}
 	}
 	else
@@ -147,8 +195,6 @@ void AvHAIPlayer::Jump(bool bDuckJump)
 		}
 	}
 }
-
-
 
 void AvHAIPlayer::Suicide()
 {
@@ -164,6 +210,168 @@ bool AvHAIPlayer::IsDead() const
 	return (Edict->v.deadflag != DEAD_NO || Edict->v.health <= 0.0f);
 }
 
+float AvHAIPlayer::GetDesiredMovementSpeed(bool bShouldWalk) const
+{
+	float MaxSpeed = fminf(CVAR_GET_FLOAT("cl_forwardspeed"), CVAR_GET_FLOAT("sv_maxspeed"));
+	return (pBot->BotNavInfo.bShouldWalk) ? MaxSpeed * 0.5f : MaxSpeed;
+}
+
+Vector AvHAIPlayer::GetBottomOfHitbox() const
+{
+	if (FNullEnt(Edict)) { return ZERO_VECTOR; }
+
+	const float Height = GetPlayerHeight();
+
+	return GetLocation() - Vector(0.0f, 0.0f, Height * 0.5f);
+}
+
+Vector AvHAIPlayer::GetTopOfHitbox() const
+{
+	if (FNullEnt(Edict)) { return ZERO_VECTOR; }
+
+	const float Height = GetPlayerHeight();
+
+	return GetLocation() + Vector(0.0f, 0.0f, Height * 0.5f);
+}
+
+void AvHAIPlayer::Think(float DeltaTime)
+{
+	NextFrameMovementInput.Clear();
+
+	ProgressMovementTasks();
+
+	BotUpdateDesiredViewRotation();
+	InterpolateView(DeltaTime);
+}
+
+void AvHAIPlayer::BotUpdateDesiredViewRotation()
+{
+	// If we are in the process of interpolating towards a current view target, don't interrupt and let it finish
+	if (!vIsZero(ViewInfo.InterpolatingViewTarget)) { return; }
+
+	const bool bIsRequiredView = !vIsZero(NextFrameMovementInput.RequiredLookLocation);
+
+	const Vector NewDesiredTargetView = (bIsRequiredView)
+		? NextFrameMovementInput.RequiredLookLocation
+		: (!vIsZero(ViewInfo.LookTargetLocation)) ? ViewInfo.LookTargetLocation : NextFrameMovementInput.DesiredLookLocation;
+
+	if (vIsZero(NewDesiredTargetView)) { return; }
+
+	const Vector DesiredViewForwardVector = UTIL_GetVectorNormal(NewDesiredTargetView - GetEyePosition());
+
+	ViewInfo.InterpolatingViewTarget = UTIL_VecToAngles(DesiredViewForwardVector);
+
+	if (!vIsValid(ViewInfo.InterpolatingViewTarget))
+	{
+		ViewInfo.InterpolatingViewTarget = ZERO_VECTOR;
+	}
+
+	vClampViewAngles(ViewInfo.InterpolatingViewTarget);
+
+	if (ViewInfo.bSnapView)
+	{
+		ViewInfo.ViewInterpolationSpeed = 1000.0f;
+		ViewInfo.ViewInterpStartedTime = gpGlobals->time;
+
+		return;
+	}
+
+	Vector ViewInterpolationDelta = ViewInfo.InterpolatingViewTarget - Edict->v.v_angle;
+
+	// Now figure out how far we have to turn to reach our desired target
+	vClampViewAngles(ViewInterpolationDelta);
+
+	const float MaxViewDelta = fmaxf(fabsf(ViewInterpolationDelta.y), fabsf(ViewInterpolationDelta.x));
+
+	float motion_tracking_skill = (IsPlayerMarine(Edict)) ? BotSkillSettings.marine_bot_motion_tracking_skill : BotSkillSettings.alien_bot_motion_tracking_skill;
+	float bot_view_speed = (IsPlayerMarine(Edict)) ? BotSkillSettings.marine_bot_view_speed : BotSkillSettings.alien_bot_view_speed;
+	float bot_aim_skill = (IsPlayerMarine(Edict)) ? BotSkillSettings.marine_bot_aim_skill : BotSkillSettings.alien_bot_aim_skill;
+
+	ViewInfo.ViewInterpolationSpeed = (MaxViewDelta >= 45.0f)
+		? 350.0f
+		: (MaxViewDelta >= 25.0f) ? 175.0f
+			: (MaxViewDelta >= 5.0f) ? 50.0f : 35.0f;
+
+	ViewInfo.ViewInterpolationSpeed *= bot_view_speed;
+
+	if (!bIsRequiredView)
+	{
+		const float AimOffset = (MaxViewDelta >= 45.0f)
+			? frandrange(10.0f, 20.0f)
+			: (MaxViewDelta >= 25.0f)
+				? frandrange(5.0f, 10.0f)
+				: (MaxViewDelta >= 5.0f)
+					? frandrange(2.0f, 5.0f)
+					: 0.0f;
+
+		const float xOffset = AimOffset * (randbool()) ? -1.0f : 1.0f;
+		const float yOffset = AimOffset * (randbool()) ? -1.0f : 1.0f;
+
+		ViewInfo.InterpolatingViewTarget.x += xOffset;
+		ViewInfo.InterpolatingViewTarget.y += yOffset;
+
+		vClampViewAngles(ViewInfo.InterpolatingViewTarget);
+	}
+
+	ViewInfo.ViewInterpStartedTime = gpGlobals->time;
+}
+
+void AvHAIPlayer::InterpolateView(float DeltaTime)
+{
+	if (vIsZero(ViewInfo.InterpolatingViewTarget)) { return; }
+
+	const Vector CurrentViewAngle = Edict->v.v_angle;
+	Vector InterpDelta = ViewInfo.InterpolatingViewTarget - CurrentViewAngle;
+
+	vClampViewAngles(InterpDelta);
+
+	Vector InterpolatedFrameAngle = CurrentViewAngle;
+
+	InterpolatedFrameAngle.x = fInterpConstantTo(CurrentViewAngle.x, ViewInfo.InterpolatingViewTarget.x, DeltaTime, ViewInfo.ViewInterpolationSpeed);
+
+	const float YawDeltaInterp = fInterpConstantTo(0.0f, InterpDelta.y, DeltaTime, ViewInfo.ViewInterpolationSpeed);
+
+	InterpolatedFrameAngle.y += YawDeltaInterp;
+
+	vClampViewAngles(InterpolatedFrameAngle);
+
+	if (vEquals2D(InterpolatedFrameAngle, ViewInfo.InterpolatingViewTarget) || (gpGlobals->time - ViewInfo.ViewInterpStartedTime > 2.0f))
+	{
+		ViewInfo.InterpolatingViewTarget = ZERO_VECTOR;
+	}
+
+	Edict->v.v_angle.x = InterpolatedFrameAngle.x;
+	Edict->v.v_angle.y = InterpolatedFrameAngle.y;
+
+	// set the body angles to point the gun correctly
+	Edict->v.angles.x = Edict->v.v_angle.x / 3;
+	Edict->v.angles.y = Edict->v.v_angle.y;
+	Edict->v.angles.z = 0;
+
+	// adjust the view angle pitch to aim correctly (MUST be after body v.angles stuff)
+	Edict->v.v_angle.x = -Edict->v.v_angle.x;
+	// Paulo-La-Frite - END
+
+	Edict->v.ideal_yaw = Edict->v.v_angle.y;
+
+	if (Edict->v.ideal_yaw > 180)
+		Edict->v.ideal_yaw -= 360;
+
+	if (Edict->v.ideal_yaw < -180)
+		Edict->v.ideal_yaw += 360;
+}
+
+void AvHAIPlayer::LookAt(const Vector& LocationTarget)
+{
+	ViewInfo.LookTargetLocation = LocationTarget;
+}
+
+void AvHAIPlayer::LookAt(const edict_t* Target)
+{
+	if (FNullEnt(Target)) { return; }
+
+	ViewInfo.LookTargetLocation = Target->v.origin;
+}
 
 
 

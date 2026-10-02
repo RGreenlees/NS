@@ -380,6 +380,29 @@ bool vIsZero(const Vector v1)
 	return (fabsf(v1.x) < 0.0001f && fabsf(v1.y) < 0.0001f && fabsf(v1.z) < 0.0001f);
 }
 
+bool vIsValid(const Vector& v1)
+{
+	return (!isnan(v1.x) && !isnan(v1.y) && !isnan(v1.z));
+}
+
+void vClampViewAngles(Vector& ViewAngles)
+{
+	while (ViewAngles.x > 180.0f)
+	{
+		ViewAngles.x -= 360.0f;
+	}
+
+	while (ViewAngles.x < -180.0f)
+	{
+		ViewAngles.x += 360.0f;
+	}
+
+	while (ViewAngles.y > 180.0f)
+	{
+		ViewAngles.y -= 360.0f;
+	}
+}
+
 bool fNearlyEqual(const float f1, const float f2)
 {
 	return fabsf(f1 - f2) < 0.001f;
@@ -466,7 +489,7 @@ int imaxi(const int a, const int b)
 	return (a > b) ? a : b;
 }
 
-int imini(const int a, const int b)
+int32 imini(const int32 a, const int32 b)
 {
 	return (a < b) ? a : b;
 }

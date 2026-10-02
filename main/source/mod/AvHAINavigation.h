@@ -91,6 +91,14 @@ bool AINAV_NextSwimMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMove
 
 EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path);
 
+void AINAV_HandlePlayerAvoidance(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, AvHAIMovementInput& OutMovementInputs);
+
+Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const AvHAIPath* Path);
+
+EAINavMoveResult AINAV_ProgressMoveTask(AvHAIPlayer* AIPlayer, AvHAIMoveTask* MoveTask, AvHAIMovementInput& OutMovementInputs);
+
+// From the given start point, determine how high up the bot needs to climb to get to climb end. Will allow the bot to climb over railings
+float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
 
 
 
@@ -216,8 +224,7 @@ Vector UTIL_GetFurthestVisiblePointOnLineWithHull(const Vector ViewerLocation, c
 // Returns the nearest nav mesh poly reference for the edict's current world position
 dtPolyRef UTIL_GetNearestPolyRefForEntity(const edict_t* Edict);
 
-// From the given start point, determine how high up the bot needs to climb to get to climb end. Will allow the bot to climb over railings
-float UTIL_FindZHeightForWallClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
+
 
 
 // Clears the bot's path and sets the path size to 0
