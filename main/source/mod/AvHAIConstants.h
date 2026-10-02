@@ -660,6 +660,8 @@ struct AvHAIViewInfo
 
 	float ViewUpdateRate = 0.2f; // How frequently the bot can react to new sightings of enemies etc.
 	float LastViewUpdateTime = 0.0f; // Used to throttle view updates based on ViewUpdateRate
+
+	AvHBotViewFrustumPlane ViewFrustumPlanes[6]; // Bot's view frustum. Essentially, their "screen" for determining visibility of stuff
 };
 
 // Contains the bot's current navigation info, such as current path
@@ -763,6 +765,15 @@ struct AvHAIMovementInput
 		bShouldWalk = false;
 		bShouldCrouch = false;
 	}
+
+	void ClearMovementOutputs()
+	{
+		ForwardMove = 0.0f;
+		SideMove = 0.0f;
+		UpMove = 0.0f;
+	}
+
+	void GenerateMovementOutputs(const Vector& CurrentViewAngles);
 };
 
 struct AvHAICommanderOrder
@@ -909,6 +920,8 @@ struct AvHAIPlayer
 	void InterpolateView(float DeltaTime);
 	void LookAt(const Vector& LocationTarget);
 	void LookAt(const edict_t* Target);
+	void UpdateViewFrustum();
+	bool IsObjectInFOV(const edict_t* Object) const;
 };
 
 struct AvHAISquad

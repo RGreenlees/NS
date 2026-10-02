@@ -115,31 +115,31 @@ bool IsPlayerSpectator(const edict_t* Player)
 
 bool IsPlayerBeingDigested(const edict_t* Player)
 {
-	if (FNullEnt(Player)) { return false; }
+	if (!UTIL_IsEdictActive(Player)) { return false; }
 	return (Player->v.iuser4 & MASK_DIGESTING && Player->v.effects & EF_NODRAW);
 }
 
 bool IsPlayerDigesting(const edict_t* Player)
 {
-	if (FNullEnt(Player)) { return false; }
+	if (!UTIL_IsEdictActive(Player)) { return false; }
 	return (Player->v.iuser4 & MASK_DIGESTING && !(Player->v.effects & EF_NODRAW));
 }
 
 bool IsPlayerGestating(const edict_t* Player)
 {
-	if (FNullEnt(Player)) { return false; }
+	if (!UTIL_IsEdictActive(Player)) { return false; }
 	return (Player->v.iuser4 & MASK_ALIEN_EMBRYO);
 }
 
 bool IsPlayerCharging(const edict_t* Player)
 {
-	if (FNullEnt(Player)) { return false; }
+	if (!UTIL_IsEdictActive(Player)) { return false; }
 	return (Player->v.iuser4 & MASK_ALIEN_MOVEMENT);
 }
 
 bool IsPlayerBuffed(const edict_t* Player)
 {
-	if (FNullEnt(Player)) { return false; }
+	if (!UTIL_IsEdictActive(Player)) { return false; }
 	return (Player->v.iuser4 & MASK_BUFFED);
 }
 

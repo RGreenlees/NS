@@ -304,134 +304,6 @@ AvHAIPlayerTask* BotGetNextTask(AvHAIPlayer* pBot)
 	return &pBot->PrimaryBotTask;
 }
 
-bool AITASK_IsTaskCompleted(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
-{
-	if (!Task) { return false; }
-
-	switch (Task->TaskType)
-	{
-	case TASK_MOVE:
-		return vDist2DSq(pBot->Edict->v.origin, Task->TaskLocation) <= sqrf(max_player_use_reach);
-	case TASK_BUILD:
-		return !FNullEnt(Task->TaskTarget) && UTIL_StructureIsFullyBuilt(Task->TaskTarget);
-	case TASK_ATTACK:
-		return FNullEnt(Task->TaskTarget) || (Task->TaskTarget->v.effects & EF_NODRAW) || (Task->TaskTarget->v.deadflag != DEAD_NO);
-	case TASK_GUARD:
-		return (gpGlobals->time - Task->TaskStartedTime) > Task->TaskLength;
-	default:
-		return !AITASK_IsTaskStillValid(pBot, Task);
-	}
-
-	return false;
-}
-
-bool AITASK_IsTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
-{
-	if (!Task || FNullEnt(pBot->Edict)) { return false; }
-
-	if ((Task->TaskStartedTime > 0.0f && Task->TaskLength > 0.0f) && (gpGlobals->time - Task->TaskStartedTime >= Task->TaskLength)) { return false; }
-
-	switch (Task->TaskType)
-	{
-	case TASK_NONE:
-		return false;
-	case TASK_MOVE:
-		return AITASK_IsMoveTaskStillValid(pBot, Task);
-	case TASK_GET_AMMO:
-		return AITASK_IsAmmoPickupTaskStillValid(pBot, Task);
-	case TASK_GET_HEALTH:
-	{
-		if (IsPlayerMarine(pBot->Edict))
-		{
-			return AITASK_IsHealthPickupTaskStillValid(pBot, Task);
-		}
-		else
-		{
-			return AITASK_IsAlienGetHealthTaskStillValid(pBot, Task);
-		}
-	}
-	case TASK_GET_EQUIPMENT:
-		return AITASK_IsEquipmentPickupTaskStillValid(pBot, Task);
-	case TASK_GET_WEAPON:
-		return AITASK_IsWeaponPickupTaskStillValid(pBot, Task);
-	case TASK_RESUPPLY:
-		return AITASK_IsResupplyTaskStillValid(pBot, Task);
-	case TASK_ATTACK:
-		return AITASK_IsAttackTaskStillValid(pBot, Task);
-	case TASK_GUARD:
-		return AITASK_IsGuardTaskStillValid(pBot, Task);
-	case TASK_BUILD:
-	{
-		if (IsPlayerMarine(pBot->Edict))
-		{
-			return AITASK_IsMarineBuildTaskStillValid(pBot, Task);
-		}
-		else
-		{
-			return AITASK_IsAlienBuildTaskStillValid(pBot, Task);
-		}
-	}
-	case TASK_CAP_RESNODE:
-	{
-		if (IsPlayerMarine(pBot->Edict))
-		{
-			return AITASK_IsMarineCapResNodeTaskStillValid(pBot, Task);
-		}
-		else
-		{
-			return AITASK_IsAlienCapResNodeTaskStillValid(pBot, Task);
-		}
-	}
-	case TASK_REINFORCE_STRUCTURE:
-		return AITASK_IsReinforceStructureTaskStillValid(pBot, Task);
-	case TASK_SECURE_HIVE:
-	{
-		if (IsPlayerMarine(pBot->Edict))
-		{
-			return AITASK_IsMarineSecureHiveTaskStillValid(pBot, Task);
-		}
-		else
-		{
-			return AITASK_IsAlienSecureHiveTaskStillValid(pBot, Task);
-		}
-	}
-	case TASK_ASSAULT_MARINE_BASE:
-		return AITASK_IsAssaultMarineBaseTaskStillValid(pBot, Task);
-	case TASK_DEFEND:
-		return AITASK_IsDefendTaskStillValid(pBot, Task);
-	case TASK_WELD:
-		return AITASK_IsWeldTaskStillValid(pBot, Task);
-	case TASK_EVOLVE:
-		return AITASK_IsEvolveTaskStillValid(pBot, Task);
-	case TASK_HEAL:
-		return AITASK_IsAlienHealTaskStillValid(pBot, Task);
-	case TASK_USE:
-		return AITASK_IsUseTaskStillValid(pBot, Task);
-	case TASK_PLACE_MINE:
-		return AITASK_IsMineStructureTaskStillValid(pBot, Task);
-	case TASK_TOUCH:
-		return AITASK_IsTouchTaskStillValid(pBot, Task);
-	default:
-		return false;
-	}
-
-	return false;
-}
-
-bool AITASK_IsTouchTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
-{
-	return (!FNullEnt(Task->TaskTarget) && !IsPlayerTouchingEntity(pBot->Edict, Task->TaskTarget));
-}
-
-bool AITASK_IsMoveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
-{
-	if (vIsZero(Task->TaskLocation)) { return false; }
-
-	if (pBot->BotNavInfo.NavProfile.bFlyingProfile && vEquals(pBot->Edict->v.origin, Task->TaskLocation, 50.0f)) { return false; }
-
-	return (vDist2DSq(pBot->Edict->v.origin, Task->TaskLocation) > sqrf(GetPlayerRadius(pBot->Player)) || fabsf(pBot->Edict->v.origin.z - Task->TaskLocation.z) > 50.0f);
-}
-
 bool AITASK_IsWeldTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 {
 	if (!Task) { return false; }
@@ -473,7 +345,7 @@ bool AITASK_IsWeldTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		if (WeldableRef)
 		{
 			return !WeldableRef->GetIsWelded();
-		}		
+		}
 	}
 
 	return false;
@@ -629,7 +501,7 @@ bool AITASK_IsMarineBuildTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* Task
 	if (!Task->bIssuedByCommander)
 	{
 		int NumBuilders = AITAC_GetNumPlayersOfTeamInArea((AvHTeamNumber)pBot->Edict->v.team, Task->TaskTarget->v.origin, UTIL_MetresToGoldSrcUnits(2.0f), false, pBot->Edict, AVH_USER3_NONE);
-		
+
 		// Only one marine should build stuff if it's near the marine base. If not, then two for safety
 		int NumDesiredBuilders = (vDist2DSq(Task->TaskTarget->v.origin, AITAC_GetCommChairLocation(pBot->Player->GetTeam())) < sqrf(UTIL_MetresToGoldSrcUnits(15.0f))) ? 1 : 2;
 
@@ -710,7 +582,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 		// An enemy is now building the hive that this res node belongs to, abort
 		if (ParentHive && ParentHive->OwningTeam == EnemyTeam) { return false; }
 	}
-	
+
 	// Don't waste resources switching down to gorge if we're a lerk, fade or onos
 	// but we can still clear the area of enemy structures
 	if (!IsPlayerSkulk(pBot->Edict) && !IsPlayerGorge(pBot->Edict))
@@ -721,7 +593,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 		EnemyStructuresFilter.ReachabilityFlags = pBot->BotNavInfo.NavProfile.ReachabilityFlag;
 		EnemyStructuresFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
 
-		return AITAC_DeployableExistsAtLocation(ResNodeIndex->Location, &EnemyStructuresFilter); 
+		return AITAC_DeployableExistsAtLocation(ResNodeIndex->Location, &EnemyStructuresFilter);
 	}
 
 	if (!FNullEnt(ResNodeIndex->ParentHive))
@@ -740,7 +612,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 		{
 			EnemyStructuresFilter.DeployableTypes = (STRUCTURE_ALIEN_OFFENSECHAMBER);
 		}
-		
+
 		// Enemy has started fortifying the hive we want to build a RT in, abort
 		if (AITAC_DeployableExistsAtLocation(ResNodeIndex->Location, &EnemyStructuresFilter)) { return false; }
 	}
@@ -758,7 +630,7 @@ bool AITASK_IsAlienCapResNodeTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask* 
 
 			// If the tower is fully built and we don't have bile bomb then our work here is done
 			if (!bCanAttackStructures) { return false; }
-			
+
 			// If we can clear the area of enemy junk then do so, otherwise we're finished
 			StructureSearchFilter EnemyStructuresFilter;
 			EnemyStructuresFilter.DeployableTeam = AIMGR_GetEnemyTeam(BotTeam);
@@ -898,7 +770,7 @@ bool AITASK_IsReinforceStructureTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTas
 	StructureSearchFilter StructureFilter;
 	StructureFilter.DeployableTypes = SEARCH_ALL_ALIEN_STRUCTURES;
 	StructureFilter.MaxSearchRadius = SearchRadius * 1.25f;
-	StructureFilter.DeployableTeam = BotTeam;	
+	StructureFilter.DeployableTeam = BotTeam;
 
 	vector<AvHAIBuildableStructure> AllNearbyStructures = AITAC_FindAllDeployables(ReinforceLocation, &StructureFilter);
 
@@ -1006,7 +878,7 @@ bool AITASK_IsMarineSecureHiveTaskStillValid(AvHAIPlayer* pBot, AvHAIPlayerTask*
 	AvHAIHiveDefinition* HiveToSecure = AITAC_GetHiveFromEdict(Task->TaskTarget);
 
 	if (!HiveToSecure || HiveToSecure->Status != HIVE_STATUS_UNBUILT) { return false; }
-	
+
 	// A marine bot will consider their "secure hive" task completed if the following structures have been fully built:
 	// Phase gate (only if tech available)
 	// Turret factory (regular or advanced)
@@ -1629,7 +1501,7 @@ void AIPlayerBuildStructure(AvHAIPlayer* pBot, edict_t* BuildTarget)
 
 		return;
 	}
-	
+
 	// Might need to duck if it's an infantry portal
 	if (vDist2DSq(pBot->Edict->v.origin, BuildTarget->v.origin) < sqrf(max_player_use_reach))
 	{
@@ -1725,7 +1597,7 @@ void MarineProgressBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 			{
 				pBot->Button |= IN_DUCK;
 			}
-			
+
 		}
 	}
 
@@ -1862,7 +1734,7 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		if (PlayerHasWeapon(pBot->Player, WEAPON_LERK_PRIMALSCREAM) && !pBot->Player->GetIsScreaming())
 		{
 			int NumBuffTargets = AITAC_GetNumPlayersOfTeamInArea(pBot->Player->GetTeam(), pBot->Edict->v.origin, BALANCE_VAR(kPrimalScreamRange), false, pBot->Edict, AVH_USER3_ALIEN_PLAYER2);
-			
+
 			if (NumBuffTargets > 0)
 			{
 				pBot->DesiredCombatWeapon = WEAPON_LERK_PRIMALSCREAM;
@@ -1917,7 +1789,7 @@ void BotProgressAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	Task->TaskLocation = (!vIsZero(NewTaskLocation)) ? NewTaskLocation : AttackLocation;
 
 	MoveTo(pBot, Task->TaskLocation, MOVESTYLE_NORMAL, max_player_use_reach);
-	
+
 	return;
 }
 
@@ -1928,7 +1800,7 @@ void BotProgressDefendTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	{
 		vector<AvHPlayer*> Attackers = AITAC_GetAllPlayersOnTeamWithLOS(AIMGR_GetEnemyTeam(pBot->Player->GetTeam()), Task->TaskTarget->v.origin, UTIL_MetresToGoldSrcUnits(15.0f), nullptr);
 		edict_t* NearestAttacker = nullptr;
-		float MinDist = 0.0f;		
+		float MinDist = 0.0f;
 
 		for (auto it = Attackers.begin(); it != Attackers.end(); it++)
 		{
@@ -1976,7 +1848,7 @@ void BotProgressDefendTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 					BotLookAt(pBot, Task->TaskTarget);
 				}
 			}
-		}		
+		}
 	}
 
 	BotProgressGuardTask(pBot, Task);
@@ -2012,7 +1884,7 @@ void BotProgressTakeCommandTask(AvHAIPlayer* pBot)
 	else
 	{
 		CommChair = AITAC_GetCommChair(BotTeam);
-	}	
+	}
 
 	if (FNullEnt(CommChair)) { return; }
 
@@ -2186,7 +2058,7 @@ void AlienProgressBuildHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		return;
 	}
 
-	
+
 	int ResRequired = UTIL_GetCostOfStructureType(Task->StructureType);
 
 	if (GetPlayerActiveClass(pBot->Player) != AVH_USER3_ALIEN_PLAYER2)
@@ -2291,7 +2163,7 @@ void BotAlienPlaceChamber(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, AvHAIDeploya
 {
 	if (vIsZero(Task->TaskLocation) || DesiredStructure == STRUCTURE_NONE) { return; }
 
-	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) 
+	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING)
 	{
 		pBot->Impulse = 0;
 		return;
@@ -2337,7 +2209,7 @@ void BotAlienPlaceChamber(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, AvHAIDeploya
 		BotEvolveLifeform(pBot, pBot->CurrentFloorPosition, ALIEN_LIFEFORM_TWO);
 		return;
 	}
-	
+
 	float LookDot = UTIL_GetDotProduct2D(UTIL_GetForwardVector2D(pBot->Edict->v.v_angle), UTIL_GetVectorNormal2D(LookLocation - pBot->Edict->v.origin));
 
 	if (LookDot > 0.9f)
@@ -2455,7 +2327,7 @@ void BotAlienHealTarget(AvHAIPlayer* pBot, edict_t* HealTarget)
 {
 	float MaxHealRange = GetMaxIdealWeaponRange(WEAPON_GORGE_HEALINGSPRAY);
 	float TargetHealRange = MaxHealRange * 0.5f;
-	
+
 	BotAttackResult HitCheck = PerformAttackLOSCheck(pBot, WEAPON_GORGE_HEALINGSPRAY, HealTarget);
 
 	if (HitCheck == ATTACK_SUCCESS)
@@ -2533,7 +2405,7 @@ void AlienProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				{
 					AIPlayerBuildStructure(pBot, ResNodeIndex->ActiveTowerEntity);
 					return;
-				}				
+				}
 			}
 		}
 		else
@@ -2618,7 +2490,7 @@ void BotProgressTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		{
 			AlienProgressGetHealthTask(pBot, Task);
 		}
-	}	
+	}
 	break;
 	case TASK_RESUPPLY:
 		BotProgressResupplyTask(pBot, Task);
@@ -2929,7 +2801,7 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 		}
 
 		if (ThisStructure.StructureStatusFlags & STRUCTURE_STATUS_COMPLETED) { continue; }
-		
+
 		// Phase gates always take priority, so just go and build it if there is one
 		if (ThisStructure.StructureType == STRUCTURE_MARINE_PHASEGATE)
 		{
@@ -2970,7 +2842,7 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 				BotAttackNonPlayerTarget(pBot, ResNode->ActiveTowerEntity);
 				return;
 			}
-			
+
 		}
 		else
 		{
@@ -3004,7 +2876,7 @@ void MarineProgressSecureHiveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	Vector OutpostLocation = (KeyOutpostStructure.IsValid()) ? KeyOutpostStructure.Location : Task->TaskLocation;
 
 	BotGuardLocation(pBot, OutpostLocation);
-	
+
 }
 
 void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
@@ -3024,7 +2896,7 @@ void MarineProgressCapResNodeTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 	if (ResNodeIndex->bIsOccupied)
 	{
 		Task->TaskTarget = ResNodeIndex->ActiveTowerEntity;
-		
+
 		if (ResNodeIndex->OwningTeam == pBot->Player->GetTeam())
 		{
 			if (!UTIL_StructureIsFullyBuilt(ResNodeIndex->ActiveTowerEntity))
@@ -3220,7 +3092,7 @@ void BotProgressAssaultMarineBaseTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task)
 
 	// nothing to attack, just hang around
 	BotGuardLocation(pBot, Task->TaskLocation);
-	
+
 }
 
 void BotGuardLocation(AvHAIPlayer* pBot, const Vector GuardLocation)
@@ -3331,7 +3203,7 @@ void AITASK_GenerateGuardWatchPoints(AvHAIPlayer* pBot, const Vector& GuardLocat
 
 	vector<bot_path_node> path;
 	path.clear();
-	
+
 	vector<AvHAIHiveDefinition*> AllHives = AITAC_GetAllHives();
 
 	for (auto it = AllHives.begin(); it != AllHives.end(); it++)
@@ -3370,7 +3242,7 @@ void AITASK_GenerateGuardWatchPoints(AvHAIPlayer* pBot, const Vector& GuardLocat
 			}
 		}
 	}
-	
+
 	if (AIMGR_GetEnemyTeamType(pBot->Player->GetTeam()) == AVH_CLASS_TYPE_MARINE)
 	{
 		if (!UTIL_QuickTrace(nullptr, GuardLocation, AITAC_GetTeamStartingLocation(EnemyTeam)))
@@ -3703,7 +3575,7 @@ void AITASK_SetWeldTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Targe
 	Task->bTaskIsUrgent = bIsUrgent;
 	Task->TaskLocation = ZERO_VECTOR;
 	Task->TaskLength = 0.0f;
-	
+
 	if (IsEdictPlayer(Target) || IsEdictStructure(Target)) { return; }
 
 	Vector TargetLocation = UTIL_GetButtonFloorLocation(pBot->Edict->v.origin, Task->TaskTarget);
@@ -3733,7 +3605,7 @@ void AITASK_SetAttackTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 		return;
 	}
 
-	if (Task->TaskType == TASK_ATTACK && Task->TaskTarget == Target) 
+	if (Task->TaskType == TASK_ATTACK && Task->TaskTarget == Target)
 	{
 		Task->bTaskIsUrgent = bIsUrgent;
 		return;
@@ -3813,7 +3685,7 @@ void AITASK_SetBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, const AvHAIDe
 	}
 
 	if (Task->ActiveBuildInfo.BuildStatus == BUILD_ATTEMPT_PENDING) { return; }
-	
+
 	AITASK_ClearBotTask(pBot, Task);
 
 
@@ -3849,7 +3721,7 @@ void AITASK_SetBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, const AvHAIDe
 			else
 			{
 				sprintf(buf, "I'll drop the hive");
-			}			
+			}
 
 			BotSay(pBot, true, 1.0f, buf);
 		}
@@ -3862,10 +3734,10 @@ void AITASK_SetBuildTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Stru
 
 	if (FNullEnt(StructureToBuild) || UTIL_StructureIsFullyBuilt(StructureToBuild)) { return; }
 
-	if (Task->TaskType == TASK_BUILD && Task->TaskTarget == StructureToBuild) 
+	if (Task->TaskType == TASK_BUILD && Task->TaskTarget == StructureToBuild)
 	{
 		Task->bTaskIsUrgent = bIsUrgent;
-		return; 
+		return;
 	}
 
 	// Get as close as possible to desired location
@@ -3930,16 +3802,16 @@ void AITASK_SetDefendTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* Tar
 		Task->TaskLocation = UTIL_GetFloorUnderEntity(Target);
 	}
 
-	
+
 }
 
 void AITASK_SetEvolveTask(AvHAIPlayer* pBot, AvHAIPlayerTask* Task, edict_t* EvolveHive, const AvHMessageID EvolveImpulse, const bool bIsUrgent)
 {
 
-	if (EvolveImpulse <= 0) 
+	if (EvolveImpulse <= 0)
 	{
 		AITASK_ClearBotTask(pBot, Task);
-		return; 
+		return;
 	}
 
 	if (Task->TaskType == TASK_EVOLVE && Task->TaskTarget == EvolveHive)

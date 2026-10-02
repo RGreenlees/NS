@@ -946,7 +946,7 @@ void AITAC_OnItemDropped(const AvHAIDroppedItem* NewItem)
 
 void AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 {
-	if (!Structure || (Structure->pev->effects & EF_NODRAW) || (Structure->pev->deadflag != DEAD_NO)) { return; }
+	if (!Structure || !UTIL_IsEdictActive(Structure->edict()) || (Structure->pev->effects & EF_NODRAW)) { return; }
 
 	const edict_t* BuildingEdict = Structure->edict();
 

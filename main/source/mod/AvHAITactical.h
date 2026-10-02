@@ -40,7 +40,7 @@ struct AvHAIBuildableStructure
 	bool bReachabilityMarkedDirty = true; // If true, reachability flags will be recalculated for this structure
 	AvHTeamNumber Team = TEAM_IND;
 
-	bool IsValid() const { return EntityRef != nullptr && !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+	bool IsValid() const { return EntityRef != nullptr && UTIL_IsEdictActive(Edict); }
 
 	bool IsGhost() const { return IsValid() && EnumHasAnyFlags(StructureStatusFlags, EAIStructureStatus::STRUCTURE_STATUS_GHOST); }
 
@@ -88,7 +88,7 @@ struct AvHAIResourceNode
 	edict_t* ParentHive = nullptr;
 	bool bReachabilityMarkedDirty = false;							// Reachability needs to be recalculated
 
-	bool IsValid() const { return ResourceNodeEntity != nullptr && !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+	bool IsValid() const { return ResourceNodeEntity != nullptr && UTIL_IsEdictActive(Edict) && !(Edict->v.flags & EF_NODRAW); }
 };
 typedef unordered_map<const AvHAIResourceNode*, EAIReachabilityFlags> AIResourceReachabilityMap;
 
@@ -126,7 +126,7 @@ struct AvHAIDroppedItem
 	bool bReachabilityMarkedDirty = false; // Reachability needs to be recalculated
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the item has been removed from play
 
-	bool IsValid() const { return !FNullEnt(Edict) && !Edict->free && !(Edict->v.flags & EF_NODRAW) && Edict->v.deadflag == DEAD_NO; }
+	bool IsValid() const { return UTIL_IsEdictActive(Edict) && !(Edict->v.flags & EF_NODRAW); }
 
 	bool IsPrimaryWeapon() const
 	{
