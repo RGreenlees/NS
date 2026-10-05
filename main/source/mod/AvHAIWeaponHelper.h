@@ -8,9 +8,6 @@
 int GetPlayerCurrentWeaponClipAmmo(const AvHPlayer* Player);
 int GetPlayerCurrentWeaponMaxClipAmmo(const AvHPlayer* Player);
 int GetPlayerCurrentWeaponReserveAmmo(const AvHPlayer* Player);
-EAIWeaponId GetPlayerCurrentWeapon(const AvHPlayer* Player);
-AvHBasePlayerWeapon* GetPlayerCurrentWeaponReference(const AvHPlayer* Player);
-
 
 EAIWeaponId UTIL_GetPlayerPrimaryWeapon(const AvHPlayer* Player);
 EAIWeaponId UTIL_GetPlayerSecondaryWeapon(const AvHPlayer* Player);
@@ -37,7 +34,7 @@ float GetProjectileVelocityForWeapon(const EAIWeaponId Weapon);
 float GetMaxIdealWeaponRange(const EAIWeaponId Weapon);
 float GetMinIdealWeaponRange(const EAIWeaponId Weapon);
 
-bool WeaponCanBeReloaded(const EAIWeaponId CheckWeapon);
+bool UTIL_WeaponCanBeReloaded(const EAIWeaponId CheckWeapon);
 bool IsMeleeWeapon(const EAIWeaponId Weapon);
 
 Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, const float ExplosionRadius, bool bPrecise);

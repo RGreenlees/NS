@@ -75,6 +75,21 @@ bool UTIL_IsEdictActive(const edict_t* Edict)
 	return (!FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO);
 }
 
+EAIWeaponId UTIL_GetPlayerCurrentWeapon(const AvHPlayer* Player)
+{
+	if (!Player) { return EAIWeaponId::WEAPON_INVALID; }
+
+	AvHBasePlayerWeapon* theBasePlayerWeapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_pActiveItem);
+
+	if (theBasePlayerWeapon)
+	{
+		return static_cast<EAIWeaponId>(theBasePlayerWeapon->m_iId);
+	}
+
+	return EAIWeaponId::WEAPON_INVALID;
+}
+
+
 Vector UTIL_GetHullTraceHitLocation(const Vector Start, const Vector End, int HullNum)
 {
 	TraceResult hit;
@@ -295,6 +310,193 @@ bool UTIL_IsPointInSwimArea(const Vector& TestPoint)
 void AIDEBUG_DrawBotPath(edict_t* OutputPlayer, AvHAIPlayer* pBot, float DrawTime)
 {
 	AIDEBUG_DrawPath(OutputPlayer, pBot->BotNavInfo.CurrentPath, DrawTime);
+}
+
+bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon)
+{
+	if (!Player || DesiredCombatWeapon == EAIWeaponId::WEAPON_INVALID) { return false; }
+
+	bool HasWeaponInInventory = (Player->pev->weapons & (1 << static_cast<int>(DesiredCombatWeapon)));
+
+	// Marines don't have a fixed inventory, so we can just do a simple check for them. Same goes to confirm the alien has the weapon in their inventory
+	if (IsPlayerMarine(Player) || !HasWeaponInInventory)
+	{
+		if (DesiredCombatWeapon == EAIWeaponId::WEAPON_MARINE_GRENADE && HasWeaponInInventory)
+		{
+			AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[5]);
+
+			if (!Weapon) { return false; }
+
+			return Weapon->m_iClip > 0;
+		}
+
+		return HasWeaponInInventory;
+	}
+
+	// Aliens always have all weapons in their inventory, but they are enabled/disabled based on hive count (or combat unlocks).
+	// Now we check to see if the weapon is enabled for them.
+
+	edict_t* pEdict = ENT(Player->pev);
+
+	// Which slot the weapon sits in
+	int DesiredWeaponIndex = -1;
+
+	switch (DesiredCombatWeapon)
+	{
+		case EAIWeaponId::WEAPON_SKULK_BITE:
+		case EAIWeaponId::WEAPON_GORGE_SPIT:
+		case EAIWeaponId::WEAPON_LERK_BITE:
+		case EAIWeaponId::WEAPON_FADE_SWIPE:
+		case EAIWeaponId::WEAPON_ONOS_GORE:
+			DesiredWeaponIndex = 1;
+			break;
+		case EAIWeaponId::WEAPON_SKULK_PARASITE:
+		case EAIWeaponId::WEAPON_GORGE_HEALINGSPRAY:
+		case EAIWeaponId::WEAPON_LERK_SPORES:
+		case EAIWeaponId::WEAPON_FADE_BLINK:
+		case EAIWeaponId::WEAPON_ONOS_DEVOUR:
+			DesiredWeaponIndex = 2;
+			break;
+		case EAIWeaponId::WEAPON_SKULK_LEAP:
+		case EAIWeaponId::WEAPON_GORGE_BILEBOMB:
+		case EAIWeaponId::WEAPON_LERK_UMBRA:
+		case EAIWeaponId::WEAPON_FADE_METABOLIZE:
+		case EAIWeaponId::WEAPON_ONOS_STOMP:
+			DesiredWeaponIndex = 3;
+			break;
+		case EAIWeaponId::WEAPON_SKULK_XENOCIDE:
+		case EAIWeaponId::WEAPON_GORGE_WEB:
+		case EAIWeaponId::WEAPON_LERK_PRIMALSCREAM:
+		case EAIWeaponId::WEAPON_FADE_ACIDROCKET:
+		case EAIWeaponId::WEAPON_ONOS_CHARGE:
+			DesiredWeaponIndex = 4;
+			break;
+		default:
+			DesiredWeaponIndex = -1;
+			break;
+	}
+
+	if (DesiredWeaponIndex < 0) { return false; }
+
+	AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[DesiredWeaponIndex]);
+
+	return (Weapon && Weapon->m_iEnabled);
+}
+
+bool UTIL_IsCloakedPlayerInvisible(const edict_t* Observer, const AvHPlayer* Player)
+{
+	if (Player->GetOpacity() > 0.6f) { return false; }
+
+	if (Player->GetIsCloaked()) { return true; }
+
+	switch (Player->GetUser3())
+	{
+	case AVH_USER3_ALIEN_PLAYER1:
+	case AVH_USER3_ALIEN_PLAYER2:
+	case AVH_USER3_ALIEN_PLAYER3:
+	{
+		if (Player->GetOpacity() < 0.3f) { return true; }
+
+		return (vDist3DSq(Observer->v.origin, Player->pev->origin) > sqrf(UTIL_MetresToGoldSrcUnits(10.0f)) || Player->pev->velocity.Length2D() < 50.0f);
+	}
+	case AVH_USER3_ALIEN_PLAYER4:
+	case AVH_USER3_ALIEN_PLAYER5:
+	{
+		if (Player->GetOpacity() > 0.4f) { return false; }
+		if (Player->GetOpacity() < 0.2f) { return true; }
+
+		return vDist3DSq(Observer->v.origin, Player->pev->origin) > sqrf(UTIL_MetresToGoldSrcUnits(10.0f));
+	}
+	}
+
+	return false;
+}
+
+AvHMessageID UTIL_GetEvolveUpgradeImpulse(EAIAlienUpgrade DesiredUpgrade)
+{
+	switch (DesiredUpgrade)
+	{
+		case EAIAlienUpgrade::ALIEN_UPGRADE_CARAPACE:
+			return ALIEN_EVOLUTION_ONE;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_REGENERATION:
+			return ALIEN_EVOLUTION_TWO;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_REDEMPTION:
+			return ALIEN_EVOLUTION_THREE;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_ADRENALINE:
+			return ALIEN_EVOLUTION_EIGHT;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_CELERITY:
+			return ALIEN_EVOLUTION_SEVEN;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_SILENCE:
+			return ALIEN_EVOLUTION_NINE;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_FOCUS:
+			return ALIEN_EVOLUTION_ELEVEN;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_SCENTOFFEAR:
+			return ALIEN_EVOLUTION_TWELVE;
+		case EAIAlienUpgrade::ALIEN_UPGRADE_CLOAK:
+			return ALIEN_EVOLUTION_TEN;
+		default:
+			return MESSAGE_NULL;
+	}
+}
+
+AvHMessageID UTIL_GetEvolveLifeformImpulse(EAIAlienLifeform DesiredLifeform)
+{
+	switch (DesiredLifeform)
+	{
+		case EAIAlienLifeform::ALIEN_LIFEFORM_SKULK:
+			return ALIEN_LIFEFORM_ONE;
+		case EAIAlienLifeform::ALIEN_LIFEFORM_GORGE:
+			return ALIEN_LIFEFORM_TWO;
+		case EAIAlienLifeform::ALIEN_LIFEFORM_LERK:
+			return ALIEN_LIFEFORM_THREE;
+		case EAIAlienLifeform::ALIEN_LIFEFORM_FADE:
+			return ALIEN_LIFEFORM_FOUR;
+		case EAIAlienLifeform::ALIEN_LIFEFORM_ONOS:
+			return ALIEN_LIFEFORM_FIVE;
+		default:
+			return MESSAGE_NULL;
+	}
+}
+
+float UTIL_GetEvolveLifeformCost(EAIAlienLifeform DesiredLifeform)
+{
+	switch (DesiredLifeform)
+	{
+		case EAIAlienLifeform::ALIEN_LIFEFORM_SKULK:
+			return 0.0f;
+		case EAIAlienLifeform::ALIEN_LIFEFORM_GORGE:
+			return BALANCE_VAR(kGorgeCost);
+		case EAIAlienLifeform::ALIEN_LIFEFORM_LERK:
+			return BALANCE_VAR(kLerkCost);
+		case EAIAlienLifeform::ALIEN_LIFEFORM_FADE:
+			return BALANCE_VAR(kFadeCost);
+		case EAIAlienLifeform::ALIEN_LIFEFORM_ONOS:
+			return BALANCE_VAR(kOnosCost);
+		default:
+			return MESSAGE_NULL;
+	}
+}
+
+AvHMessageID UTIL_GetVoicelineId(EAIVoiceLine RequiredVoiceLine)
+{
+	switch (RequiredVoiceLine)
+	{
+		case EAIVoiceLine::AI_MARINE_VOICELINE_NEEDHEALTH:
+		case EAIVoiceLine::AI_ALIEN_VOICELINE_HEALME:
+			return SAYING_4;
+		case EAIVoiceLine::AI_MARINE_VOICELINE_NEEDAMMO:
+			return SAYING_5;
+		case EAIVoiceLine::AI_MARINE_VOICELINE_WELDME:
+			return SAYING_8;
+		case EAIVoiceLine::AI_MARINE_VOICELINE_TAUNT:
+			return SAYING_5;
+		case EAIVoiceLine::AI_MARINE_VOICELINE_NEEDORDER:
+			return ORDER_REQUEST;
+		case EAIVoiceLine::AI_MARINE_VOICELINE_ACKORDER:
+			return ORDER_ACK;
+		default:
+			return MESSAGE_NULL;
+	}
 }
 
 void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<AvHAIPathNode>& path, float DrawTime)

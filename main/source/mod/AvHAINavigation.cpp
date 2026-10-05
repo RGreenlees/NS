@@ -1015,6 +1015,11 @@ bool AINAV_IsBotOffPlatformNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode
 	return false;
 }
 
+bool AINAV_IsBotOffPhaseGateNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
+{
+
+}
+
 EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
@@ -1069,7 +1074,7 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 			return EAINavMoveResult::NAV_MOVE_SUCCESS;
 		}
 
-		MoveToWithoutNav(AIPlayer, CurrentPathNode->ToLocation);
+		AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 
 		return;
 	}
@@ -1101,11 +1106,11 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 
 	if (AIPlayer->IsInWater())
 	{
-		AINAV_NextSwimMove(AIPlayer, AIPlayer->NextFrameMovementInput, CurrentPathNode, NextPathNode);
+		AINAV_NextSwimMove(AIPlayer, CurrentPathNode, NextPathNode);
 	}
 	else
 	{
-		AINAV_NextMove(AIPlayer, AIPlayer->NextFrameMovementInput, CurrentPathNode, NextPathNode);
+		AINAV_NextMove(AIPlayer, CurrentPathNode, NextPathNode);
 	}
 
 	AINAV_HandlePlayerAvoidance(AIPlayer, CurrentPathNode, AIPlayer->NextFrameMovementInput);
@@ -1362,9 +1367,11 @@ AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer)
 	return nullptr;
 }
 
-bool AINAV_NewGroundMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NewGroundMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
 	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
 
 	const Vector CurrentPos = (AIPlayer->IsOnGround()) ? AIPlayer->Edict->v.origin : AIPlayer->CurrentFloorPosition;
 
@@ -1442,8 +1449,12 @@ bool AINAV_NewGroundMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMov
 	}
 }
 
-bool AINAV_NewFallMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NewFallMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
+
 	const Vector AIPlayerLocation = AIPlayer->GetLocation();
 	const Vector vBotOrientation = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - AIPlayerLocation);
 	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
@@ -1473,8 +1484,12 @@ bool AINAV_NewFallMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovem
 	}
 }
 
-bool AINAV_NewJumpMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NewJumpMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
+
 	Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - AIPlayer->GetLocation());
 
 	if (vIsZero(vForward))
@@ -1567,13 +1582,17 @@ Vector AINAV_GetLadderMountPoint(const edict_t* MountLadder, const Vector StartP
 	return MountPoint;
 }
 
-void AINAV_NewMountLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NewMountLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
+
 	edict_t* MountLadder = UTIL_GetNearestLadderAtPoint(CurrentPathNode->FromLocation);
 
 	if (FNullEnt(MountLadder))
 	{
-		AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation, OutMovementInput);
+		AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 		return;
 	}
 
@@ -1604,8 +1623,12 @@ void AINAV_NewMountLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& O
 	OutMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(MountPoint - BotCurrentLocation);
 }
 
-bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
+
 	bool bIsGoingUpLadder = (CurrentPathNode->FromLocation.z < CurrentPathNode->ToLocation.z);
 	bool bAtAppropriateClimbHeight = (bIsGoingUpLadder) ? (AIPlayer->GetLocation().z >= CurrentPathNode->RequiredClimbZ) : (AIPlayer->GetLocation().z <= CurrentPathNode->RequiredClimbZ);
 
@@ -1615,12 +1638,12 @@ bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMov
 	{
 		if (!AIPlayer->IsOnGround() || AINAV_IsPointDirectlyReachable(NavProfile, AIPlayer->GetBottomOfHitbox(), CurrentPathNode->ToLocation))
 		{
-			AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation, OutMovementInput);
+			AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 			return;
 		}
 		else
 		{
-			AINAV_NewMountLadderMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			AINAV_NewMountLadderMove(AIPlayer, CurrentPathNode, NextPathNode);
 			return;
 		}
 	}
@@ -1686,7 +1709,7 @@ bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMov
 		// We've reached the end of the ladder, try and make it to the disembark point if we can
 		if (LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z >= DesiredClimbHeight)
 		{
-			AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation, OutMovementInput);
+			AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 
 			const Vector DesiredLookTarget = (BotEyePosition + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
 
@@ -1709,7 +1732,7 @@ bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMov
 			// We're close enough to the end that we can jump off the ladder
 			if (UTIL_QuickTrace(AIPlayer->Edict, CollisionTopLocation, CurrentPathNode->ToLocation))
 			{
-				AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation, OutMovementInput);
+				AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 				AIPlayer->Jump(OutMovementInput, true);
 				return;
 			}
@@ -1779,15 +1802,15 @@ bool AINAV_NewLadderMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMov
 	OutMovementInput.RequiredLookLocation = LookTarget;
 }
 
-bool AINAV_NewPlatformMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NewPlatformMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
 }
 
-bool AINAV_NextMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NextMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
-	OutMovementInput.Clear();
-
 	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
 	bool bMoveSuccess = false;
@@ -1795,30 +1818,31 @@ bool AINAV_NextMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovement
 	switch (CurrentPathNode->MovementFlag)
 	{
 		case EAINavMovementFlag::NAV_FLAG_WALK:
-			return AINAV_NewGroundMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			return AINAV_NewGroundMove(AIPlayer, CurrentPathNode, NextPathNode);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_FALL:
-			return AINAV_NewFallMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			return AINAV_NewFallMove(AIPlayer, CurrentPathNode, NextPathNode);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_JUMP:
-			return AINAV_NewJumpMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			return AINAV_NewJumpMove(AIPlayer, CurrentPathNode, NextPathNode);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_LADDER:
-			return AINAV_NewLadderMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			return AINAV_NewLadderMove(AIPlayer, CurrentPathNode, NextPathNode);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
-			return AINAV_NewPlatformMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			return AINAV_NewPlatformMove(AIPlayer, CurrentPathNode, NextPathNode);
 			break;
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+			return AINAV_NewPhaseGateMove(AIPlayer, CurrentPathNode, NextPathNode);
 		default:
-			return AINAV_NewGroundMove(AIPlayer, OutMovementInput, CurrentPathNode, NextPathNode);
+			return AINAV_NewGroundMove(AIPlayer, CurrentPathNode, NextPathNode);
 			break;
 	}
 }
 
-bool AINAV_NextSwimMove(const AvHAIPlayer* AIPlayer, AvHAIMovementInput& OutMovementInput, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+bool AINAV_NextSwimMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
-	OutMovementInput.Clear();
-
 	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 }
 
@@ -1879,110 +1903,39 @@ EAINavMoveResult AINAV_ProgressMoveTask(AvHAIPlayer* AIPlayer, AvHAIMoveTask* Mo
 	return AINAV_FollowPath(AIPlayer, &MoveTask->TaskPath);
 }
 
-
-
-
-
-
-
-
-
-
-void BlockedMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
+bool AINAV_NewPhaseGateMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
-	Vector vForward = UTIL_GetVectorNormal2D(EndPoint - pBot->Edict->v.origin);
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
-	if (vIsZero(vForward))
-	{
-		vForward = UTIL_GetVectorNormal2D(EndPoint - StartPoint);
+	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
 
-		if (vIsZero(vForward))
-		{
-			if (pBot->BotNavInfo.CurrentPathPoint < pBot->BotNavInfo.CurrentPath.size() - 1)
-			{
-				bot_path_node NextPathNode = pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint + 1];
-
-				vForward = UTIL_GetVectorNormal2D(NextPathNode.Location - pBot->Edict->v.origin);
-			}
-			else
-			{
-				vForward = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
-			}
-		}
-	}
-
-	pBot->desiredMovementDir = vForward;
-
-	Vector CurrVelocity = UTIL_GetVectorNormal2D(pBot->Edict->v.velocity);
-
-	float Dot = UTIL_GetDotProduct2D(vForward, CurrVelocity);
-
-	Vector FaceDir = UTIL_GetForwardVector2D(pBot->Edict->v.angles);
-
-	float FaceDot = UTIL_GetDotProduct2D(FaceDir, vForward);
-
-	// Yes this is cheating, but is it not cheating for humans to have millions of years of evolution
-	// driving their ability to judge a jump, while the bots have a single year of coding from a moron?
-	if (FaceDot < 0.95f)
-	{
-		float MoveSpeed = vSize2D(pBot->Edict->v.velocity);
-		if (MoveSpeed < 20.0f)
-		{
-			MoveSpeed = 100.0f;
-		}
-		Vector NewVelocity = vForward * MoveSpeed;
-		NewVelocity.z = pBot->Edict->v.velocity.z;
-
-		pBot->Edict->v.velocity = NewVelocity;
-	}
-
-	BotJump(pBot);
-}
-
-void PhaseGateMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint)
-{
 	StructureSearchFilter PGFilter;
-	PGFilter.DeployableTeam = pBot->Player->GetTeam();
-	PGFilter.DeployableTypes = STRUCTURE_MARINE_PHASEGATE;
+	PGFilter.DeployableTeam = AIPlayer->Player->GetTeam();
+	PGFilter.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
 	PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
-	PGFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
+	PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
 
-	AvHAIBuildableStructure NearestPhaseGate = AITAC_FindClosestDeployableToLocation(pBot->Edict->v.origin, &PGFilter);
+	const AvHAIBuildableStructure* NearestPhaseGate = AITAC_FindSingleMatchingStructure(CurrentPathNode->FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
 
-	if (!NearestPhaseGate.IsValid()) { return; }
+	if (!NearestPhaseGate || !NearestPhaseGate->IsValid()) { return; }
 
-	if (IsPlayerInUseRange(pBot->Edict, NearestPhaseGate.edict))
+	if (IsPlayerInUseRange(AIPlayer->Edict, NearestPhaseGate->Edict))
 	{
-		BotMoveLookAt(pBot, NearestPhaseGate.edict->v.origin);
-		pBot->desiredMovementDir = g_vecZero;
-		BotUseObject(pBot, NearestPhaseGate.edict, false);
+		OutMovementInput.RequiredLookLocation = NearestPhaseGate->Location;
+		OutMovementInput.DesiredMoveDirection = g_vecZero;
+		AIPlayer->UseObject(NearestPhaseGate->Edict, false);
 
-		if (vDist2DSq(pBot->Edict->v.origin, NearestPhaseGate.edict->v.origin) < sqrf(16.0f))
+		if (vDist2DSq(AIPlayer->GetLocation(), NearestPhaseGate->Location) < sqrf(16.0f))
 		{
-			pBot->desiredMovementDir = UTIL_GetForwardVector2D(NearestPhaseGate.edict->v.angles);
+			OutMovementInput.DesiredMoveDirection = UTIL_GetForwardVector2D(AIPlayer->Edict->v.angles);
 		}
 
 		return;
 	}
 	else
 	{
-		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(NearestPhaseGate.edict->v.origin - pBot->Edict->v.origin);
+		OutMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NearestPhaseGate->Location - AIPlayer->GetLocation());
 	}
-}
-
-bool IsBotOffLadderNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
-{
-	if (!IsPlayerOnLadder(pBot->Edict))
-	{
-		if (IsPlayerClimbingWall(pBot->Edict)) { return true; }
-
-		if (pBot->BotNavInfo.IsOnGround)
-		{
-			if (!UTIL_PointIsDirectlyReachable(GetPlayerBottomOfCollisionHull(pBot->Edict), MoveStart) && !UTIL_PointIsDirectlyReachable(GetPlayerBottomOfCollisionHull(pBot->Edict), MoveEnd)) { return true; }
-		}
-	}
-
-	return false;
 }
 
 bool IsBotOffClimbNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
@@ -2257,95 +2210,4 @@ void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndP
 
 	BotMoveLookAt(pBot, LookLocation, true);
 
-}
-
-
-void BotMovementInputs(AvHAIPlayer* pBot)
-{
-	if (vIsZero(pBot->desiredMovementDir)) { return; }
-
-	edict_t* pEdict = pBot->Edict;
-
-	UTIL_NormalizeVector2D(&pBot->desiredMovementDir);
-
-	float currentYaw = pBot->Edict->v.v_angle.y;
-	float moveDelta = UTIL_VecToAngles(pBot->desiredMovementDir).y;
-	float angleDelta = currentYaw - moveDelta;
-
-	float botSpeed = (pBot->BotNavInfo.bShouldWalk) ? (pBot->Edict->v.maxspeed * 0.4f) : pBot->Edict->v.maxspeed;
-
-	if (pBot->BotNavInfo.bShouldWalk)
-	{
-		pBot->Button |= IN_WALK;
-	}
-
-	if (angleDelta < -180.0f)
-	{
-		angleDelta += 360.0f;
-	}
-	else if (angleDelta > 180.0f)
-	{
-		angleDelta -= 360.0f;
-	}
-
-	if (angleDelta >= -22.5f && angleDelta < 22.5f)
-	{
-		pBot->ForwardMove = botSpeed;
-		pBot->SideMove = 0.0f;
-		pBot->Button |= IN_FORWARD;
-	}
-	else if (angleDelta >= 22.5f && angleDelta < 67.5f)
-	{
-		pBot->ForwardMove = botSpeed;
-		pBot->SideMove = botSpeed;
-		pBot->Button |= IN_FORWARD;
-		pBot->Button |= IN_MOVERIGHT;
-	}
-	else if (angleDelta >= 67.5f && angleDelta < 112.5f)
-	{
-		pBot->ForwardMove = 0.0f;
-		pBot->SideMove = botSpeed;
-		pBot->Button |= IN_MOVERIGHT;
-	}
-	else if (angleDelta >= 112.5f && angleDelta < 157.5f)
-	{
-		pBot->ForwardMove = -botSpeed;
-		pBot->SideMove = botSpeed;
-		pBot->Button |= IN_BACK;
-		pBot->Button |= IN_MOVERIGHT;
-	}
-	else if (angleDelta >= 157.5f || angleDelta <= -157.5f)
-	{
-		pBot->ForwardMove = -botSpeed;
-		pBot->SideMove = 0.0f;
-		pBot->Button |= IN_BACK;
-	}
-	else if (angleDelta >= -157.5f && angleDelta < -112.5f)
-	{
-		pBot->ForwardMove = -botSpeed;
-		pBot->SideMove = -botSpeed;
-		pBot->Button |= IN_BACK;
-		pBot->Button |= IN_MOVELEFT;
-	}
-	else if (angleDelta >= -112.5f && angleDelta < -67.5f)
-	{
-		pBot->ForwardMove = 0.0f;
-		pBot->SideMove = -botSpeed;
-		pBot->Button |= IN_MOVELEFT;
-	}
-	else if (angleDelta >= -67.5f && angleDelta < -22.5f)
-	{
-		pBot->ForwardMove = botSpeed;
-		pBot->SideMove = -botSpeed;
-		pBot->Button |= IN_FORWARD;
-		pBot->Button |= IN_MOVELEFT;
-	}
-
-	if (pBot->BotNavInfo.CurrentPath.size() == 0 || pBot->BotNavInfo.CurrentPathPoint >= pBot->BotNavInfo.CurrentPath.size() || pBot->BotNavInfo.CurrentPath[pBot->BotNavInfo.CurrentPathPoint].flag != SAMPLE_POLYFLAGS_LADDER)
-	{
-		if (pBot->Player->IsOnLadder())
-		{
-			BotJump(pBot);
-		}
-	}
 }

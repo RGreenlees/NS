@@ -91,6 +91,32 @@ enum class EAIHiveTechStatus
 	HIVE_TECH_MOVEMENT = 3
 };
 
+// Alien upgrades
+enum class EAIAlienUpgrade
+{
+	ALIEN_UPGRADE_NONE = 0,
+	ALIEN_UPGRADE_CARAPACE,
+	ALIEN_UPGRADE_REGENERATION,
+	ALIEN_UPGRADE_REDEMPTION,
+	ALIEN_UPGRADE_ADRENALINE,
+	ALIEN_UPGRADE_CELERITY,
+	ALIEN_UPGRADE_SILENCE,
+	ALIEN_UPGRADE_FOCUS,
+	ALIEN_UPGRADE_SCENTOFFEAR,
+	ALIEN_UPGRADE_CLOAK
+};
+
+// Alien Lifeforms
+enum class EAIAlienLifeform
+{
+	ALIEN_LIFEFORM_NONE = 0,
+	ALIEN_LIFEFORM_SKULK,
+	ALIEN_LIFEFORM_GORGE,
+	ALIEN_LIFEFORM_LERK,
+	ALIEN_LIFEFORM_FADE,
+	ALIEN_LIFEFORM_ONOS
+};
+
 enum class EAIReachabilityFlags : uint16
 {
 	AI_REACHABILITY_NONE = 0,
@@ -287,11 +313,12 @@ enum class EAICombatStrategy
 // Pending message a bot wants to say. Allows for a delay in sending a message to simulate typing, or prevent too many messages on the same frame
 struct AvHAIBotMsg
 {
-	char msg[64]; // Message to send
+	char Message[64]; // Message to send
 	float SendTime = 0.0f; // When the bot should send this message
 	bool bIsPending = false; // Represents a valid pending message
 	bool bIsTeamSay = false; // Is this a team-only message?
 };
+typedef std::vector<AvHAIBotMsg> AvHAIPendingMessageList;
 
 struct AvHAIGuardInfo
 {
@@ -370,14 +397,27 @@ enum class EAIMovementTaskType
 	MOVE_TASK_WELD
 };
 
+enum class EAIVoiceLine
+{
+	AI_VOICELINE_NONE = 0,
+	AI_MARINE_VOICELINE_NEEDHEALTH,
+	AI_MARINE_VOICELINE_NEEDAMMO,
+	AI_MARINE_VOICELINE_WELDME,
+	AI_MARINE_VOICELINE_NEEDORDER,
+	AI_MARINE_VOICELINE_ACKORDER,
+	AI_MARINE_VOICELINE_TAUNT,
+	AI_ALIEN_VOICELINE_HEALME,
+	AI_ALIEN_VOICELINE_CHUCKLE
+};
+
 // Bot path node. A path will be several of these strung together to lead the bot to its destination
 struct AvHAIPathNode
 {
 	Vector FromLocation = ZERO_VECTOR; // Location to move from
 	Vector ToLocation = ZERO_VECTOR; // Location to move to
 	float RequiredClimbZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
-	EAINavMovementFlag MovementFlag = NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
-	EAINavArea MovementArea = NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
+	EAINavMovementFlag MovementFlag = EAINavMovementFlag::NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
+	EAINavArea MovementArea = EAINavArea::NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
 	unsigned int MeshPoly = 0; // The nav mesh poly this point resides on
 	edict_t* Platform = nullptr;
 
@@ -577,7 +617,7 @@ struct AvHAIBuildAttempt
 	int NumAttempts = 0;
 	EAIBuildAttemptResult BuildStatus = EAIBuildAttemptResult::BUILD_ATTEMPT_NONE;
 	float BuildAttemptTime = 0.0f;
-	AvHAIBuildableStructure* LinkedStructure = nullptr;
+	const AvHAIBuildableStructure* LinkedStructure = nullptr;
 };
 
 // A bot task is a goal the bot wants to perform, such as attacking a structure, placing a structure etc. NOT USED BY COMMANDER
@@ -742,7 +782,8 @@ struct AvHAIMovementInput
 	int				Impulse = 0;
 	Vector			RequiredLookLocation = ZERO_VECTOR; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
 	Vector			DesiredLookLocation = ZERO_VECTOR;  // Where the bot might want to look if they're not doing a precise movement (e.g. an enemy target)
-	EAIWeaponId		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot might need to continue moving
+	EAIWeaponId		RequiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot MUST switch to for movement purposes (e.g. leap/blink)
+	EAIWeaponId		DesiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
 	Vector			DesiredMoveDirection = ZERO_VECTOR;
 	Vector			VelocityOverride = ZERO_VECTOR; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
 	bool			bHasAttemptedJump = false;
@@ -758,7 +799,8 @@ struct AvHAIMovementInput
 		Impulse = 0;
 		RequiredLookLocation = ZERO_VECTOR;
 		DesiredLookLocation = ZERO_VECTOR;
-		DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID;
+		RequiredWeapon = EAIWeaponId::WEAPON_INVALID;
+		DesiredWeapon = EAIWeaponId::WEAPON_INVALID;
 		DesiredMoveDirection = ZERO_VECTOR;
 		VelocityOverride = ZERO_VECTOR;
 		bHasAttemptedJump = false;
@@ -773,7 +815,7 @@ struct AvHAIMovementInput
 		UpMove = 0.0f;
 	}
 
-	void GenerateMovementOutputs(const Vector& CurrentViewAngles);
+	void GenerateMovementOutputs(const AvHAIPlayer* Player);
 };
 
 struct AvHAICommanderOrder
@@ -848,7 +890,7 @@ struct AvHAIPlayer
 
 	float next_commander_action_time = 0.0f;
 
-	AvHAIBotMsg ChatMessages[5]; // Bot can have up to 5 chat messages pending
+	AvHAIPendingMessageList PendingMessages;
 
 	float LastCombatTime = 0.0f;
 
@@ -904,7 +946,7 @@ struct AvHAIPlayer
 	float GetPlayerHeight() const;
 	void AddMovementTask(AvHAIMoveTask& NewTask);
 	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
-	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation, AvHAIMovementInput& OutMovementInput);
+	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
 	EAINavMoveResult ProgressMovementTasks();
 	Vector GetLocation() const { return Edict->v.origin; }
 	Vector GetVelocity() const { return Edict->v.velocity; }
@@ -915,13 +957,30 @@ struct AvHAIPlayer
 	float GetDesiredMovementSpeed(bool bShouldWalk) const;
 	Vector GetBottomOfHitbox() const;
 	Vector GetTopOfHitbox() const;
+	void CheckAndSendMessages();
 	void Think(float DeltaTime);
+	void StartThink(float DeltaTime);
+	void EndThink(float DeltaTime);
+	void UpdateView(float DeltaTime);
 	void BotUpdateDesiredViewRotation();
 	void InterpolateView(float DeltaTime);
 	void LookAt(const Vector& LocationTarget);
 	void LookAt(const edict_t* Target);
 	void UpdateViewFrustum();
 	bool IsObjectInFOV(const edict_t* Object) const;
+	bool UseObject(edict_t* Object, bool bUseContinuously = false);
+	void DropWeapon();
+	void ReloadWeapon();
+	EAIWeaponId GetCurrentWeapon() const;
+	void LeaveCommChair();
+	void UpdateReceivedOrders();
+	void OnReceiveMoveOrder(const Vector& TargetLocation);
+	void OnReceiveBuildOrder(const edict_t* TargetObject);
+	void SwitchToWeapon(EAIWeaponId NewWeaponId);
+	void RequestEvolveUpgrade(EAIAlienUpgrade DesiredUpgrade);
+	void RequestEvolveLifeform(EAIAlienLifeform DesiredLifeform);
+	void Say(const char* ThingToSay, bool bTeamSay, float Delay = 0.0f);
+	bool ShouldThink() const;
 };
 
 struct AvHAISquad

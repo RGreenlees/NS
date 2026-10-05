@@ -30,6 +30,18 @@ EAIStructureType IUSER3ToStructureType(const int inIUSER3);
 bool IsEdictStructure(const edict_t* edict);
 bool IsEdictHive(const edict_t* edict);
 
+AvHMessageID UTIL_GetVoicelineId(EAIVoiceLine RequiredVoiceLine);
+
+EAIWeaponId UTIL_GetPlayerCurrentWeapon(const AvHPlayer* Player);
+
+bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon);
+
+bool UTIL_IsCloakedPlayerInvisible(const edict_t* Observer, const AvHPlayer* Player);
+
+AvHMessageID UTIL_GetEvolveUpgradeImpulse(EAIAlienUpgrade DesiredUpgrade);
+AvHMessageID UTIL_GetEvolveLifeformImpulse(EAIAlienLifeform DesiredLifeform);
+float UTIL_GetEvolveLifeformCost(EAIAlienLifeform DesiredLifeform);
+
 EAIStructureType GetStructureTypeFromEdict(const edict_t* StructureEdict);
 
 // Returns true if this structure shoots back (turret or offence chamber)

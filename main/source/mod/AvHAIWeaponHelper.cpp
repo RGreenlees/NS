@@ -453,7 +453,7 @@ bool IsMeleeWeapon(const EAIWeaponId Weapon)
 	}
 }
 
-bool WeaponCanBeReloaded(const EAIWeaponId CheckWeapon)
+bool UTIL_WeaponCanBeReloaded(const EAIWeaponId CheckWeapon)
 {
 	switch (CheckWeapon)
 	{
