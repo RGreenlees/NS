@@ -480,7 +480,22 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 			if (PlatformRef)
 			{
-				NextPathNode.Platform = PlatformRef->Edict;
+				NextPathNode.MovementObject = PlatformRef->Edict;
+			}
+		}
+		else if (CurrFlags == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 || CurrFlags == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2)
+		{
+			const bool bIsTeamOne = (CurrFlags == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
+
+			StructureSearchFilter PGFilter;
+			PGFilter.DeployableTeam = (bIsTeamOne) ? GetGameRules()->GetTeamA()->GetTeamNumber() : GetGameRules()->GetTeamB()->GetTeamNumber();
+			PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+			PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
+			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
+
+			if (const AvHAIBuildableStructure* MatchingPhaseGate = AITAC_FindSingleMatchingStructure(NextPathNode.FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST))
+			{
+				NextPathNode.MovementObject = MatchingPhaseGate->Edict;
 			}
 		}
 
@@ -914,6 +929,9 @@ bool AINAV_IsBotOffPathNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* Pa
 		return AINAV_IsBotOffJumpNode(AIPlayer, PathNode);
 	case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 		return AINAV_IsBotOffPlatformNode(AIPlayer, PathNode);
+	case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+	case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+		return AINAV_IsBotOffPhaseGateNode(AIPlayer, PathNode);
 	default:
 		return AINAV_IsBotOffWalkNode(AIPlayer, PathNode);
 	}
@@ -923,6 +941,8 @@ bool AINAV_IsBotOffPathNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* Pa
 
 bool AINAV_IsBotOffWalkNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !PathNode || !PathNode->IsValidMove()) { return true; }
+
 	if (!AIPlayer->IsOnGround()) { return false; }
 
 	Vector NearestPointOnLine = vClosestPointOnLine(PathNode->FromLocation, PathNode->ToLocation, AIPlayer->Edict->v.origin);
@@ -941,6 +961,8 @@ bool AINAV_IsBotOffWalkNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* Pa
 
 bool AINAV_IsBotOffLadderNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !PathNode || !PathNode->IsValidMove()) { return true; }
+
 	if (IsPlayerOnLadder(AIPlayer->Edict)) { return false; }
 
 	if (AIPlayer->IsOnGround())
@@ -959,6 +981,8 @@ bool AINAV_IsBotOffLadderNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* 
 
 bool AINAV_IsBotOffFallNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !PathNode || !PathNode->IsValidMove()) { return true; }
+
 	if (!AIPlayer->IsOnGround()) { return false; }
 
 	Vector NearestPointOnLine = vClosestPointOnLine2D(PathNode->FromLocation, PathNode->ToLocation, AIPlayer->Edict->v.origin);
@@ -976,6 +1000,8 @@ bool AINAV_IsBotOffFallNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* Pa
 
 bool AINAV_IsBotOffJumpNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !PathNode || !PathNode->IsValidMove()) { return true; }
+
 	if (!AIPlayer->IsOnGround()) { return false; }
 
 	Vector ClosestPointOnLine = vClosestPointOnLine2D(PathNode->FromLocation, PathNode->ToLocation, AIPlayer->Edict->v.origin);
@@ -1011,13 +1037,29 @@ bool AINAV_IsBotOffJumpNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* Pa
 
 bool AINAV_IsBotOffPlatformNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !PathNode || !PathNode->IsValidMove()) { return true; }
+
 	// TODO: Fill this in
 	return false;
 }
 
 bool AINAV_IsBotOffPhaseGateNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
+	if (!AIPlayer || !AIPlayer->IsValid() || !PathNode || !PathNode->IsValidMove()) { return true; }
 
+	if (FNullEnt(PathNode->MovementObject)) { return true; }
+
+	const AvHAIBuildableStructure* StartingPhaseGate = AITAC_GetStructureFromEdict(PathNode->MovementObject);
+
+	if (!StartingPhaseGate || !StartingPhaseGate->IsValid() || StartingPhaseGate->StructureType != EAIStructureType::STRUCTURE_MARINE_PHASEGATE || !StartingPhaseGate->IsCompleted()) { return true; }
+
+	StructureSearchFilter PGFilter;
+	PGFilter.DeployableTeam = AIPlayer->Player->GetTeam();
+	PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+	PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
+	PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
+
+	return (AITAC_FindSingleMatchingStructure(PathNode->ToLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST) != nullptr);
 }
 
 EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
@@ -1113,7 +1155,7 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 		AINAV_NextMove(AIPlayer, CurrentPathNode, NextPathNode);
 	}
 
-	AINAV_HandlePlayerAvoidance(AIPlayer, CurrentPathNode, AIPlayer->NextFrameMovementInput);
+	AINAV_HandlePlayerAvoidance(AIPlayer, CurrentPathNode);
 
 	if (vIsZero(AIPlayer->NextFrameMovementInput.RequiredLookLocation) && vIsZero(AIPlayer->NextFrameMovementInput.DesiredLookLocation))
 	{
@@ -1130,7 +1172,7 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 	}
 }
 
-void AINAV_HandlePlayerAvoidance(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, AvHAIMovementInput& OutMovementInputs)
+void AINAV_HandlePlayerAvoidance(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode)
 {
 
 }
@@ -1152,7 +1194,7 @@ bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, A
 
 		if (FutureNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
 		{
-			const DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->Platform);
+			const DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->MovementObject);
 
 			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject, NewMoveTask);
 		}
@@ -1936,278 +1978,4 @@ bool AINAV_NewPhaseGateMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentP
 	{
 		OutMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NearestPhaseGate->Location - AIPlayer->GetLocation());
 	}
-}
-
-bool IsBotOffClimbNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
-{
-	if (!IsPlayerClimbingWall(pBot->Edict) && (pBot->Edict->v.flags & FL_ONGROUND))
-	{
-		return (!UTIL_PointIsDirectlyReachable(GetPlayerBottomOfCollisionHull(pBot->Edict), MoveStart) && !UTIL_PointIsDirectlyReachable(GetPlayerBottomOfCollisionHull(pBot->Edict), MoveEnd));
-	}
-
-	Vector ClosestPointOnLine = vClosestPointOnLine2D(MoveStart, MoveEnd, pBot->Edict->v.origin);
-
-	return vDist2DSq(pBot->Edict->v.origin, ClosestPointOnLine) > sqrf(GetPlayerRadius(pBot->Edict) * 3.0f);
-}
-
-bool IsBotOffPhaseGateNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
-{
-	if (vDist2DSq(pBot->Edict->v.origin, MoveStart) > sqrf(UTIL_MetresToGoldSrcUnits(2.0f)) && vDist2DSq(pBot->Edict->v.origin, MoveEnd) > sqrf(UTIL_MetresToGoldSrcUnits(2.0f))) { return true; }
-
-	StructureSearchFilter PGFilter;
-	PGFilter.DeployableTeam = pBot->Player->GetTeam();
-	PGFilter.IncludeStatusFlags = STRUCTURE_STATUS_COMPLETED;
-	PGFilter.ExcludeStatusFlags = STRUCTURE_STATUS_RECYCLING;
-	PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
-
-	bool StartPGExists = AITAC_DeployableExistsAtLocation(MoveStart, &PGFilter);
-
-	if (!StartPGExists) { return true; }
-
-	bool EndPGExists = AITAC_DeployableExistsAtLocation(MoveEnd, &PGFilter);
-
-	if (!EndPGExists) { return true; }
-
-	return false;
-}
-
-bool IsBotOffObstacleNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag)
-{
-	return IsBotOffJumpNode(pBot, MoveStart, MoveEnd, NextMoveDestination, NextMoveFlag);
-}
-
-void BlinkClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight)
-{
-	edict_t* pEdict = pBot->Edict;
-
-	Vector vForward = UTIL_GetVectorNormal2D(EndPoint - StartPoint);
-	Vector CheckLine = StartPoint + (vForward * 1000.0f);
-	Vector MoveDir = UTIL_GetVectorNormal2D(EndPoint - pBot->Edict->v.origin);
-
-	Vector PointOnMove = vClosestPointOnLine2D(StartPoint, EndPoint, pEdict->v.origin);
-	float DistFromLineSq = vDist2DSq(PointOnMove, pEdict->v.origin);
-
-	if (vEquals(PointOnMove, StartPoint, 2.0f) && DistFromLineSq > sqrf(8.0f))
-	{
-		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(StartPoint - pBot->Edict->v.origin);
-		return;
-	}
-
-	pBot->desiredMovementDir = MoveDir;
-
-	// Always duck. It doesn't have any downsides and means we don't have to separately handle vent climbing
-	pBot->Button |= IN_DUCK;
-
-	pBot->DesiredMoveWeapon = WEAPON_FADE_BLINK;
-
-	// Wait until we have blink equipped before proceeding
-	if (GetPlayerCurrentWeapon(pBot->Player) != WEAPON_FADE_BLINK) { return; }
-
-	// Only blink if we're below the target climb height
-	if (pEdict->v.origin.z < RequiredClimbHeight + 4.0f && !UTIL_QuickHullTrace(pBot->Edict, pBot->Edict->v.origin, Vector(EndPoint.x, EndPoint.y, pBot->Edict->v.origin.z)))
-	{
-		Vector CurrVelocity = UTIL_GetVectorNormal2D(pBot->Edict->v.velocity);
-
-		float Dot = UTIL_GetDotProduct2D(MoveDir, CurrVelocity);
-
-		Vector FaceDir = UTIL_GetForwardVector2D(pEdict->v.angles);
-
-		float FaceDot = UTIL_GetDotProduct2D(FaceDir, MoveDir);
-
-		// Yes this is cheating, but the fades were struggling with zipping off-target when trying to blink
-		// Better this than fades getting constantly chewed up by marines because they can't escape properly
-		if (FaceDot < 0.95f)
-		{
-			float MoveSpeed = vSize2D(pBot->Edict->v.velocity);
-
-			if (MoveSpeed < 20.0f)
-			{
-				MoveSpeed = 100.0f;
-			}
-
-			Vector NewVelocity = MoveDir * MoveSpeed;
-			NewVelocity.z = pBot->Edict->v.velocity.z;
-
-			pBot->Edict->v.velocity = NewVelocity;
-		}
-
-		float ZDiff = fabs(pEdict->v.origin.z - (RequiredClimbHeight + 16.0f));
-
-		// We don't want to blast off like a rocket, so only apply enough blink until our upwards velocity is enough to carry us to the desired height
-		float DesiredZVelocity = sqrtf(2.0f * GOLDSRC_GRAVITY * (ZDiff + 10.0f));
-
-		if (pBot->Edict->v.velocity.z < DesiredZVelocity)
-		{
-			bool bHasHeadroom = UTIL_QuickHullTrace(pBot->Edict, pBot->Edict->v.origin, pBot->Edict->v.origin + Vector(0.0f, 0.0f, 4.0f));
-			// We're going to cheat and give the bot the necessary energy to make the move. Better the fade cheats a bit than gets stuck somewhere
-			if (GetPlayerEnergy(pBot->Edict) < 0.1f)
-			{
-				pBot->Player->Energize(0.1f);
-			}
-
-			if (!bHasHeadroom || pBot->Edict->v.origin.z >= RequiredClimbHeight)
-			{
-				Vector LookPoint = EndPoint;
-				LookPoint.z = pBot->CurrentEyePosition.z + 5.0f;
-				BotMoveLookAt(pBot, LookPoint);
-			}
-			else
-			{
-				BotMoveLookAt(pBot, EndPoint + Vector(0.0f, 0.0f, 100.0f));
-			}
-
-
-			pBot->Button |= IN_ATTACK2;
-		}
-		else
-		{
-			Vector LookAtTarget = EndPoint;
-			LookAtTarget.z = pBot->CurrentEyePosition.z;
-			BotMoveLookAt(pBot, LookAtTarget);
-		}
-	}
-}
-
-void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight)
-{
-	edict_t* pEdict = pBot->Edict;
-
-	if (UTIL_PointIsDirectlyReachable(pBot->BotNavInfo.NavProfile, pBot->CurrentFloorPosition, EndPoint))
-	{
-		Vector PointOnMoveLine = vClosestPointOnLine2D(StartPoint, EndPoint, pBot->Edict->v.origin);
-
-		if (vEquals2D(PointOnMoveLine, EndPoint, 4.0f))
-		{
-
-			// Stop holding crouch if we're a skulk so we can actually climb
-			if (IsPlayerSkulk(pBot->Edict))
-			{
-				pBot->Button &= ~IN_DUCK;
-			}
-
-			pBot->desiredMovementDir = UTIL_GetVectorNormal2D(EndPoint - pBot->CurrentFloorPosition);
-
-			return;
-		}
-	}
-
-	Vector vForward = UTIL_GetVectorNormal2D(EndPoint - StartPoint);
-	Vector ClimbAngle = UTIL_GetVectorNormal(Vector(EndPoint.x, EndPoint.y, RequiredClimbHeight) - pBot->Edict->v.origin);
-
-	TraceResult SurfaceCheck;
-
-	UTIL_TraceHull(pBot->Edict->v.origin - Vector(0.0f, 0.0f, 1.0f), pBot->Edict->v.origin + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, pBot->Edict->v.pContainingEntity, &SurfaceCheck);
-
-	Vector CeilNormal = SurfaceCheck.vecPlaneNormal;
-
-	bool bIsUnderClimbing = false;
-
-	bool bClimbingUnderway = ((pBot->CollisionHullBottomLocation.z - StartPoint.z) >= 32.0f) && IsPlayerClimbingWall(pBot->Edict);
-
-	if (pEdict->v.origin.z < (RequiredClimbHeight - 10.0f) && !(pEdict->v.flags & FL_ONGROUND) && bClimbingUnderway)
-	{
-		bIsUnderClimbing = (SurfaceCheck.flFraction < 1.0f && UTIL_GetDotProduct(ClimbAngle, CeilNormal) < 0.0f);
-	}
-
-	if (bIsUnderClimbing)
-	{
-		pBot->Button |= IN_WALK;
-		vForward = (UTIL_GetDotProduct2D(vForward, CeilNormal) > 0.0f) ? vForward : -vForward;
-
-	}
-
-	Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
-
-	pBot->desiredMovementDir = vForward;
-
-	Vector CheckLine = StartPoint + (vForward * 1000.0f);
-
-	float DistFromLine = vDistanceFromLine2D(StartPoint, CheckLine, pEdict->v.origin);
-
-	// Draw an imaginary 2D line between from and to movement, and make sure we're aligned. If we've drifted off to one side, readjust.
-	if (DistFromLine > 18.0f)
-	{
-		float modifier = (float)vPointOnLine(StartPoint, CheckLine, pEdict->v.origin);
-
-		pBot->desiredMovementDir = UTIL_GetVectorNormal2D(pBot->desiredMovementDir + (vRight * modifier));
-	}
-
-	// Stop holding crouch if we're a skulk so we can actually climb
-	if (IsPlayerSkulk(pBot->Edict))
-	{
-		pBot->Button &= ~IN_DUCK;
-	}
-
-	float ZDiff = fabs(pEdict->v.origin.z - RequiredClimbHeight);
-	Vector AdjustedTargetLocation = EndPoint + (UTIL_GetVectorNormal2D(EndPoint - StartPoint) * 1000.0f);
-	Vector DirectAheadView = pBot->CurrentEyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - pBot->CurrentEyePosition) * 100.0f);
-
-	Vector LookLocation = g_vecZero;
-
-	if (ZDiff < 1.0f)
-	{
-		LookLocation = DirectAheadView;
-	}
-	else
-	{
-		// Don't look up/down quite so much as we reach the desired height so we slow down a bit, reduces the chance of over-shooting and climbing right over a vent
-		if (pEdict->v.origin.z > RequiredClimbHeight)
-		{
-			if (ZDiff > 16.0f)
-			{
-				ClimbAngle = ClimbAngle - (2.0f * (UTIL_GetDotProduct(ClimbAngle, UP_VECTOR) * ClimbAngle));
-				LookLocation = pBot->CurrentEyePosition + (ClimbAngle * 100.0f);
-			}
-			else
-			{
-				LookLocation = DirectAheadView - Vector(0.0f, 0.0f, 20.0f);
-			}
-		}
-		else
-		{
-			if (bIsUnderClimbing)
-			{
-				LookLocation = pBot->CurrentEyePosition + vForward;
-				LookLocation.z = EndPoint.z + 100.0f;
-			}
-			else
-			{
-				if (bClimbingUnderway)
-				{
-					LookLocation = pBot->CurrentEyePosition + (ClimbAngle * 100.0f);
-				}
-				else
-				{
-					LookLocation = pBot->CurrentEyePosition + vForward;
-					LookLocation.z = RequiredClimbHeight;
-				}
-			}
-		}
-	}
-
-	if (IsPlayerClimbingWall(pBot->Edict) && !bIsUnderClimbing)
-	{
-		Vector RightDir = UTIL_GetCrossProduct(vForward, UP_VECTOR);
-
-		Vector LeftCheckStart = pBot->Edict->v.origin - (RightDir * (GetPlayerRadius(pBot->Player) + 2.0f));
-		Vector LeftCheckEnd = LeftCheckStart + Vector(0.0f, 0.0f, 50.0f);
-
-		Vector RightCheckStart = pBot->Edict->v.origin + (RightDir * (GetPlayerRadius(pBot->Player) + 2.0f));
-		Vector RightCheckEnd = RightCheckStart + Vector(0.0f, 0.0f, 50.0f);
-
-		if (!UTIL_QuickTrace(pBot->Edict, LeftCheckStart, LeftCheckEnd))
-		{
-			if (UTIL_QuickTrace(pBot->Edict, RightCheckStart, RightCheckEnd))
-			{
-				pBot->desiredMovementDir = UTIL_GetVectorNormal2D(vForward + RightDir);
-			}
-		}
-		else if (!UTIL_QuickTrace(pBot->Edict, RightCheckStart, RightCheckEnd))
-		{
-			pBot->desiredMovementDir = UTIL_GetVectorNormal2D(vForward - RightDir);
-		}
-	}
-
-	BotMoveLookAt(pBot, LookLocation, true);
-
 }

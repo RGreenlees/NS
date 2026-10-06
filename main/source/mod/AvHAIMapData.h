@@ -15,6 +15,7 @@
 #include "DetourTileCache.h"
 #include "AvHAIPlayer.h"
 #include "AvHAINavMesh.h"
+#include "AvHAINavConstants.h"
 
 // Dynamic map object type
 enum class EAIDynamicMapObjectType
@@ -56,7 +57,7 @@ struct DynamicMapObject
 	edict_t* Edict = nullptr;
 	const char* ObjectName = nullptr;
 	EAIDynamicMapObjectType Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
-	std::vector<NavTempObstacle> TempObstacles; // Dynamic obstacle ref. Used to add/remove the obstacle as the door is opened/closed
+	std::vector<NavTempObstacle*> TempObstacles; // Dynamic obstacle ref. Used to add/remove the obstacle as the door is opened/closed
 	std::vector<edict_t*> Triggers; // Reference to the trigger edicts (e.g. func_trigger, func_button etc.)
 	std::vector<DynamicMapObjectStop> StopPoints; // Where the object stops when triggered. Doors will always have two stop points (open and shut positions), trains could have many
 	int NextStopIndex = 0;
@@ -73,7 +74,7 @@ struct DynamicMapObject
 
 	bool IsValid() const
 	{
-		return ObjectRef != nullptr && EdictIndex > -1 && !FNullEnt(Edict);
+		return ObjectRef != nullptr && EdictIndex > -1 && !FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO;
 	}
 
 	const DynamicMapObjectStop* GetCurrentStop() const
@@ -111,27 +112,8 @@ struct DynamicMapObject
 		return IsValid() && Triggers.size() > 0 && Triggers[0] == Edict;
 	}
 
-	void ClearObject()
-	{
-		EdictIndex = -1;
-		Edict = nullptr;
-		ObjectName = nullptr;
-		Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
-		TempObstacles.clear();
-		Triggers.clear();
-		StopPoints.clear();
-		NextStopIndex = 0;
-		Targets.clear();
-		State = EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
-		Master = nullptr;
-		GlobalState = "";
-		Wait = 0.0f;
-		Delay = 0.0f;
-		LastActivatedTime = 0.0f;
-		bToggleActive = false;
-		bIsActive = true;
-		NumTimesActivated = 0;
-	}
+	void UndoOffMeshConnectionChanges();
+	void ClearTemporaryObstacles();
 };
 
 bool AIMAP_BuildMapData();
@@ -194,7 +176,7 @@ Vector AIMAP_GetTriggerFloorLocation(const NavAgentProfile* NavProfile, const Dy
 
 void AIMAP_ForceActivateTrigger(const AvHAIPlayer* AIPlayer, const DynamicMapObject* TriggerObject);
 
-DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, const DynamicMapObject* SearchObject, const DynamicMapObject* IgnoreObject);
+const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const EAINavMovementFlag MovementFlag, const DynamicMapObject* SearchObject, const DynamicMapObject* IgnoreObject);
 
 // Removes all temporary obstacles from the map
 void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area);

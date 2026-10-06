@@ -14,6 +14,8 @@ float MaxAIMatchTimeMinutes = 90.0f;
 
 float RelocationChance = 0.1f;
 
+float BotFillRate = 0.5f;
+
 std::unordered_map<std::string, TeamSizeDefinitions> TeamSizeMap;
 
 AvHAISkillLevel BotSkillLevels[4];
@@ -100,6 +102,11 @@ bool CONFIG_IsRelocationAllowed()
     return RelocationChance > 0.0f;
 }
 
+float CONFIG_GetBotFillRate()
+{
+    return BotFillRate;
+}
+
 float CONFIG_GetRelocationChance()
 {
     return RelocationChance;
@@ -157,11 +164,11 @@ EAIHiveTechStatus CONFIG_GetHiveTechAtIndex(const int Index)
     return ChamberSequence[Index];
 }
 
-AvHAISkillLevel CONFIG_GetBotSkillLevel()
+const AvHAISkillLevel* CONFIG_GetBotSkillLevel()
 {
     int index = clampi((int)avh_botskill.value, 0, 3);
 
-    return BotSkillLevels[index];
+    return &BotSkillLevels[index];
 }
 
 void CONFIG_PopulateBotNames()
@@ -269,7 +276,7 @@ void CONFIG_ParseConfigFile()
     BotSkillLevels[3].alien_bot_view_speed = 2.0f;
 
     ChamberSequence.clear();
-    ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_DEFENCE);
+    ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_DEFENSE);
     ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_MOVEMENT);
     ChamberSequence.push_back(EAIHiveTechStatus::HIVE_TECH_SENSORY);
 
@@ -347,6 +354,14 @@ void CONFIG_ParseConfigFile()
             {
                 float RelocationValue = std::stof(value.c_str());
                 RelocationChance = RelocationValue;
+
+                continue;
+            }
+
+            if (!stricmp(keyChar, "BotFillRate"))
+            {
+                float RelocationValue = std::stof(value.c_str());
+                BotFillRate = RelocationValue;
 
                 continue;
             }
@@ -629,7 +644,7 @@ void CONFIG_ParseConfigFile()
     }
 }
 
-BotFillTiming CONFIG_GetBotFillTiming()
+EAIFillTiming CONFIG_GetBotFillTiming()
 {
     return CurrentBotFillTiming;
 }

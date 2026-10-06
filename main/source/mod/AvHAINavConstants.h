@@ -13,6 +13,7 @@
 
 #include <vector>
 #include <dlls/extdll.h>
+#include <dlls/util.h>
 #include "DetourNavMeshQuery.h"
 
 // How far a bot can be from a useable object when trying to interact with it. Used also for melee attacks. We make it slightly less than actual to avoid edge cases
@@ -27,27 +28,40 @@ constexpr float max_ai_jump_height = 62.0f;
 // Max nav mesh polys that can be traversed in a path. This should be sufficient for any sized map.
 constexpr auto MAX_PATH_POLY = 512;
 
+constexpr int NAVMESHSET_MAGIC = 'M' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'MSET', used to confirm the nav mesh we're loading is compatible;
+constexpr int NAVMESHSET_VERSION = 1;
+
+constexpr int TILECACHESET_MAGIC = 'T' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'TSET', used to confirm the tile cache we're loading is compatible;
+constexpr int TILECACHESET_VERSION = 4;
+
+constexpr int DT_AREA_NULL = 0; // Represents a null area on the nav mesh. Not traversable and considered not on the nav mesh
+constexpr int DT_AREA_BLOCKED = 3; // Area occupied by an obstruction (e.g. building). Not traversable, but considered to be on the nav mesh
+
+constexpr float dtDefaultProjectionExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
+constexpr float dtDefaultReachableExtents[3] = { max_ai_use_reach, max_ai_use_reach, max_ai_use_reach }; // Extents (in GoldSrc units) to determine if something is on the nav mesh
+static const Vector DefaultReachableExtents = Vector(max_ai_use_reach, max_ai_use_reach, max_ai_use_reach); // Extents (in GoldSrc units) to determine if something is on the nav mesh
+
 // Possible movement types. Defines the actions the bot needs to take to traverse this node
-enum class EAINavMovementFlag : uint16
+enum class EAINavMovementFlag : uint32
 {
 	NAV_FLAG_NONE = 0,
-	NAV_FLAG_DISABLED = 1 << 31,		// Disabled
-	NAV_FLAG_WALK = 1 << 0,		// Walk
-	NAV_FLAG_CROUCH = 1 << 1,		// Crouch
-	NAV_FLAG_JUMP = 1 << 2,		// Jump
-	NAV_FLAG_LADDER = 1 << 3,		// Ladder
-	NAV_FLAG_FALL = 1 << 4,		// Fall
-	NAV_FLAG_PLATFORM = 1 << 5,		// Platform
-	NAV_FLAG_TELEPORT = 1 << 6,		// Teleport
-	NAV_FLAG_WALLCLIMB = 1 << 7,		// Wall Climb
-	NAV_FLAG_LEAP = 1 << 8,		// Leap
-	NAV_FLAG_BLOCKAGE_TEAM1 = 1 << 9,		// Destroy Team 1 Blockage
-	NAV_FLAG_BLOCKAGE_TEAM2 = 1 << 10,		// Destroy Team 2 Blockage
-	NAV_FLAG_WELD = 1 << 11,		// Weld
-	NAV_FLAG_PHASEGATE_TEAM1 = 1 << 12,		// Team 1 Phase Gate
-	NAV_FLAG_PHASEGATE_TEAM2 = 1 << 13,		// Team 2 Phase Gate
-	NAV_FLAG_FLY = 1 << 14,		// Fly
-	NAV_FLAG_ALL = -1		// All flags
+	NAV_FLAG_DISABLED = 1u << 31,		// Disabled
+	NAV_FLAG_WALK = 1u << 0,		// Walk
+	NAV_FLAG_CROUCH = 1u << 1,		// Crouch
+	NAV_FLAG_JUMP = 1u << 2,		// Jump
+	NAV_FLAG_LADDER = 1u << 3,		// Ladder
+	NAV_FLAG_FALL = 1u << 4,		// Fall
+	NAV_FLAG_PLATFORM = 1u << 5,		// Platform
+	NAV_FLAG_TELEPORT = 1u << 6,		// Teleport
+	NAV_FLAG_WALLCLIMB = 1u << 7,		// Wall Climb
+	NAV_FLAG_LEAP = 1u << 8,		// Leap
+	NAV_FLAG_BLOCKAGE_TEAM1 = 1u << 9,		// Destroy Team 1 Blockage
+	NAV_FLAG_BLOCKAGE_TEAM2 = 1u << 10,		// Destroy Team 2 Blockage
+	NAV_FLAG_WELD = 1u << 11,		// Weld
+	NAV_FLAG_PHASEGATE_TEAM1 = 1u << 12,		// Team 1 Phase Gate
+	NAV_FLAG_PHASEGATE_TEAM2 = 1u << 13,		// Team 2 Phase Gate
+	NAV_FLAG_FLY = 1u << 14,		// Fly
+	NAV_FLAG_ALL = 0xFFFFFFFF		// All flags
 };
 
 inline EAINavMovementFlag operator|(EAINavMovementFlag a, EAINavMovementFlag b)
@@ -63,21 +77,21 @@ inline EAINavMovementFlag operator&(EAINavMovementFlag a, EAINavMovementFlag b)
 // Nav hint types
 enum class EAINavHintType : uint16
 {
-	NAV_HINT_BUILD_COMMCHAIR = 1 << 0,		// Place Command Chair
-	NAV_HINT_BUILD_INFPORTAL = 1 << 1,		// Place Infantry Portal
-	NAV_HINT_BUILD_ARMORY = 1 << 2,		// Place Armory
-	NAV_HINT_BUILD_TURRETFACTORY = 1 << 3,		// Place Turret Factory
-	NAV_HINT_BUILD_OBSERVATORY = 1 << 4,		// Place Observatory
-	NAV_HINT_BUILD_ARMSLAB = 1 << 5,		// Place Arms Lab
-	NAV_HINT_BUILD_PROTOTYPELAB = 1 << 6,		// Place Prototype Lab
-	NAV_HINT_BUILD_SENTRY = 1 << 7,		// Place Sentry Turret
-	NAV_HINT_BUILD_SIEGETURRET = 1 << 8,		// Place Siege Turret
-	NAV_HINT_BUILD_PHASEGATE = 1 << 9,		// Place Phase Gate
-	NAV_HINT_BUILD_OFFENSE_CHAMBER = 1 << 10,		// Place Offense Chamber
-	NAV_HINT_BUILD_DEFENSE_CHAMBER = 1 << 11,		// Place Defense Chamber
-	NAV_HINT_BUILD_MOVEMENT_CHAMBER = 1 << 12,		// Place Movement Chamber
-	NAV_HINT_SENSORY_CHAMBER = 1 << 13,		// Place Sensory Chamber
-	NAV_HINT_ANY = -1		// Any hint type
+	NAV_HINT_BUILD_COMMCHAIR = 1u << 0,		// Place Command Chair
+	NAV_HINT_BUILD_INFPORTAL = 1u << 1,		// Place Infantry Portal
+	NAV_HINT_BUILD_ARMORY = 1u << 2,		// Place Armory
+	NAV_HINT_BUILD_TURRETFACTORY = 1u << 3,		// Place Turret Factory
+	NAV_HINT_BUILD_OBSERVATORY = 1u << 4,		// Place Observatory
+	NAV_HINT_BUILD_ARMSLAB = 1u << 5,		// Place Arms Lab
+	NAV_HINT_BUILD_PROTOTYPELAB = 1u << 6,		// Place Prototype Lab
+	NAV_HINT_BUILD_SENTRY = 1u << 7,		// Place Sentry Turret
+	NAV_HINT_BUILD_SIEGETURRET = 1u << 8,		// Place Siege Turret
+	NAV_HINT_BUILD_PHASEGATE = 1u << 9,		// Place Phase Gate
+	NAV_HINT_BUILD_OFFENSE_CHAMBER = 1u << 10,		// Place Offense Chamber
+	NAV_HINT_BUILD_DEFENSE_CHAMBER = 1u << 11,		// Place Defense Chamber
+	NAV_HINT_BUILD_MOVEMENT_CHAMBER = 1u << 12,		// Place Movement Chamber
+	NAV_HINT_SENSORY_CHAMBER = 1u << 13,		// Place Sensory Chamber
+	NAV_HINT_ANY = 0xFFFF		// Any hint type
 };
 
 inline EAINavHintType operator|(EAINavHintType a, EAINavHintType b)
@@ -166,22 +180,233 @@ struct NavAgentProfile
 	}
 };
 
-// Agent profile definition. Holds all information an agent needs when querying the nav mesh
-struct NavHint
-{
-	unsigned int NavMeshIndex = 0;
-	unsigned int HintTypes = 0;
-	Vector Position;
-};
-
-// List of base agent profiles
-std::vector<NavAgentProfile> BaseAgentProfiles;
-
 inline bool IsValidNavMeshIndex(int CheckIndex)
 {
 	return CheckIndex >= static_cast<int>(EAINavMeshIndex::NAV_MESH_REGULAR)
 		&& CheckIndex < static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 }
+
+// Hints are locations placed on the nav mesh to influence and guide the bot. For example, "good ambush point".
+// See the nav constants header for all nav hint types.
+struct NavHint
+{
+	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	unsigned int HintTypes = 0;
+	Vector Position;
+};
+typedef std::vector<NavHint> NavHintList;
+
+struct NavOffMeshConnection
+{
+	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	Vector FromLocation = g_vecZero; // The start point of the connection
+	Vector ToLocation = g_vecZero; // The end point of the connection
+	EAINavMovementFlag ConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // The type of connection it is
+	EAINavMovementFlag DefaultConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // If this connection is being temporarily modified, what it should normally be
+	unsigned int ConnectionRef = 0; // References to this connection on all defined nav meshes
+	edict_t* LinkedObject = nullptr;
+
+	bool IsValid() const
+	{
+		return ConnectionRef > 0 && IsValidNavMeshIndex(static_cast<int>(NavMeshIndex));
+	}
+};
+typedef std::vector<NavOffMeshConnection> OffMeshConnectionList;
+
+// A temporary obstacle is a shape placed on the map during play which affects the area it covers, changing the movement flags on it.
+// For example, a temporary obstacle with an area type of NULL would cut a hole in the nav mesh, e.g. a door is permanently welded shut.
+// Can also be later removed to undo the change, hence "temporary" obstacle.
+struct NavTempObstacle
+{
+	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID; // Which nav mesh this obstacle belongs to
+	Vector Location = ZERO_VECTOR; // The location of the obstacle. This will be at the BASE of the cylinder
+	float Radius = 0.0f; // How wide the cylindrical obstacle is
+	float Height = 0.0f; // How tall the cylinder is
+	EAINavArea Area = EAINavArea::NAV_AREA_NULL; // The area to mark on the nav mesh
+	unsigned int ObstacleRef = 0; // The reference to the obstacle within Detour
+
+	bool IsValid()
+	{
+		return IsValidNavMeshIndex(static_cast<int>(NavMeshIndex)) && ObstacleRef > 0;
+	}
+
+	void Clear()
+	{
+		NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+		Area = EAINavArea::NAV_AREA_NULL;
+		ObstacleRef = 0;
+	}
+};
+typedef std::vector<NavTempObstacle> NavTempObstacleList;
+
+
+// Bot path node. A path will be several of these strung together to lead the bot to its destination
+struct AvHAIPathNode
+{
+	Vector FromLocation = ZERO_VECTOR; // Location to move from
+	Vector ToLocation = ZERO_VECTOR; // Location to move to
+	float RequiredClimbZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
+	EAINavMovementFlag MovementFlag = EAINavMovementFlag::NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
+	EAINavArea MovementArea = EAINavArea::NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
+	unsigned int MeshPoly = 0; // The nav mesh poly this point resides on
+	edict_t* MovementObject = nullptr;
+
+	bool IsValidMove() const
+	{
+		return !vEquals(FromLocation, ToLocation) && MovementFlag != EAINavMovementFlag::NAV_FLAG_DISABLED && MovementArea != EAINavArea::NAV_AREA_NULL;
+	}
+
+	// Returns true if this movement requires careful alignment from start to end point to avoid screwing it up
+	bool IsPrecisionMove() const
+	{
+		EAINavMovementFlag PrecisionFlags = (EAINavMovementFlag::NAV_FLAG_WALLCLIMB | EAINavMovementFlag::NAV_FLAG_LADDER | EAINavMovementFlag::NAV_FLAG_JUMP | EAINavMovementFlag::NAV_FLAG_FALL);
+		return EnumHasAnyFlags(MovementFlag, PrecisionFlags);
+	}
+
+	bool IsTeleportMove() const
+	{
+		EAINavMovementFlag TeleportFlags = (EAINavMovementFlag::NAV_FLAG_TELEPORT | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
+		return EnumHasAnyFlags(MovementFlag, TeleportFlags);
+	}
+};
+typedef std::vector<AvHAIPathNode> AvHAIPathList;
+typedef std::vector<const AvHAIPathNode*> AvHAIPathNodeList;
+typedef std::vector<AvHAIPathNode*> AvHAIMutablePathNodeList;
+
+struct AvHAIPath
+{
+	AvHAIPathList PathNodes;
+
+	Vector DesiredDestination = ZERO_VECTOR;
+	EAINavMovementFlag RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
+	uint32 CurrentNodeIndex = 0;
+	EAINavMeshIndex UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
+
+	void Clear()
+	{
+		PathNodes.clear();
+		RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
+		CurrentNodeIndex = 0;
+		DesiredDestination = ZERO_VECTOR;
+		UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
+	}
+
+	bool IsValidPath() const
+	{
+		return UsedNavMesh != EAINavMeshIndex::NAV_MESH_INVALID && !vIsZero(DesiredDestination) && CurrentNodeIndex < PathNodes.size();
+	}
+
+	const AvHAIPathNode* GetCurrentPathNode() const
+	{
+		if (IsValidPath()) { return nullptr; }
+
+		return &PathNodes[CurrentNodeIndex];
+	}
+
+	void JumpToPathNode(const AvHAIPathNode* PathNode)
+	{
+		if (!PathNode) { return; }
+
+		for (int32 i = 0; i < GetPathSize(); i++)
+		{
+			if (PathNode == &PathNodes[i])
+			{
+				CurrentNodeIndex = i;
+			}
+		}
+	}
+
+	AvHAIPathNodeList GetFuturePathNodeList() const
+	{
+		AvHAIPathNodeList Result;
+
+		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
+		{
+			if (!PathNodes[i].IsValidMove()) { break; }
+
+			Result.push_back(&PathNodes[i]);
+		}
+
+		return Result;
+	}
+
+	AvHAIMutablePathNodeList GetMutableFuturePathNodeList()
+	{
+		AvHAIMutablePathNodeList Result;
+
+		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
+		{
+			if (!PathNodes[i].IsValidMove()) { break; }
+
+			Result.push_back(&PathNodes[i]);
+		}
+
+		return Result;
+	}
+
+	const AvHAIPathNode* GetNextPathNode() const
+	{
+		if (IsValidPath()) { return nullptr; }
+
+		if (CurrentNodeIndex + 1 < PathNodes.size())
+		{
+			return &PathNodes[CurrentNodeIndex + 1];
+		}
+
+		return nullptr;
+	}
+
+	const AvHAIPathNode* GetPreviousPathNode() const
+	{
+		if (IsValidPath() || CurrentNodeIndex == 0) { return nullptr; }
+
+		if (CurrentNodeIndex - 1 < PathNodes.size())
+		{
+			return &PathNodes[CurrentNodeIndex - 1];
+		}
+
+		return nullptr;
+	}
+
+	const AvHAIPathNode* GetNodeAtIndex(int32 Index) const
+	{
+		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
+
+		return &PathNodes[Index];
+	}
+
+	AvHAIPathNode* GetNodeAtIndex_Mutable(int32 Index)
+	{
+		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
+
+		return &PathNodes[Index];
+	}
+
+	int32 GetPathSize() const
+	{
+		return PathNodes.size();
+	}
+
+	Vector GetFinalDestination() const
+	{
+		if (!IsValidPath()) { return ZERO_VECTOR; }
+
+		return PathNodes[PathNodes.size() - 1].ToLocation;
+	}
+
+	void OnPathNodeComplete()
+	{
+		if (!IsValidPath()) { return; }
+
+		if (CurrentNodeIndex < GetPathSize() - 1)
+		{
+			CurrentNodeIndex++;
+		}
+	}
+};
+
+// List of base agent profiles
+std::vector<NavAgentProfile> BaseAgentProfiles;
 
 // Retrieve appropriate flag for area (See process() in the MeshProcess struct)
 inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)

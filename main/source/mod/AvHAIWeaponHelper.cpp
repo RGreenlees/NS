@@ -157,11 +157,6 @@ float GetEnergyCostForWeapon(const EAIWeaponId Weapon)
 	}
 }
 
-void InterruptReload(AvHAIPlayer* pBot)
-{
-	pBot->Button |= IN_ATTACK;
-}
-
 EAIWeaponId UTIL_GetPlayerPrimaryWeapon(const AvHPlayer* Player)
 {
 	AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[1]);
@@ -476,13 +471,15 @@ Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, 
 		return TargetLocation;
 	}
 
-	if (UTIL_PointIsDirectlyReachable(Player->v.origin, TargetLocation))
+	const NavAgentProfile* NavProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
+
+	if (AINAV_IsPointDirectlyReachable(NavProfile, Player->v.origin, TargetLocation))
 	{
 		Vector Orientation = UTIL_GetVectorNormal(Player->v.origin - TargetLocation);
 
 		Vector NewSpot = TargetLocation + (Orientation * UTIL_MetresToGoldSrcUnits(1.5f));
 
-		NewSpot = UTIL_ProjectPointToNavmesh(NewSpot);
+		NewSpot = AIMESH_ProjectPointToNavmesh(NavProfile, NewSpot);
 
 		if (NewSpot != ZERO_VECTOR)
 		{
@@ -492,42 +489,36 @@ Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, 
 		return NewSpot;
 	}
 
-	vector<AvHAIPathNode> CheckPath;
-	CheckPath.clear();
+	AvHAIPath CheckPath;
 
-	dtStatus Status = FindPathClosestToPoint(GetBaseNavProfile(ALL_NAV_PROFILE), Player->v.origin, TargetLocation, CheckPath, ExplosionRadius);
+	const bool GrenadeHasPath = AINAV_FindPathClosestToPoint(NavProfile, Player->v.origin, TargetLocation, &CheckPath, ExplosionRadius);
 
-	if (dtStatusSucceed(Status))
+	if (!GrenadeHasPath) { return ZERO_VECTOR; }
+
+	Vector FurthestPointVisible = AINAV_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), &CheckPath);
+
+	if (vDist3DSq(FurthestPointVisible, TargetLocation) <= sqrf(ExplosionRadius))
 	{
-		Vector FurthestPointVisible = UTIL_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), CheckPath, bPrecise);
-
-		if (vDist3DSq(FurthestPointVisible, TargetLocation) <= sqrf(ExplosionRadius))
-		{
-			return FurthestPointVisible;
-		}
-
-		Vector ThrowDir = UTIL_GetVectorNormal(FurthestPointVisible - Player->v.origin);
-
-		Vector LineEnd = FurthestPointVisible + (ThrowDir * UTIL_MetresToGoldSrcUnits(5.0f));
-
-		Vector ClosestPointInTrajectory = vClosestPointOnLine(FurthestPointVisible, LineEnd, TargetLocation);
-
-		ClosestPointInTrajectory = UTIL_ProjectPointToNavmesh(ClosestPointInTrajectory);
-		ClosestPointInTrajectory.z += 10.0f;
-
-		if (vDist2DSq(ClosestPointInTrajectory, TargetLocation) < sqrf(ExplosionRadius) && UTIL_PlayerHasLOSToLocation(Player, ClosestPointInTrajectory, UTIL_MetresToGoldSrcUnits(10.0f)) && UTIL_PointIsDirectlyReachable(ClosestPointInTrajectory, TargetLocation))
-		{
-			return ClosestPointInTrajectory;
-		}
-		else
-		{
-			return ZERO_VECTOR;
-		}
+		return FurthestPointVisible;
 	}
-	else
+
+	Vector ThrowDir = UTIL_GetVectorNormal(FurthestPointVisible - Player->v.origin);
+
+	Vector LineEnd = FurthestPointVisible + (ThrowDir * UTIL_MetresToGoldSrcUnits(5.0f));
+
+	Vector ClosestPointInTrajectory = vClosestPointOnLine(FurthestPointVisible, LineEnd, TargetLocation);
+
+	ClosestPointInTrajectory = AIMESH_ProjectPointToNavmesh(NavProfile, ClosestPointInTrajectory);
+	ClosestPointInTrajectory.z += 10.0f;
+
+	if (vDist2DSq(ClosestPointInTrajectory, TargetLocation) < sqrf(ExplosionRadius)
+		&& UTIL_PlayerHasLOSToLocation(Player, ClosestPointInTrajectory, UTIL_MetresToGoldSrcUnits(10.0f))
+		&& AINAV_IsPointDirectlyReachable(NavProfile, ClosestPointInTrajectory, TargetLocation))
 	{
-		return ZERO_VECTOR;
+		return ClosestPointInTrajectory;
 	}
+
+	return ZERO_VECTOR;
 }
 
 EAIWeaponId BotAlienChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target)
@@ -546,7 +537,7 @@ EAIWeaponId BotMarineChooseBestWeapon(AvHAIPlayer* pBot, edict_t* target)
 	{
 		if (IsPlayerReloading(pBot->Player))
 		{
-			return GetPlayerCurrentWeapon(pBot->Player);
+			return UTIL_GetPlayerCurrentWeapon(pBot->Player);
 		}
 
 		if (UTIL_GetPlayerPrimaryWeaponClipAmmo(pBot->Player) > 0 || UTIL_GetPlayerPrimaryAmmoReserve(pBot->Player) > 0)
@@ -663,7 +654,7 @@ EAIWeaponId MarineGetBestWeaponForPlayerTarget(AvHAIPlayer* pBot, AvHPlayer* Tar
 {
 	EAIWeaponId PrimaryWeapon = UTIL_GetPlayerPrimaryWeapon(pBot->Player);
 	EAIWeaponId SecondaryWeapon = UTIL_GetPlayerSecondaryWeapon(pBot->Player);
-	EAIWeaponId CurrentWeapon = GetPlayerCurrentWeapon(pBot->Player);
+	EAIWeaponId CurrentWeapon = UTIL_GetPlayerCurrentWeapon(pBot->Player);
 
 	float DistToEnemy = vDist2DSq(pBot->Edict->v.origin, Target->pev->origin);
 
@@ -722,7 +713,7 @@ EAIWeaponId MarineGetBestWeaponForPlayerTarget(AvHAIPlayer* pBot, AvHPlayer* Tar
 		}
 	}
 
-	bool bEnemyIsRanged = IsPlayerMarine(Target) || ((GetPlayerCurrentWeapon(Target) == EAIWeaponId::WEAPON_FADE_ACIDROCKET || GetPlayerCurrentWeapon(Target) == EAIWeaponId::WEAPON_LERK_SPORES) && DistToEnemy > sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
+	bool bEnemyIsRanged = IsPlayerMarine(Target) || ((UTIL_GetPlayerCurrentWeapon(Target) == EAIWeaponId::WEAPON_FADE_ACIDROCKET || UTIL_GetPlayerCurrentWeapon(Target) == EAIWeaponId::WEAPON_LERK_SPORES) && DistToEnemy > sqrf(UTIL_MetresToGoldSrcUnits(5.0f)));
 
 	if (bEnemyIsRanged)
 	{
@@ -795,22 +786,6 @@ EAIWeaponId OnosGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target)
 EAIWeaponId FadeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target)
 {
 	return EAIWeaponId::WEAPON_FADE_SWIPE;
-}
-
-void BotReloadCurrentWeapon(AvHAIPlayer* pBot)
-{
-	EAIWeaponId CurrentWeapon = GetPlayerCurrentWeapon(pBot->Player);
-
-	if (!WeaponCanBeReloaded(CurrentWeapon)) { return; }
-
-	if (!IsPlayerReloading(pBot->Player))
-	{
-		if (gpGlobals->time - pBot->LastUseTime > 1.0f)
-		{
-			pBot->Button |= IN_RELOAD;
-			pBot->LastUseTime = gpGlobals->time;
-		}
-	}
 }
 
 EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const edict_t* Target)

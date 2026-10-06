@@ -152,6 +152,14 @@ EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
 
 }
 
+void AvHAIPlayer::InterruptReload()
+{
+	if (IsPlayerReloading(Player))
+	{
+		NextFrameMovementInput.Button |= IN_ATTACK;
+	}
+}
+
 EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 {
 	if (BotNavInfo.MovementTasks.size() == 0)
@@ -229,14 +237,13 @@ Vector AvHAIPlayer::GetTopOfHitbox() const
 
 void AvHAIPlayer::Think(float DeltaTime)
 {
-	StartThink(DeltaTime);
-
 	if (ShouldThink())
 	{
-		ProgressMovementTasks();
+		if (!vIsZero(DebugDestination))
+		{
+			MoveTo(DebugDestination);
+		}
 	}
-
-	EndThink(DeltaTime);
 }
 
 void AvHAIPlayer::CheckAndSendMessages()
@@ -282,7 +289,7 @@ void AvHAIPlayer::UpdateView(float DeltaTime)
 
 void AvHAIPlayer::EndThink(float DeltaTime)
 {
-	NextFrameMovementInput.GenerateMovementOutputs(this);
+	NextFrameMovementInput.GenerateMovementOutputs(Edict->v.v_angle, Edict->v.maxspeed);
 
 	const EAIWeaponId NewSwitchWeapon = (NextFrameMovementInput.RequiredWeapon != EAIWeaponId::WEAPON_INVALID)
 		? NextFrameMovementInput.RequiredWeapon
@@ -676,19 +683,40 @@ bool AvHAIPlayer::ShouldThink() const
 		&& !IsPlayerGestating(Edict);
 }
 
-void AvHAIMovementInput::GenerateMovementOutputs(const AvHAIPlayer* Player)
+void AvHAIPlayer::HearEnemy(const edict_t* EmittingEdict, float Volume)
+{
+
+}
+
+void AvHAIPlayer::OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex)
+{
+	for (auto MoveTaskIt = BotNavInfo.MovementTasks.begin(); MoveTaskIt != BotNavInfo.MovementTasks.end(); MoveTaskIt++)
+	{
+		AvHAIMoveTask* ThisTask = &(*MoveTaskIt);
+
+		if (!ThisTask || !ThisTask->HasPath()) { continue; }
+
+		if (ThisTask->TaskPath.UsedNavMesh == ModifiedMeshIndex)
+		{
+			// This will force a recalculation when the bot next wants to handle this movement task
+			ThisTask->TaskPath.Clear();
+		}
+	}
+}
+
+void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles, float MaxSpeed)
 {
 	ClearMovementOutputs();
 
-	if (!Player || !Player->IsValid() || vIsZero(DesiredMoveDirection)) { return; }
+	if (vIsZero(DesiredMoveDirection)) { return; }
 
 	UTIL_NormalizeVector2D(&DesiredMoveDirection);
 
-	float CurrentYaw = Player->Edict->v.v_angle.y;
+	float CurrentYaw = CurrentViewAngles.y;
 	float MoveDelta = UTIL_VecToAngles(DesiredMoveDirection).y;
 	float AngleDelta = CurrentYaw - MoveDelta;
 
-	float BotSpeed = Player->Edict->v.maxspeed;
+	float BotSpeed = MaxSpeed;
 
 	if (bShouldWalk)
 	{
@@ -813,83 +841,4 @@ Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPla
 	}
 
 	return ZERO_VECTOR;
-}
-
-void DEBUG_PrintTaskInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot)
-{
-	char buf[511];
-	char interbuf[164];
-
-	sprintf(buf, "Task info for %s:\n\n", STRING(pBot->Edict->v.netname));
-
-	sprintf(interbuf, "Role: %s\n\n", UTIL_BotRoleToChar(pBot->BotRole));
-	strcat(buf, interbuf);
-
-	if (IsPlayerMarine(pBot->Edict))
-	{
-		const char* CommanderTask = UTIL_TaskTypeToChar(pBot->CommanderTask.TaskType);
-
-		sprintf(interbuf, "Commander-Issued: %s\n", CommanderTask);
-		strcat(buf, interbuf);
-	}
-
-	const char* PrimaryTask = UTIL_TaskTypeToChar(pBot->PrimaryBotTask.TaskType);
-
-	sprintf(interbuf, "Primary: %s\n", PrimaryTask);
-	strcat(buf, interbuf);
-
-	const char* SecondaryTask = UTIL_TaskTypeToChar(pBot->SecondaryBotTask.TaskType);
-
-	sprintf(interbuf, "Secondary: %s\n", SecondaryTask);
-	strcat(buf, interbuf);
-
-	const char* WantAndNeedTask = UTIL_TaskTypeToChar(pBot->WantsAndNeedsTask.TaskType);
-
-	sprintf(interbuf, "Want/Need: %s\n\n", WantAndNeedTask);
-	strcat(buf, interbuf);
-
-	if (pBot->CurrentTask)
-	{
-		const char* CurrentTask = UTIL_TaskTypeToChar(pBot->CurrentTask->TaskType);
-
-		sprintf(interbuf, "Current: %s\n\n", CurrentTask);
-		strcat(buf, interbuf);
-	}
-
-	if (pBot->CurrentTask && pBot->CurrentTask->TaskType != EAITaskType::TASK_NONE)
-	{
-		sprintf(interbuf, "Red = Target, Yellow = Location\n");
-		strcat(buf, interbuf);
-
-		if (!FNullEnt(pBot->CurrentTask->TaskTarget))
-		{
-			UTIL_DrawLine(OutputPlayer, pBot->Edict->v.origin, pBot->CurrentTask->TaskTarget->v.origin, 255, 0, 0);
-		}
-
-		if (!vIsZero(pBot->CurrentTask->TaskLocation))
-		{
-			UTIL_DrawLine(OutputPlayer, pBot->Edict->v.origin, pBot->CurrentTask->TaskLocation, 255, 255, 0);
-		}
-	}
-
-	UTIL_DrawHUDText(OutputPlayer, 0, 0.1, 0.1f, 255, 255, 255, buf);
-}
-
-void DEBUG_PrintBotDebugInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot)
-{
-	if (FNullEnt(OutputPlayer) || OutputPlayer->free) { return; }
-
-	bool bBreak = true; // Add a break point here if you want to debug a specific bot
-
-	AIDEBUG_DrawBotPath(OutputPlayer, pBot);
-
-	DEBUG_PrintTaskInfo(OutputPlayer, pBot);
-}
-
-void OnBotTeleport(AvHAIPlayer* pBot)
-{
-	ClearBotStuck(pBot);
-	ClearBotStuckMovement(pBot);
-	pBot->BotNavInfo.LastOpenLocation = ZERO_VECTOR;
-	pBot->LastTeleportTime = gpGlobals->time;
 }

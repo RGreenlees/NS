@@ -55,13 +55,9 @@ EAIWeaponId SkulkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target
 EAIWeaponId GorgeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
 EAIWeaponId LerkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
 
-void BotReloadCurrentWeapon(AvHAIPlayer* pBot);
-
 float GetReloadTimeForWeapon(EAIWeaponId Weapon);
 
 bool CanInterruptWeaponReload(EAIWeaponId Weapon);
-
-void InterruptReload(AvHAIPlayer* pBot);
 
 bool IsHitscanWeapon(EAIWeaponId Weapon);
 float GetTimeUntilPlayerNextRefire(const AvHPlayer* Player);

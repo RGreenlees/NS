@@ -56,7 +56,7 @@ void AIMGR_RegenBotIni();
 void	AIMGR_UpdateAIMapData();
 bool AIMGR_ShouldStartPlayerBalancing();
 
-AvHAICommanderMode AIMGR_GetCommanderMode();
+EAICommanderMode AIMGR_GetCommanderMode();
 
 void AIMGR_SetCommanderAllowedTime(AvHTeamNumber Team, float NewValue);
 float AIMGR_GetCommanderAllowedTime(AvHTeamNumber Team);
@@ -68,7 +68,7 @@ void AIDEBUG_SetDebugVector1(const Vector NewVector);
 void AIDEBUG_SetDebugVector2(const Vector NewVector);
 void AIDEBUG_TestPathFind();
 void AIDEBUG_TestFlightPathFind(Vector FromLoc, Vector ToLoc);
-DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject();
+const DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject();
 void AIDEBUG_SetDebugDynamicMapObject(edict_t* NewObject);
 #endif
 
@@ -77,17 +77,11 @@ int AIMGR_GetNumHumanPlayersOnTeam(AvHTeamNumber Team);
 int AIMGR_GetNumHumanPlayersOnServer();
 int AIMGR_GetNumActiveHumanPlayers();
 
-int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, AvHAIBotRole Role, AvHAIPlayer* IgnoreAIPlayer);
+int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, EAIPlayerRole Role, AvHAIPlayer* IgnoreAIPlayer);
 
 int AIMGR_GetNumHumansOfClassOnTeam(AvHTeamNumber Team, AvHUser3 PlayerType);
 
-bool AIMGR_IsNavmeshLoaded();
-AvHAINavMeshStatus AIMGR_GetNavMeshStatus();
-
 bool AIMGR_IsBotEnabled();
-
-void AIMGR_LoadNavigationData();
-void AIMGR_ReloadNavigationData();
 
 AvHAIPlayer* AIMGR_GetAICommander(AvHTeamNumber Team);
 
@@ -123,6 +117,8 @@ void AIMGR_ReceiveCommanderRequest(AvHTeamNumber Team, edict_t* Requestor, const
 
 void AIMGR_ClientConnected(edict_t* NewClient);
 void AIMGR_PlayerSpawned();
+
+void AIMGR_PrintNavMeshLoadResult(EAINavMeshLoadResult Result, const char* MapName);
 
 // Called when mp_botsenabled changes from 0 to 1
 void AIMGR_OnBotEnabled();

@@ -20,6 +20,7 @@
 #include "AvHEntities.h"
 #include "AvHAIMath.h"
 #include "AvHAINavConstants.h"
+#include "AvHAIMapData.h"
 
 static const float commander_action_cooldown = 1.0f;
 static const float min_request_spam_time = 10.0f;
@@ -86,7 +87,7 @@ enum class EAIHiveStatus
 enum class EAIHiveTechStatus
 {
 	HIVE_TECH_NONE = 0, // Hive doesn't have any tech assigned to it yet (no chambers built for it)
-	HIVE_TECH_DEFENCE = 1,
+	HIVE_TECH_DEFENSE = 1,
 	HIVE_TECH_SENSORY = 2,
 	HIVE_TECH_MOVEMENT = 3
 };
@@ -129,7 +130,7 @@ enum class EAIReachabilityFlags : uint16
 	AI_REACHABILITY_ONOS = 1u << 6,
 	AI_REACHABILITY_WELDER = 1u << 7,
 
-	AI_REACHABILITY_ALL = -1
+	AI_REACHABILITY_ALL = 0xFFFF
 };
 
 inline EAIReachabilityFlags operator|(EAIReachabilityFlags a, EAIReachabilityFlags b)
@@ -151,18 +152,18 @@ template<class T> inline T EnumGetCombinedFlags(T a, T b) { return static_cast<T
 enum class EAIStructureStatus : uint16
 {
 	STRUCTURE_STATUS_NONE = 0,				// No filters, all buildings will be returned
-	STRUCTURE_STATUS_GHOST = 1 << 0,		// For marine structure, this is their "ghost" form before anyone has started building it
-	STRUCTURE_STATUS_PARTIAL = 1 << 1,		// Partially finished, but not yet completed
-	STRUCTURE_STATUS_COMPLETED = 1 << 2,	// Structure is fully built
-	STRUCTURE_STATUS_ELECTRIFIED = 1 << 3,
-	STRUCTURE_STATUS_RECYCLING = 1 << 4,
-	STRUCTURE_STATUS_PARASITED = 1 << 5,
-	STRUCTURE_STATUS_UNDERATTACK = 1 << 6,
-	STRUCTURE_STATUS_RESEARCHING = 1 << 7,
-	STRUCTURE_STATUS_DAMAGED = 1 << 8,		// When it's completed, but at less than 100% health
-	STRUCTURE_STATUS_DISABLED = 1 << 9,		// For marine turrets when there's no TF
+	STRUCTURE_STATUS_GHOST = 1u << 0,		// For marine structure, this is their "ghost" form before anyone has started building it
+	STRUCTURE_STATUS_PARTIAL = 1u << 1,		// Partially finished, but not yet completed
+	STRUCTURE_STATUS_COMPLETED = 1u << 2,	// Structure is fully built
+	STRUCTURE_STATUS_ELECTRIFIED = 1u << 3,
+	STRUCTURE_STATUS_RECYCLING = 1u << 4,
+	STRUCTURE_STATUS_PARASITED = 1u << 5,
+	STRUCTURE_STATUS_UNDERATTACK = 1u << 6,
+	STRUCTURE_STATUS_RESEARCHING = 1u << 7,
+	STRUCTURE_STATUS_DAMAGED = 1u << 8,		// When it's completed, but at less than 100% health
+	STRUCTURE_STATUS_DISABLED = 1u << 9,		// For marine turrets when there's no TF
 
-	STRUCTURE_STATUS_ALL = -1
+	STRUCTURE_STATUS_ALL = 0xFFFF
 };
 
 inline EAIStructureStatus operator|(EAIStructureStatus a, EAIStructureStatus b)
@@ -237,7 +238,7 @@ enum class EAIDeployableItemType : uint16
 	DEPLOYABLE_ITEM_WEAPONS = 0xF80,
 	DEPLOYABLE_ITEM_EQUIPMENT = 0x6,
 
-	DEPLOYABLE_ITEM_ALL = -1
+	DEPLOYABLE_ITEM_ALL = 0xFFFF
 };
 
 inline EAIDeployableItemType operator|(EAIDeployableItemType a, EAIDeployableItemType b)
@@ -258,7 +259,7 @@ enum class EAIStructurePurpose : uint16
 	STRUCTURE_PURPOSE_SIEGE = 1u << 1,
 	STRUCTURE_PURPOSE_FORTIFY = 1u << 2,
 	STRUCTURE_PURPOSE_BASE = 1u << 3,
-	STRUCTURE_PURPOSE_ANY = -1
+	STRUCTURE_PURPOSE_ANY = 0xFFFF
 };
 
 inline EAIStructurePurpose operator|(EAIStructurePurpose a, EAIStructurePurpose b)
@@ -410,168 +411,6 @@ enum class EAIVoiceLine
 	AI_ALIEN_VOICELINE_CHUCKLE
 };
 
-// Bot path node. A path will be several of these strung together to lead the bot to its destination
-struct AvHAIPathNode
-{
-	Vector FromLocation = ZERO_VECTOR; // Location to move from
-	Vector ToLocation = ZERO_VECTOR; // Location to move to
-	float RequiredClimbZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
-	EAINavMovementFlag MovementFlag = EAINavMovementFlag::NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
-	EAINavArea MovementArea = EAINavArea::NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
-	unsigned int MeshPoly = 0; // The nav mesh poly this point resides on
-	edict_t* Platform = nullptr;
-
-	bool IsValidMove() const
-	{
-		return !vEquals(FromLocation, ToLocation) && MovementFlag != EAINavMovementFlag::NAV_FLAG_DISABLED && MovementArea != EAINavArea::NAV_AREA_NULL;
-	}
-
-	// Returns true if this movement requires careful alignment from start to end point to avoid screwing it up
-	bool IsPrecisionMove() const
-	{
-		EAINavMovementFlag PrecisionFlags = (EAINavMovementFlag::NAV_FLAG_WALLCLIMB | EAINavMovementFlag::NAV_FLAG_LADDER | EAINavMovementFlag::NAV_FLAG_JUMP | EAINavMovementFlag::NAV_FLAG_FALL);
-		return EnumHasAnyFlags(MovementFlag, PrecisionFlags);
-	}
-
-	bool IsTeleportMove() const
-	{
-		EAINavMovementFlag TeleportFlags = (EAINavMovementFlag::NAV_FLAG_TELEPORT | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
-		return EnumHasAnyFlags(MovementFlag, TeleportFlags);
-	}
-};
-typedef std::vector<AvHAIPathNode> AvHAIPathList;
-typedef std::vector<const AvHAIPathNode*> AvHAIPathNodeList;
-typedef std::vector<AvHAIPathNode*> AvHAIMutablePathNodeList;
-
-struct AvHAIPath
-{
-	AvHAIPathList PathNodes;
-
-	Vector DesiredDestination = ZERO_VECTOR;
-	EAINavMovementFlag RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
-	uint32 CurrentNodeIndex = 0;
-
-	void Clear()
-	{
-		PathNodes.clear();
-		RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
-		CurrentNodeIndex = 0;
-		DesiredDestination = ZERO_VECTOR;
-	}
-
-	bool IsValidPath() const
-	{
-		return !vIsZero(DesiredDestination) && CurrentNodeIndex < PathNodes.size();
-	}
-
-	const AvHAIPathNode* GetCurrentPathNode() const
-	{
-		if (IsValidPath()) { return nullptr; }
-
-		return &PathNodes[CurrentNodeIndex];
-	}
-
-	void JumpToPathNode(const AvHAIPathNode* PathNode)
-	{
-		if (!PathNode) { return; }
-
-		for (int32 i = 0; i < GetPathSize(); i++)
-		{
-			if (PathNode == &PathNodes[i])
-			{
-				CurrentNodeIndex = i;
-			}
-		}
-	}
-
-	AvHAIPathNodeList GetFuturePathNodeList() const
-	{
-		AvHAIPathNodeList Result;
-
-		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
-		{
-			if (!PathNodes[i].IsValidMove()) { break; }
-
-			Result.push_back(&PathNodes[i]);
-		}
-
-		return Result;
-	}
-
-	AvHAIMutablePathNodeList GetMutableFuturePathNodeList()
-	{
-		AvHAIMutablePathNodeList Result;
-
-		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
-		{
-			if (!PathNodes[i].IsValidMove()) { break; }
-
-			Result.push_back(&PathNodes[i]);
-		}
-
-		return Result;
-	}
-
-	const AvHAIPathNode* GetNextPathNode() const
-	{
-		if (IsValidPath()) { return nullptr; }
-
-		if (CurrentNodeIndex + 1 < PathNodes.size())
-		{
-			return &PathNodes[CurrentNodeIndex + 1];
-		}
-
-		return nullptr;
-	}
-
-	const AvHAIPathNode* GetPreviousPathNode() const
-	{
-		if (IsValidPath() || CurrentNodeIndex == 0) { return nullptr; }
-
-		if (CurrentNodeIndex - 1 < PathNodes.size())
-		{
-			return &PathNodes[CurrentNodeIndex - 1];
-		}
-
-		return nullptr;
-	}
-
-	const AvHAIPathNode* GetNodeAtIndex(int32 Index) const
-	{
-		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
-
-		return &PathNodes[Index];
-	}
-
-	AvHAIPathNode* GetNodeAtIndex_Mutable(int32 Index)
-	{
-		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
-
-		return &PathNodes[Index];
-	}
-
-	int32 GetPathSize() const
-	{
-		return PathNodes.size();
-	}
-
-	Vector GetFinalDestination() const
-	{
-		if (!IsValidPath()) { return ZERO_VECTOR; }
-
-		return PathNodes[PathNodes.size() - 1].ToLocation;
-	}
-
-	void OnPathNodeComplete()
-	{
-		if (!IsValidPath()) { return; }
-
-		if (CurrentNodeIndex < GetPathSize() - 1)
-		{
-			CurrentNodeIndex++;
-		}
-	}
-};
 
 // Represents a bot's current understanding of an enemy player's status
 struct AvHAIEnemyStatus
@@ -596,7 +435,7 @@ struct AvHAIEnemyStatus
 	Vector LastCoverPosition = g_vecZero;
 };
 
-// Tracks what orders have been given to which players
+// Bot skill settings. Affects things like aim accuracy and speed.
 struct AvHAISkillLevel
 {
 	float marine_bot_reaction_time = 0.2f; // How quickly the bot will react to seeing an enemy
@@ -607,17 +446,6 @@ struct AvHAISkillLevel
 	float alien_bot_aim_skill = 0.5f; // How quickly the bot can lock on to an enemy
 	float alien_bot_motion_tracking_skill = 0.5f; // How well the bot can follow an enemy target's motion
 	float alien_bot_view_speed = 0.5f; // How fast a bot can spin its view to aim in a given direction
-
-};
-
-struct AvHAIBuildAttempt
-{
-	EAIStructureType AttemptedStructureType = EAIStructureType::STRUCTURE_NONE;
-	Vector AttemptedLocation = g_vecZero;
-	int NumAttempts = 0;
-	EAIBuildAttemptResult BuildStatus = EAIBuildAttemptResult::BUILD_ATTEMPT_NONE;
-	float BuildAttemptTime = 0.0f;
-	const AvHAIBuildableStructure* LinkedStructure = nullptr;
 };
 
 // A bot task is a goal the bot wants to perform, such as attacking a structure, placing a structure etc. NOT USED BY COMMANDER
@@ -637,7 +465,6 @@ struct AvHAIPlayerTask
 	int BuildAttempts = 0; // How many attempts the Gorge has tried to place it, so it doesn't keep trying forever
 	AvHMessageID Evolution = MESSAGE_NULL; // Used by TASK_EVOLVE to determine what to evolve into
 	float TaskLength = 0.0f; // If a task has gone on longer than this time, it will be considered completed
-	AvHAIBuildAttempt ActiveBuildInfo; // If gorge, the current status of any recent attempt to place a structure
 };
 
 struct AvHAIMoveTask
@@ -815,7 +642,7 @@ struct AvHAIMovementInput
 		UpMove = 0.0f;
 	}
 
-	void GenerateMovementOutputs(const AvHAIPlayer* Player);
+	void GenerateMovementOutputs(const Vector& CurrentViewAngles, float MaxSpeed);
 };
 
 struct AvHAICommanderOrder
@@ -933,6 +760,8 @@ struct AvHAIPlayer
 
 	int DebugValue = 0; // Used for debugging the bot
 
+	Vector DebugDestination = ZERO_VECTOR;
+
 	bool IsValid() const { return Player != nullptr && !FNullEnt(Edict) && !Edict->free; }
 	bool HasValidPath() const;
 	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
@@ -971,6 +800,7 @@ struct AvHAIPlayer
 	bool UseObject(edict_t* Object, bool bUseContinuously = false);
 	void DropWeapon();
 	void ReloadWeapon();
+	void InterruptReload();
 	EAIWeaponId GetCurrentWeapon() const;
 	void LeaveCommChair();
 	void UpdateReceivedOrders();
@@ -981,6 +811,8 @@ struct AvHAIPlayer
 	void RequestEvolveLifeform(EAIAlienLifeform DesiredLifeform);
 	void Say(const char* ThingToSay, bool bTeamSay, float Delay = 0.0f);
 	bool ShouldThink() const;
+	void HearEnemy(const edict_t* EmittingEdict, float Volume);
+	void OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex);
 };
 
 struct AvHAISquad

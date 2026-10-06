@@ -228,6 +228,21 @@ EAIStructureType GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict)
 	return IUSER3ToStructureType(StructureEdict->v.iuser3);
 }
 
+EAIHiveTechStatus UTIL_GetHiveTechStatusFromMessageID(const AvHMessageID TechID)
+{
+	switch (TechID)
+	{
+		case ALIEN_BUILD_DEFENSE_CHAMBER:
+			return EAIHiveTechStatus::HIVE_TECH_DEFENSE;
+		case ALIEN_BUILD_MOVEMENT_CHAMBER:
+			return EAIHiveTechStatus::HIVE_TECH_MOVEMENT;
+		case ALIEN_BUILD_SENSORY_CHAMBER:
+			return EAIHiveTechStatus::HIVE_TECH_SENSORY;
+		default:
+			return EAIHiveTechStatus::HIVE_TECH_NONE;
+	}
+}
+
 bool IsEdictStructure(const edict_t* edict)
 {
 	return (GetDeployableObjectTypeFromEdict(edict) != EAIStructureType::STRUCTURE_NONE);
@@ -305,11 +320,6 @@ bool UTIL_IsPointInSwimArea(const Vector& TestPoint)
 	return UTIL_PointContents(TestPoint) == CONTENTS_WATER
 		|| UTIL_PointContents(TestPoint) == CONTENTS_SLIME
 		|| UTIL_PointContents(TestPoint) == CONTENTS_LAVA;
-}
-
-void AIDEBUG_DrawBotPath(edict_t* OutputPlayer, AvHAIPlayer* pBot, float DrawTime)
-{
-	AIDEBUG_DrawPath(OutputPlayer, pBot->BotNavInfo.CurrentPath, DrawTime);
 }
 
 bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon)
@@ -499,20 +509,24 @@ AvHMessageID UTIL_GetVoicelineId(EAIVoiceLine RequiredVoiceLine)
 	}
 }
 
-void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<AvHAIPathNode>& path, float DrawTime)
+void AIDEBUG_DrawPath(edict_t* OutputPlayer, const AvHAIPath* Path, float DrawTime)
 {
-	if (path.size() == 0) { return; }
+	if (!Path || !Path->IsValidPath()) { return; }
 
-	for (auto it = path.begin(); it != path.end(); it++)
+	for (auto it = Path->PathNodes.begin(); it != Path->PathNodes.end(); it++)
 	{
-		Vector FromLoc = it->FromLocation;
-		Vector ToLoc = it->ToLocation;
+		const AvHAIPathNode* PathNode = &(*it);
+
+		if (!PathNode || !PathNode->IsValidMove()) { continue; }
+
+		Vector FromLoc = PathNode->FromLocation;
+		Vector ToLoc = PathNode->ToLocation;
 
 		unsigned char r;
 		unsigned char g;
 		unsigned char b;
 
-		GetDebugColorForFlag(it->flag, r, g, b);
+		GetDebugColorForFlag(PathNode->MovementFlag, r, g, b);
 
 		UTIL_DrawLine(OutputPlayer, FromLoc, ToLoc, DrawTime, r, g, b);
 	}

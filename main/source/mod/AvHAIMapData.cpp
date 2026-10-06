@@ -26,8 +26,7 @@ static const int SF_PLAT_TRIGGER_ONLY = 1;
 
 bool AIMAP_BuildMapData()
 {
-	if (!AIMAP_PopulateDynamicMapObjects()) { return false; }
-
+	AIMAP_PopulateDynamicMapObjects();
 	AIMAP_LinkDynamicMapObjectsToTriggers();
 	AIMAP_LinkDynamicMapObjectsToOffMeshConnections();
 	AIMAP_SetTrainStartPoints();
@@ -41,12 +40,7 @@ bool AIMAP_PopulateDynamicMapObjects()
 	DynamicMapObjects.clear();
 
 	FOR_ALL_ENTITIES("func_door", CBaseEntity*)
-		const bool bSuccess = AIMAP_PopulateDynamicDoorObject(theEntity->edict());
-
-		if (!bSuccess)
-		{
-
-		}
+		AIMAP_PopulateDynamicDoorObject(theEntity->edict());
 	END_FOR_ALL_ENTITIES("func_door")
 
 	FOR_ALL_ENTITIES("func_seethroughdoor", CBaseEntity*)
@@ -534,9 +528,10 @@ void AIMAP_UpdateDynamicMapObjects()
 			continue;
 		}
 
-		if (FNullEnt(ThisObject->Edict) || ThisObject->Edict->v.deadflag != DEAD_NO)
+		if (!ThisObject->IsValid())
 		{
-			AIMAP_RemoveAllTempObstaclesFromObject(ThisObject);
+			ThisObject->ClearTemporaryObstacles();
+			ThisObject->UndoOffMeshConnectionChanges();
 
 			it = DynamicMapObjects.erase(it);
 			continue;
@@ -918,7 +913,7 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 	int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
-	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(NAV_PROFILE_DEFAULT);
+	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
 
 	NavAgentProfile TestProfile = *DefaultBase;
 
@@ -932,7 +927,7 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 		if (!ThisTrigger)
 		{
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, NAV_FLAG_DISABLED);
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_DISABLED);
 			continue;
 		}
 	}
@@ -940,22 +935,8 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 void AIMAP_OnDynamicMapObjectStopIdle(DynamicMapObject* Object)
 {
-	for (auto stopIt = Object->StopPoints.begin(); stopIt != Object->StopPoints.end(); stopIt++)
-	{
-		for (auto it = stopIt->AffectedConnections.begin(); it != stopIt->AffectedConnections.end(); it++)
-		{
-			NavOffMeshConnection* ThisConnection = (*it);
-
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, ThisConnection->DefaultConnectionFlags);
-		}
-	}
-
-	for (auto it = Object->TempObstacles.begin(); it != Object->TempObstacles.end(); it++)
-	{
-		AIMESH_RemoveTemporaryObstacle(&(*it));
-	}
-
-	Object->TempObstacles.clear();
+	Object->UndoOffMeshConnectionChanges();
+	Object->ClearTemporaryObstacles();
 }
 
 void AIMAP_LinkDynamicMapObjectsToTriggers()
@@ -1021,7 +1002,7 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 
 void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 {
-	const int InvalidIndex = static_cast<int>(NAV_MESH_INVALID);
+	const int InvalidIndex = static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 
 	for (int i = 0; i < InvalidIndex; i++)
 	{
@@ -1037,7 +1018,7 @@ void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 
 			if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-			if (ThisConnection->DefaultConnectionFlags & NAV_FLAG_PLATFORM)
+			if (EnumHasAnyFlags(ThisConnection->DefaultConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM))
 			{
 				const DynamicMapObject* NearestPlatform = AIMAP_GetClosestPlatformToPoints(ThisConnection->FromLocation, ThisConnection->ToLocation);
 
@@ -1139,7 +1120,7 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector
 	return true;
 }
 
-DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const unsigned int MovementFlag, DynamicMapObject* SearchObject, DynamicMapObject* IgnoreObject)
+const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const EAINavMovementFlag MovementFlag, const DynamicMapObject* SearchObject, const DynamicMapObject* IgnoreObject)
 {
 	if (IsFlagTeleportType((EAINavMovementFlag)MovementFlag)) { return nullptr; }
 
@@ -1148,7 +1129,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 
 	TraceResult doorHit;
 
-	if (MovementFlag == NAV_FLAG_LADDER)
+	if (MovementFlag == EAINavMovementFlag::NAV_FLAG_LADDER)
 	{
 		Vector TargetLoc = (ToLocation.z > FromLocation.z) ? Vector(FromLoc.x, FromLoc.y, ToLoc.z) : Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
@@ -1193,7 +1174,7 @@ DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, co
 		}
 
 	}
-	else if (MovementFlag == NAV_FLAG_FALL)
+	else if (MovementFlag == EAINavMovementFlag::NAV_FLAG_FALL)
 	{
 		Vector TargetLoc = Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
@@ -1433,7 +1414,7 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
-				return ThisObject);
+				return ThisObject;
 			}
 
 			if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
@@ -1481,7 +1462,7 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 	HalfExtents.y += 16.0f;
 	HalfExtents.z += 16.0f;
 
-	const int InvalidIndex = static_cast<int>(NAV_MESH_INVALID);
+	const int InvalidIndex = static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 
 	for (int i = 0; i < InvalidIndex; i++)
 	{
@@ -1730,17 +1711,9 @@ void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
 {
 	if (!Object) { return; }
 
-	for (auto ObsIt = Object->TempObstacles.begin(); ObsIt != Object->TempObstacles.begin(); ObsIt++)
-	{
-		AIMESH_RemoveTemporaryObstacle(&(*ObsIt));
-	}
+	Object->ClearTemporaryObstacles();
 
-	Object->TempObstacles.clear();
-
-	if (FNullEnt(Object->Edict) || Object->Edict->free)
-	{
-		return;
-	}
+	if (!Object->IsValid()) { return; }
 
 	float SizeX = Object->Edict->v.size.x;
 	float SizeY = Object->Edict->v.size.y;
@@ -1773,7 +1746,7 @@ void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
 
 	for (int ii = 0; ii < NumObstacles; ii++)
 	{
-		const int InvalidIndex = static_cast<int>(NAV_MESH_INVALID);
+		const int InvalidIndex = static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 
 		for (int NavIndex = 0; NavIndex < InvalidIndex; NavIndex++)
 		{
@@ -1783,7 +1756,7 @@ void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
 
 			if (NewObstacle)
 			{
-				Object->TempObstacles.push_back(*NewObstacle);
+				Object->TempObstacles.push_back(NewObstacle);
 			}
 		}
 
@@ -1804,7 +1777,7 @@ void AIMAP_RemoveAllTempObstaclesFromObject(DynamicMapObject* Object)
 
 	for (auto ObsIt = Object->TempObstacles.begin(); ObsIt != Object->TempObstacles.begin(); ObsIt++)
 	{
-		AIMESH_RemoveTemporaryObstacle(&(*ObsIt));
+		AIMESH_RemoveTemporaryObstacle(*ObsIt);
 	}
 
 	Object->TempObstacles.clear();
@@ -1812,6 +1785,22 @@ void AIMAP_RemoveAllTempObstaclesFromObject(DynamicMapObject* Object)
 
 void AIMAP_ClearCachedMapData()
 {
+	if (!AIMESH_IsNavMeshLoaded())
+	{
+		DynamicMapObjects.clear();
+		return;
+	}
+
+	for (auto ObjIt = DynamicMapObjects.begin(); ObjIt != DynamicMapObjects.end(); ObjIt++)
+	{
+		DynamicMapObject* ThisObject = &(*ObjIt);
+
+		if (!ThisObject) { continue; }
+
+		ThisObject->UndoOffMeshConnectionChanges();
+		ThisObject->ClearTemporaryObstacles();
+	}
+
 	DynamicMapObjects.clear();
 }
 
@@ -1920,7 +1909,7 @@ const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgent
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-		if (!(ThisConnection->ConnectionFlags & NAV_FLAG_PLATFORM)) { continue; }
+		if (!EnumHasAnyFlags(ThisConnection->ConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
 
 		if (ThisConnection->LinkedObject == PlatformRef->Edict)
 		{
@@ -2556,4 +2545,33 @@ void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
 	}
 
 	UTIL_DrawHUDText(INDEXENT(1), 1, 0.6, 0.1f, 255, 255, 255, buf);
+}
+
+void DynamicMapObject::ClearTemporaryObstacles()
+{
+	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
+	{
+		NavTempObstacle* ThisObstacle = (*ObsIt);
+
+		if (!ThisObstacle || !ThisObstacle->IsValid()) { continue; }
+
+		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
+	}
+
+	TempObstacles.clear();
+}
+
+void DynamicMapObject::UndoOffMeshConnectionChanges()
+{
+	for (auto stopIt = StopPoints.begin(); stopIt != StopPoints.end(); stopIt++)
+	{
+		for (auto it = stopIt->AffectedConnections.begin(); it != stopIt->AffectedConnections.end(); it++)
+		{
+			NavOffMeshConnection* ThisConnection = (*it);
+
+			if (!ThisConnection) { continue; }
+
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, ThisConnection->DefaultConnectionFlags);
+		}
+	}
 }

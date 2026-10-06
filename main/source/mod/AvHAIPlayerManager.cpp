@@ -17,6 +17,7 @@
 double last_think_time = 0.0;
 
 vector<AvHAIPlayer> ActiveAIPlayers;
+vector<EAINavMeshIndex> RecentlyModifiedNavMeshes;
 
 extern cvar_t avh_botautomode;
 extern cvar_t avh_botsenabled;
@@ -34,7 +35,6 @@ int BotNameIndex = 0;
 float AIStartedTime = 0.0f; // Used to give 5-second grace period before adding bots
 
 bool bHasRoundStarted = false;
-bool bMapDataInitialised = false;
 
 float NextCommanderAllowedTimeTeamA = 0.0f;
 float NextCommanderAllowedTimeTeamB = 0.0f;
@@ -52,25 +52,24 @@ float CurrentFrameDelta = 0.01f;
 #ifdef BOTDEBUG
 AvHAIPlayer* DebugAIPlayer = nullptr;
 edict_t* DebugBots[MAX_PLAYERS];
-DynamicMapObject* DebugDynamicMapObject;
+const DynamicMapObject* DebugDynamicMapObject = nullptr;
 Vector DebugVector1 = ZERO_VECTOR;
 Vector DebugVector2 = ZERO_VECTOR;
-vector<bot_path_node> DebugPath;
 #endif
 
-AvHAICommanderMode AIMGR_GetCommanderMode()
+EAICommanderMode AIMGR_GetCommanderMode()
 {
 	if (avh_botcommandermode.value == 1)
 	{
-		return COMMANDERMODE_ENABLED;
+		return EAICommanderMode::COMMANDERMODE_ENABLED;
 	}
 
 	if (avh_botcommandermode.value == 2)
 	{
-		return COMMANDERMODE_IFNOHUMAN;
+		return EAICommanderMode::COMMANDERMODE_IFNOHUMAN;
 	}
 
-	return COMMANDERMODE_DISABLED;
+	return EAICommanderMode::COMMANDERMODE_DISABLED;
 
 }
 
@@ -83,8 +82,10 @@ void AIMGR_UpdateAIPlayerCounts()
 {
 	for (auto BotIt = ActiveAIPlayers.begin(); BotIt != ActiveAIPlayers.end();)
 	{
+		AvHAIPlayer* ThisAIPlayer = &(*BotIt);
+
 		// If bot has been kicked from the server then remove from active AI player list
-		if (FNullEnt(BotIt->Edict) || BotIt->Edict->free || !BotIt->Player)
+		if (!ThisAIPlayer || !ThisAIPlayer->IsValid())
 		{
 			BotIt = ActiveAIPlayers.erase(BotIt);
 		}
@@ -95,7 +96,7 @@ void AIMGR_UpdateAIPlayerCounts()
 	}
 
 	// Don't add or remove bots too quickly, otherwise it can cause lag or even overflows
-	if (gpGlobals->time - LastAIPlayerCountUpdate < 0.5f) { return; }
+	if (gpGlobals->time - LastAIPlayerCountUpdate < CONFIG_GetBotFillRate()) { return; }
 
 	LastAIPlayerCountUpdate = gpGlobals->time;
 
@@ -478,15 +479,12 @@ void AIMGR_AddAIPlayerToTeam(int Team)
 		NewAIPlayer.Edict = BotEnt;
 		NewAIPlayer.Team = theNewAIPlayer->GetTeam();
 
-		NewAIPlayer.CurrentTask = nullptr;
-		NewAIPlayer.PrimaryBotTask.TaskType = TASK_NONE;
-		NewAIPlayer.SecondaryBotTask.TaskType = TASK_NONE;
-		NewAIPlayer.WantsAndNeedsTask.TaskType = TASK_NONE;
-		NewAIPlayer.CommanderTask.TaskType = TASK_NONE;
+		const AvHAISkillLevel* BotSkillSettings = CONFIG_GetBotSkillLevel();
 
-		const bot_skill BotSkillSettings = CONFIG_GetBotSkillLevel();
-
-		memcpy(&NewAIPlayer.BotSkillSettings, &BotSkillSettings, sizeof(bot_skill));
+		if (BotSkillSettings)
+		{
+			memcpy(&NewAIPlayer.BotSkillSettings, BotSkillSettings, sizeof(AvHAISkillLevel));
+		}
 
 		ActiveAIPlayers.push_back(NewAIPlayer);
 
@@ -545,18 +543,14 @@ Vector AIDEBUG_GetDebugVector2()
 void AIDEBUG_TestPathFind()
 {
 	if (vIsZero(DebugVector1) || vIsZero(DebugVector2)) { return; }
-
-	DEBUG_TestFindPath(GetBaseNavProfile(SKULK_BASE_NAV_PROFILE), DebugVector1, DebugVector2, DebugPath, 60.0f);
 }
 
 void AIDEBUG_TestFlightPathFind(Vector FromLoc, Vector ToLoc)
 {
 	if (vIsZero(FromLoc) || vIsZero(ToLoc)) { return; }
-
-	FindFlightPathToPoint(GetBaseNavProfile(SKULK_BASE_NAV_PROFILE), FromLoc, ToLoc, DebugPath, 60.0f);
 }
 
-DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject()
+const DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject()
 {
 	return DebugDynamicMapObject;
 }
@@ -624,7 +618,6 @@ void AIMGR_UpdateAIPlayers()
 		}
 
 		AIMGR_ProcessPendingSounds();
-		AITAC_UpdateSquads();
 	}
 
 	int NumCommanders = AIMGR_GetNumAICommanders();
@@ -638,9 +631,9 @@ void AIMGR_UpdateAIPlayers()
 
 	for (auto BotIt = ActiveAIPlayers.begin(); BotIt != ActiveAIPlayers.end();)
 	{
-		AvHAIPlayer* Bot = &(*BotIt);
+		AvHAIPlayer* AIPlayer = &(*BotIt);
 
-		if (!Bot || !Bot->IsValid())
+		if (!AIPlayer || !AIPlayer->IsValid())
 		{
 			BotIt = ActiveAIPlayers.erase(BotIt);
 			continue;
@@ -648,24 +641,35 @@ void AIMGR_UpdateAIPlayers()
 
 		if (bSkillChanged)
 		{
-			const AvHAISkillLevel NewSkillSettings = CONFIG_GetBotSkillLevel();
-			memcpy(&Bot->BotSkillSettings, &NewSkillSettings, sizeof(AvHAISkillLevel));
+			const AvHAISkillLevel* NewSkillSettings = CONFIG_GetBotSkillLevel();
+
+			if (NewSkillSettings)
+			{
+				memcpy(&AIPlayer->BotSkillSettings, NewSkillSettings, sizeof(AvHAISkillLevel));
+			}
 		}
+
+		AIPlayer->StartThink(FrameDelta);
 
 		if (bHasRoundStarted)
 		{
-			if (IsPlayerCommander(Bot->Edict))
+			for (int32 i = 0; i < RecentlyModifiedNavMeshes.size(); i++)
+			{
+				AIPlayer->OnNavMeshModified(RecentlyModifiedNavMeshes[i]);
+			}
+
+			if (IsPlayerCommander(AIPlayer->Edict))
 			{
 				if (UpdateIndex == -1)
 				{
-					Bot->Think(FrameDelta);
+					AIPlayer->Think(FrameDelta);
 				}
 			}
 			else
 			{
 				if (UpdateIndex > -1 && BotIndex >= UpdateIndex && NumBotsThinkThisFrame < BotsPerFrame)
 				{
-					Bot->Think(FrameDelta);
+					AIPlayer->Think(FrameDelta);
 
 					NumBotsThinkThisFrame++;
 				}
@@ -674,16 +678,7 @@ void AIMGR_UpdateAIPlayers()
 			}
 		}
 
-		//UpdateBotChat(bot);
-
-		// Needed to correctly handle client prediction and physics calculations
-		byte adjustedmsec = BotThrottledMsec(Bot, CurrTime);
-
-		// Simulate PM_PlayerMove so client prediction and stuff can be executed correctly.
-		RUN_AI_MOVE(Bot->Edict, Bot->Edict->v.v_angle, bot->ForwardMove,
-			bot->SideMove, bot->UpMove, bot->Button, bot->Impulse, adjustedmsec);
-
-		Bot->LastServerUpdateTime = CurrTime;
+		AIPlayer->EndThink(FrameDelta);
 
 		BotIt++;
 	}
@@ -709,8 +704,8 @@ void AIMGR_UpdateAIPlayers()
 		}
 	}
 
+	RecentlyModifiedNavMeshes.empty();
 	PrevTime = CurrTime;
-
 }
 
 int AIMGR_GetNumAIPlayers()
@@ -839,7 +834,7 @@ int AIMGR_GetNumActiveHumanPlayers()
 	return Result;
 }
 
-int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, AvHAIBotRole Role, AvHAIPlayer* IgnoreAIPlayer)
+int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, EAIPlayerRole Role, AvHAIPlayer* IgnoreAIPlayer)
 {
 	int Result = 0;
 
@@ -908,56 +903,6 @@ void AIMGR_RemoveBotsInReadyRoom()
 	}
 }
 
-void AIMGR_ResetRound()
-{
-	if (!AIMGR_IsBotEnabled()) { return; } // Do nothing if we're not using bots, as the data will be cleared out via AIMGR_OnBotDisabled()
-
-	AITAC_ClearMapAIData(false);
-
-#ifdef BOTDEBUG
-	memset(DebugBots, 0, sizeof(DebugBots));
-#endif
-
-	// AI Players would be 0 if the round is being reset because a new game is starting. If the round is reset
-	// from a console command, or tournament mode readying up etc, then bot logic is unaffected
-	if (AIMGR_GetNumAIPlayers() == 0)
-	{
-		// This is used to track the 5-second "grace period" before adding bots to the game if fill teams is enabled
-		AIStartedTime = gpGlobals->time;
-	}
-
-	LastAIPlayerCountUpdate = 0.0f;
-
-	AIMAP_BuildMapData();
-	UTIL_PopulateDoors();
-	UTIL_PopulateWeldableObstacles();
-
-	bool bTileCacheFullyUpdated = UTIL_UpdateTileCache();
-
-	int NumAttempts = 0;
-
-	while (!bTileCacheFullyUpdated && NumAttempts < 30)
-	{
-		bTileCacheFullyUpdated = UTIL_UpdateTileCache();
-		NumAttempts++;
-	}
-
-	bHasRoundStarted = false;
-	bMapDataInitialised = true;
-
-	CountdownStartedTime = 0.0f;
-
-	AITAC_DetermineRelocationEnabled();
-}
-
-void AIMGR_ReloadNavigationData()
-{
-	if (NavmeshLoaded())
-	{
-		ReloadNavMeshes();
-	}
-}
-
 void AIMGR_RoundStarted()
 {
 	if (!AIMGR_IsBotEnabled()) { return; } // Do nothing if we're not using bots
@@ -986,10 +931,6 @@ void AIMGR_RoundStarted()
 	{
 		AIMGR_SetCommanderAllowedTime(TeamBNumber, 0.0f);
 	}
-
-	AITAC_RefreshTeamStartingLocations();
-
-	AITAC_OnNavMeshModified();
 }
 
 void AIMGR_SetCommanderAllowedTime(AvHTeamNumber Team, float NewValue)
@@ -1038,14 +979,12 @@ void AIMGR_NewMap()
 
 	if (!AIMGR_IsBotEnabled()) { return; } // Do nothing if we're not using bots. Data will be already cleared if bot is disabled via AIMGR_OnBotDisabled()
 
-	if (NavmeshLoaded())
-	{
-		UnloadNavigationData();
-	}
+	AIMESH_UnloadNavMesh();
+	AIMAP_ClearCachedMapData();
+	AITAC_ClearMapAIData();
 
-	AITAC_ClearMapAIData(true);
-
-	bMapDataInitialised = false;
+	AIMESH_LoadNavMesh(STRING(gpGlobals->mapname));
+	AIMAP_BuildMapData();
 
 	ActiveAIPlayers.clear();
 
@@ -1060,34 +999,33 @@ void AIMGR_NewMap()
 	CONFIG_PopulateBotNames();
 }
 
-bool AIMGR_IsNavmeshLoaded()
+void AIMGR_ResetRound()
 {
-	return NavmeshLoaded();
+	if (!AIMGR_IsBotEnabled()) { return; } // Do nothing if we're not using bots, as the data will be cleared out via AIMGR_OnBotDisabled()
+
+	AITAC_ClearMapAIData();
+	AIMAP_ClearCachedMapData();
+
+	// AI Players would be 0 if the round is being reset because a new game is starting. If the round is reset
+	// from a console command, or tournament mode readying up etc, then bot logic is unaffected
+	if (AIMGR_GetNumAIPlayers() == 0)
+	{
+		// This is used to track the 5-second "grace period" before adding bots to the game if fill teams is enabled
+		AIStartedTime = gpGlobals->time;
+	}
+
+	LastAIPlayerCountUpdate = 0.0f;
+
+	AIMAP_BuildMapData();
+
+	bHasRoundStarted = false;
+
+	CountdownStartedTime = 0.0f;
 }
 
 bool AIMGR_IsBotEnabled()
 {
-	return avh_botsenabled.value > 0 && NAV_GetNavMeshStatus() != NAVMESH_STATUS_FAILED;
-}
-
-AvHAINavMeshStatus AIMGR_GetNavMeshStatus()
-{
-	return NAV_GetNavMeshStatus();
-}
-
-void AIMGR_LoadNavigationData()
-{
-	// Don't reload the nav mesh if it's already loaded
-	if (NavmeshLoaded()) { return; }
-
-	const char* theCStrLevelName = STRING(gpGlobals->mapname);
-
-	if (!loadNavigationData(theCStrLevelName))
-	{
-		char ErrMsg[128];
-		sprintf(ErrMsg, "Failed to load navigation data for %s\n", theCStrLevelName);
-		g_engfuncs.pfnServerPrint(ErrMsg);
-	}
+	return avh_botsenabled.value > 0;
 }
 
 AvHAIPlayer* AIMGR_GetAICommander(AvHTeamNumber Team)
@@ -1235,16 +1173,16 @@ bool AIMGR_ShouldStartPlayerBalancing()
 
 	if (AIMGR_HasMatchEnded()) { return false; }
 
-	BotFillTiming FillTiming = CONFIG_GetBotFillTiming();
+	EAIFillTiming FillTiming = CONFIG_GetBotFillTiming();
 
 	switch (FillTiming)
 	{
-		case FILLTIMING_MAPLOAD:
-			return true;
-		case FILLTIMING_ROUNDSTART:
-			return GetGameRules()->GetGameStarted();
-		default:
-			break;
+		case EAIFillTiming::FILLTIMING_MAPLOAD:
+				return true;
+		case EAIFillTiming::FILLTIMING_ROUNDSTART:
+				return GetGameRules()->GetGameStarted();
+			default:
+				break;
 	}
 
 	if (!bPlayerSpawned)
@@ -1272,18 +1210,16 @@ bool AIMGR_ShouldStartPlayerBalancing()
 
 void AIMGR_UpdateAIMapData()
 {
-	if (!NavmeshLoaded()) { return; }
+	if (!AIMESH_IsNavMeshLoaded()) { return; }
 
 	if (GetGameRules()->GetCountdownStarted() && CountdownStartedTime == 0.0f)
 	{
 		CountdownStartedTime = gpGlobals->time;
 	}
 
-	if (bMapDataInitialised && (CountdownStartedTime > 0.0f && (gpGlobals->time - 1.0f) > CountdownStartedTime))
+	if (CountdownStartedTime > 0.0f && (gpGlobals->time - 1.0f) > CountdownStartedTime)
 	{
 		AITAC_UpdateMapAIData();
-		UTIL_UpdateTileCache();
-		AITAC_CheckNavMeshModified();
 	}
 }
 
@@ -1412,52 +1348,66 @@ void AIMGR_PlayerSpawned()
 	bPlayerSpawned = true;
 }
 
+void AIMGR_PrintNavMeshLoadResult(EAINavMeshLoadResult Result, const char* MapName)
+{
+	char ErrMsg[256];
+
+	switch (Result)
+	{
+		case EAINavMeshLoadResult::NAVMESH_LOAD_NOTFOUND:
+			sprintf(ErrMsg, "No nav file found for %s. Please create or download one and place it in the navmeshes folder in the NS root directory.\n", (MapName) ? MapName : "the current map");
+			break;
+		case EAINavMeshLoadResult::NAVMESH_LOAD_INVALID:
+			sprintf(ErrMsg, "The nav file found for %s is not a valid navmesh file or has been corrupted. Please download or generate a new one.\n", (MapName) ? MapName : "the current map");
+			break;
+		case EAINavMeshLoadResult::NAVMESH_LOAD_WRONGVERSION:
+			sprintf(ErrMsg, "The nav file found for %s uses an outdated version (3.3b9 or earlier). Please download or generate a new one.\n", (MapName) ? MapName : "the current map");
+			break;
+		case EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL:
+		case EAINavMeshLoadResult::NAVMESH_STATUS_MESHINITFAIL:
+		case EAINavMeshLoadResult::NAVMESH_STATUS_CACHEINITFAIL:
+		case EAINavMeshLoadResult::NAVMESH_STATUS_QUERYINITFAIL:
+			sprintf(ErrMsg, "Failed to allocate memory for the nav data for %s. Possible system instability or RAM issue?\n", (MapName) ? MapName : "the current map");
+			break;
+		case EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS:
+			sprintf(ErrMsg, "Successfully loaded navigation data for %s.\n", (MapName) ? MapName : "the current map");
+			break;
+		default:
+			return;
+	}
+
+	g_engfuncs.pfnServerPrint(ErrMsg);
+}
+
 void AIMGR_OnBotEnabled()
 {
-	// First clear any stale data
-	if (NavmeshLoaded())
+	AIMAP_ClearCachedMapData();
+	AITAC_ClearMapAIData();
+
+	const char* MapName = STRING(gpGlobals->mapname);
+
+	EAINavMeshLoadResult Result = AIMESH_LoadNavMesh(MapName);
+
+	AIMGR_PrintNavMeshLoadResult(Result, MapName);
+
+	if (Result != EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS)
 	{
-		UnloadNavigationData();
+		return;
 	}
+
+	AIMAP_BuildMapData();
 
 	CONFIG_ParseConfigFile();
 	CONFIG_PopulateBotNames();
 
-	AITAC_ClearMapAIData(true);
-
 	bBotsEnabled = true;
-
-	// Now load new stuff for current map
-
-	AIMGR_LoadNavigationData();
-
-	bMapDataInitialised = false;
 
 	ActiveAIPlayers.clear();
 
 	AIStartedTime = gpGlobals->time;
 	LastAIPlayerCountUpdate = 0.0f;
 
-	if (AIMGR_GetNavMeshStatus() != NAVMESH_STATUS_FAILED)
-	{
-		AIMAP_BuildMapData();
-		UTIL_PopulateDoors();
-		UTIL_PopulateWeldableObstacles();
-
-		bool bTileCacheFullyUpdated = UTIL_UpdateTileCache();
-
-		int NumAttempts = 0;
-
-		while (!bTileCacheFullyUpdated && NumAttempts < 30)
-		{
-			bTileCacheFullyUpdated = UTIL_UpdateTileCache();
-			NumAttempts++;
-		}
-	}
-	// Figure out the current game status
-
 	bHasRoundStarted = GetGameRules()->GetGameStarted();
-	bMapDataInitialised = true;
 
 	CountdownStartedTime = (bHasRoundStarted || GetGameRules()->GetCountdownStarted()) ? gpGlobals->time : 0.0f;
 
@@ -1466,13 +1416,9 @@ void AIMGR_OnBotEnabled()
 void AIMGR_OnBotDisabled()
 {
 	// Clear all data out
-
-	AITAC_ClearMapAIData(false);
-
-	if (NavmeshLoaded())
-	{
-		UnloadNavigationData();
-	}
+	AIMESH_UnloadNavMesh();
+	AITAC_ClearMapAIData();
+	AIMAP_ClearCachedMapData();
 
 	bBotsEnabled = false;
 }
@@ -1481,11 +1427,11 @@ void AIMGR_UpdateAISystem()
 {
 	AIMGR_UpdateAIPlayerCounts();
 
-	bool bNewBotsEnabled = (avh_botsenabled.value > 0);
+	bool bBotsCurrentlyEnabled = AIMGR_IsBotEnabled();
 
-	if (bNewBotsEnabled != bBotsEnabled)
+	if (bBotsCurrentlyEnabled != bBotsEnabled)
 	{
-		if (bNewBotsEnabled)
+		if (bBotsCurrentlyEnabled)
 		{
 			AIMGR_OnBotEnabled();
 		}
@@ -1494,36 +1440,19 @@ void AIMGR_UpdateAISystem()
 			AIMGR_OnBotDisabled();
 		}
 
-		bBotsEnabled = bNewBotsEnabled;
+		bBotsEnabled = bBotsCurrentlyEnabled;
 		return;
 	}
 
-	if (AIMGR_IsBotEnabled())
+	if (!bBotsCurrentlyEnabled) { return; }
+
+	if (!AIMGR_HasMatchEnded())
 	{
-		if (!AIMGR_HasMatchEnded())
-		{
-			if (AIMGR_GetNavMeshStatus() == NAVMESH_STATUS_PENDING)
-			{
-				AIMGR_LoadNavigationData();
-			}
-
-			AIMGR_UpdateAIMapData();
-		}
-
-#ifdef BOTDEBUG
-		if (DebugPath.size() > 0)
-		{
-			AIDEBUG_DrawPath(INDEXENT(1), DebugPath);
-		}
-
-		if (DebugDynamicMapObject)
-		{
-			DEBUG_PrintObjectInfo(DebugDynamicMapObject);
-		}
-#endif
-
-		AIMGR_UpdateAIPlayers();
+		AIMESH_UpdateTileCaches(RecentlyModifiedNavMeshes);
+		AIMGR_UpdateAIMapData();
 	}
+
+	AIMGR_UpdateAIPlayers();
 }
 
 bool AIMGR_HasMatchEnded()
@@ -1543,41 +1472,6 @@ bool AIMGR_HasMatchEnded()
 
 bool AIMGR_IsMatchPracticallyOver()
 {
-	if (!GetGameRules()->GetGameStarted() || GetGameRules()->GetMapMode() != MAP_MODE_NS) { return false; }
-
-	AvHTeamNumber TeamANumber = AIMGR_GetTeamANumber();
-	AvHTeamNumber TeamBNumber = AIMGR_GetTeamBNumber();
-
-	if (AIMGR_GetTeamType(TeamANumber) == AVH_CLASS_TYPE_ALIEN)
-	{
-		if (AITAC_GetNumTeamHives(TeamANumber, false) == 0) { return true; }
-	}
-	else
-	{
-		StructureSearchFilter ChairFilter;
-		ChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
-		ChairFilter.DeployableTeam = TeamANumber;
-		ChairFilter.ReachabilityTeam = TeamANumber;
-		ChairFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
-
-		if (!AITAC_DeployableExistsAtLocation(ZERO_VECTOR, &ChairFilter)) { return true; }
-	}
-
-	if (AIMGR_GetTeamType(TeamBNumber) == AVH_CLASS_TYPE_ALIEN)
-	{
-		if (AITAC_GetNumTeamHives(TeamBNumber, false) == 0) { return true; }
-	}
-	else
-	{
-		StructureSearchFilter ChairFilter;
-		ChairFilter.DeployableTypes = STRUCTURE_MARINE_COMMCHAIR;
-		ChairFilter.DeployableTeam = TeamBNumber;
-		ChairFilter.ReachabilityTeam = TeamBNumber;
-		ChairFilter.ReachabilityFlags = AI_REACHABILITY_MARINE;
-
-		if (!AITAC_DeployableExistsAtLocation(ZERO_VECTOR, &ChairFilter)) { return true; }
-	}
-
 	return false;
 }
 
@@ -1596,7 +1490,7 @@ void AIMGR_ProcessPendingSounds()
 	AvHTeamNumber TeamANumber = AIMGR_GetTeamANumber();
 	AvHTeamNumber TeamBNumber = AIMGR_GetTeamBNumber();
 
-	while (Sound.SoundType != AI_SOUND_NONE)
+	while (Sound.SoundType != EAISoundType::AI_SOUND_NONE)
 	{
 		edict_t* EmittingEntity = INDEXENT(Sound.EntIndex);
 		//string SoundType = "Unknown";
@@ -1605,25 +1499,25 @@ void AIMGR_ProcessPendingSounds()
 
 		switch (Sound.SoundType)
 		{
-			case AI_SOUND_FOOTSTEP:
+			case EAISoundType::AI_SOUND_FOOTSTEP:
 				MaxDist = UTIL_MetresToGoldSrcUnits(20.0f);
 				//SoundType = "Footstep";
 				break;
-			case AI_SOUND_SHOOT:
+			case EAISoundType::AI_SOUND_SHOOT:
 				MaxDist = UTIL_MetresToGoldSrcUnits(30.0f);
 				//SoundType = "Shoot";
 				break;
-			case AI_SOUND_VOICELINE:
+			case EAISoundType::AI_SOUND_VOICELINE:
 				MaxDist = UTIL_MetresToGoldSrcUnits(20.0f);
 				//SoundType = "Voiceline";
 				break;
-			case AI_SOUND_LANDING:
+			case EAISoundType::AI_SOUND_LANDING:
 				MaxDist = UTIL_MetresToGoldSrcUnits(20.0f);
 				//SoundType = "Landing";
 				break;
-			case AI_SOUND_OTHER:
+			case EAISoundType::AI_SOUND_OTHER:
 			default:
-				MaxDist = UTIL_MetresToGoldSrcUnits(20.0f);
+				MaxDist = UTIL_MetresToGoldSrcUnits(5.0f);
 				//SoundType = "Other";
 				break;
 		}
@@ -1636,9 +1530,13 @@ void AIMGR_ProcessPendingSounds()
 
 			for (auto it = ActiveAIPlayers.begin(); it != ActiveAIPlayers.end(); it++)
 			{
-				AvHTeamNumber ThisTeam = it->Player->GetTeam();
+				AvHAIPlayer* AIPlayer = &(*it);
+
+				if (!AIPlayer || !AIPlayer->IsValid()) { continue; }
+
+				AvHTeamNumber ThisTeam = AIPlayer->Player->GetTeam();
 				float Volume = Sound.Volume;
-				float HearingThresholdScalar = (ThisTeam != EmitterTeam || EmittingEntity == it->Edict) ? 1.0f : 0.5f;
+				float HearingThresholdScalar = (ThisTeam != EmitterTeam || EmittingEntity == AIPlayer->Edict) ? 1.0f : 0.5f;
 
 				if (EmitterTeam != ThisTeam)
 				{
@@ -1651,13 +1549,13 @@ void AIMGR_ProcessPendingSounds()
 
 				Volume = Volume * HearingThresholdScalar;
 
-				if (Volume > it->HearingThreshold)
+				if (Volume > AIPlayer->HearingThreshold)
 				{
-					it->HearingThreshold = Volume;
+					AIPlayer->HearingThreshold = Volume;
 
 					if (EmitterTeam != ThisTeam)
 					{
-						AIPlayerHearEnemy(&(*it), EmittingEntity, Volume);
+						AIPlayer->HearEnemy(EmittingEntity, Volume);
 					}
 				}
 			}

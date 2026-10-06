@@ -26,10 +26,4 @@ static const float f_ffwidth = f_ffheight * BOT_ASPECT_RATIO;
 
 Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer);
 
-void OnBotTeleport(AvHAIPlayer* pBot);
-
-void DEBUG_PrintBotDebugInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot);
-void DEBUG_PrintTaskInfo(edict_t* OutputPlayer, AvHAIPlayer* pBot);
-
-
 #endif

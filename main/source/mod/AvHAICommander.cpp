@@ -18,10 +18,10 @@ AvHAIBuildableStructure* AICOMM_DeployStructure(AvHAIPlayer* pBot, const EAIStru
 	if (vIsZero(Location)) { return nullptr; }
 
 	NavAgentProfile WelderProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
-	WelderProfile.Filters.addIncludeFlags(EAINavMovementFlag::NAV_FLAG_WELD);
+	WelderProfile.Filters.addIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
 
 	// Don't allow the commander to place a structure somewhere unreachable to marines
-	if (!UTIL_PointIsReachable(&WelderProfile, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), Location, max_player_use_reach))
+	if (!AINAV_IsPointReachable(&WelderProfile, AITAC_GetTeamStartingLocation(pBot->Player->GetTeam()), Location, max_player_use_reach))
 	{
 		return false;
 	}
@@ -118,8 +118,8 @@ bool AICOMM_ResearchTech(AvHAIPlayer* pBot, const AvHAIBuildableStructure* Struc
 
 	pBot->Player->SetSelection(StructureIndex, true);
 
-	pBot->Button |= IN_ATTACK2;
-	pBot->Impulse = Research;
+	pBot->NextFrameMovementInput.Button |= IN_ATTACK2;
+	pBot->NextFrameMovementInput.Impulse = Research;
 
 	pBot->next_commander_action_time = gpGlobals->time + 0.2f;
 

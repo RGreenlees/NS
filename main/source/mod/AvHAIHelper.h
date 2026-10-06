@@ -53,8 +53,9 @@ bool GetNearestMapLocationAtPoint(vec3_t SearchLocation, string& outLocation);
 
 EAIStructureType GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict);
 
-void AIDEBUG_DrawBotPath(edict_t* OutputPlayer, AvHAIPlayer* pBot, float DrawTime = 0.0f);
-void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<AvHAIPathNode>& path, float DrawTime = 0.0f);
+void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<AvHAIPathNode>& Path, float DrawTime = 0.0f);
+
+EAIHiveTechStatus UTIL_GetHiveTechStatusFromMessageID(const AvHMessageID TechID);
 
 // Draws a white line between start and end for the given player (pEntity) for 0.1s
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end);

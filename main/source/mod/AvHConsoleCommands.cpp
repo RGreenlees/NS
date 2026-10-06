@@ -1441,7 +1441,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		{
 			AvHAIPlayer* thisBot = (*it);
 
-			AITASK_SetMoveTask(thisBot, &thisBot->PrimaryBotTask, theAvHPlayer->pev->origin, true);
+			thisBot->DebugDestination = theAvHPlayer->pev->origin;
 		}
 
 		theSuccess = true;

@@ -44,6 +44,7 @@ bool CONFIG_IsOnosAllowed();
 
 bool CONFIG_IsRelocationAllowed();
 float CONFIG_GetRelocationChance();
+float CONFIG_GetBotFillRate();
 
 // Returns the max time a bot is allowed to be stuck before suiciding (0 means forever)
 float CONFIG_GetMaxStuckTime();
@@ -58,7 +59,7 @@ int CONFIG_GetTeamBSizeForMap(const char* MapName);
 // Returns the configured hive tech at that index (chamber build sequence)
 EAIHiveTechStatus CONFIG_GetHiveTechAtIndex(const int Index);
 
-AvHAISkillLevel CONFIG_GetBotSkillLevel();
+const AvHAISkillLevel* CONFIG_GetBotSkillLevel();
 
 EAIFillTiming CONFIG_GetBotFillTiming();
 

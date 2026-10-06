@@ -781,7 +781,7 @@ bool PlayerHasAlienUpgradeOfType(const edict_t* Player, const HiveTechStatus Tec
 
 	switch (TechType)
 	{
-	case HIVE_TECH_DEFENCE:
+	case HIVE_TECH_DEFENSE:
 		return ((Player->v.iuser4 & MASK_UPGRADE_1) || (Player->v.iuser4 & MASK_UPGRADE_2) || (Player->v.iuser4 & MASK_UPGRADE_3));
 	case HIVE_TECH_MOVEMENT:
 		return ((Player->v.iuser4 & MASK_UPGRADE_4) || (Player->v.iuser4 & MASK_UPGRADE_5) || (Player->v.iuser4 & MASK_UPGRADE_6));
@@ -794,6 +794,8 @@ bool PlayerHasAlienUpgradeOfType(const edict_t* Player, const HiveTechStatus Tec
 
 float GetPlayerCloakAmount(const edict_t* Player)
 {
+	if (FNullEnt(Player)) { return 0.0f; }
+
 	if (!(Player->v.iuser4 & MASK_UPGRADE_7) && !(Player->v.iuser4 & MASK_SENSORY_NEARBY)) { return 0.0f; }
 
 	if (Player->v.iuser4 & MASK_VIS_SIGHTED)
@@ -808,6 +810,8 @@ float GetPlayerCloakAmount(const edict_t* Player)
 
 bool IsPlayerReloading(const AvHPlayer* Player)
 {
+	if (!Player) { return false; }
+
 	AvHBasePlayerWeapon* theBasePlayerWeapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_pActiveItem);
 
 	if (!theBasePlayerWeapon) { return false; }
@@ -817,6 +821,8 @@ bool IsPlayerReloading(const AvHPlayer* Player)
 
 bool IsPlayerStandingOnPlayer(const edict_t* Player)
 {
+	if (FNullEnt(Player)) { return false; }
+
 	return (IsEdictPlayer(Player->v.groundentity));
 }
 

@@ -99,20 +99,6 @@ EAINavMoveResult AINAV_ProgressMoveTask(AvHAIPlayer* AIPlayer, AvHAIMoveTask* Mo
 // From the given start point, determine how high up the bot needs to climb to get to climb end. Will allow the bot to climb over railings
 float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
 
-
-// Returns true if the bot is considered to have strayed off the path (e.g. missed a jump and fallen)
-
-bool IsBotOffLadderNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffClimbNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffPhaseGateNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-bool IsBotOffObstacleNode(const AvHAIPlayer* pBot, Vector MoveStart, Vector MoveEnd, Vector NextMoveDestination, SamplePolyFlags NextMoveFlag);
-
-void WallClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight);
-void BlinkClimbMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint, float RequiredClimbHeight);
-// Called by NewMove, determines the movement direction and inputs required to use a phase gate to reach end point
-void PhaseGateMove(AvHAIPlayer* pBot, const Vector StartPoint, const Vector EndPoint);
-
-
 // Used by Detour for the FindRandomPointInCircle type functions
 static float frand();
 

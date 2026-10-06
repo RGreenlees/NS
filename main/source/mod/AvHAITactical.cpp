@@ -29,7 +29,7 @@
 #include "DetourTileCacheBuilder.h"
 
 vector<AvHAIResourceNode> ResourceNodes;
-vector<AvHAIHiveDefinition> Hives;
+vector<AvHAIHive> Hives;
 
 float CommanderViewZHeight;
 
@@ -47,13 +47,7 @@ float last_item_refresh_time = 0.0f;
 // Increments by 1 every time the structure list is refreshed. Used to detect if structures have been destroyed and no longer show up
 uint32 StructureRefreshFrame = 1;
 // Increments by 1 every time the item list is refreshed. Used to detect if items have been removed from play and no longer show up
-uint32 ItemRefreshFrame = 0;
-
-Vector TeamAStartingLocation = ZERO_VECTOR;
-Vector TeamBStartingLocation = ZERO_VECTOR;
-
-Vector TeamARelocationPoint = ZERO_VECTOR;
-Vector TeamBRelocationPoint = ZERO_VECTOR;
+uint32 ItemRefreshFrame = 1;
 
 bool bEnableRelocationAtStart = false; // For this round, should the AI commander try relocating at the start of the match?
 
@@ -62,11 +56,6 @@ edict_t* LastSeenLerkTeamB = nullptr; // Track who went lerk on team B last time
 
 float LastSeenLerkTeamATime = 0.0f;
 float LastSeenLerkTeamBTime = 0.0f;
-
-vector<AvHAISquad> ActiveSquads;
-
-vector<AvHAIMarineBase> ActiveTeamABases; // If Team A are marines, any active bases they have established around the map
-vector<AvHAIMarineBase> ActiveTeamBBases; // If Team B are marines, any active bases they have established around the map
 
 bool AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, const StructureSearchFilter* Filter, const Vector& SearchLocation)
 {
@@ -496,11 +485,10 @@ void AITAC_PopulateHiveData()
 	const AvHBaseInfoLocationListType& theInfoLocations = GetGameRules()->GetInfoLocations();
 
 	FOR_ALL_ENTITIES(kesTeamHive, AvHHive*)
-		AvHAIHiveDefinition NewHive;
+		AvHAIHive NewHive;
 		NewHive.HiveEntity = theEntity;
 		NewHive.Edict = theEntity->edict();
 		NewHive.Location = theEntity->pev->origin;
-		memset(&NewHive.ObstacleRefs, 0, sizeof(NewHive.ObstacleRefs));
 
 		string HiveName = UTIL_GetLocationName(NewHive.Location);
 
@@ -528,6 +516,21 @@ void AITAC_RefreshHiveData()
 	if (Hives.size() == 0)
 	{
 		AITAC_PopulateHiveData();
+	}
+
+	int NextRefresh = 0;
+
+	if (Hives.size() == 0) { return; }
+
+	for (auto it = Hives.begin(); it != Hives.end(); it++)
+	{
+		AvHAIHive* ThisHive = &(*it);
+
+		if (!ThisHive || !ThisHive->IsValid()) { continue; }
+
+		ThisHive->Update();
+
+		NextRefresh++;
 	}
 
 }
@@ -724,14 +727,7 @@ void AITAC_RefreshResourceNodes()
 
 void AITAC_UpdateMapAIData()
 {
-
 	AITAC_RefreshHiveData();
-
-	AIMAP_UpdateDynamicMapObjects();
-
-	UTIL_UpdateDoors(false);
-	UTIL_UpdateWeldableObstacles();
-
 
 	if (gpGlobals->time - last_structure_refresh_time >= structure_inventory_refresh_rate)
 	{
@@ -797,43 +793,6 @@ void AITAC_UpdateMapAIData()
 void AITAC_CheckNavMeshModified()
 {
 
-}
-
-void AITAC_OnNavMeshModified()
-{
-	if (!AIMESH_IsNavMeshLoaded()) { return; }
-
-	for (auto it = TeamAStructureMap.begin(); it != TeamAStructureMap.end(); it++)
-	{
-		it->second.bReachabilityMarkedDirty = true;
-	}
-
-	for (auto it = TeamBStructureMap.begin(); it != TeamBStructureMap.end(); it++)
-	{
-		it->second.bReachabilityMarkedDirty = true;
-	}
-
-	for (auto it = MarineDroppedItemMap.begin(); it != MarineDroppedItemMap.end(); it++)
-	{
-		it->second.bReachabilityMarkedDirty = true;
-	}
-
-	for (auto it = ResourceNodes.begin(); it != ResourceNodes.end(); it++)
-	{
-		it->bReachabilityMarkedDirty = true;
-	}
-
-	vector<AvHAIPlayer*> AllAIPlayers = AIMGR_GetAllAIPlayers();
-
-	for (auto it = AllAIPlayers.begin(); it != AllAIPlayers.end(); it++)
-	{
-		AvHAIPlayer* ThisPlayer = (*it);
-
-		if (IsPlayerActiveInGame(ThisPlayer->Edict) && ThisPlayer->BotNavInfo.CurrentPath.size() > 0)
-		{
-			ThisPlayer->BotNavInfo.NextForceRecalc = gpGlobals->time + frandrange(0.0f, 1.0f);
-		}
-	}
 }
 
 void AITAC_RefreshBuildableStructures()
@@ -1214,59 +1173,60 @@ void AITAC_ClearStructureNavData()
 {
 	for (auto& it : TeamAStructureMap)
 	{
-		AITAC_OnStructureDestroyed(&it.second);
+		AvHAIBuildableStructure* Structure = &it.second;
+
+		if (!Structure) { continue; }
+
+		Structure->ClearNavInformation();
 	}
 
 	for (auto& it : TeamBStructureMap)
 	{
-		AITAC_OnStructureDestroyed(&it.second);
+		AvHAIBuildableStructure* Structure = &it.second;
+
+		if (!Structure) { continue; }
+
+		Structure->ClearNavInformation();
 	}
 }
 
-void AITAC_ClearMapAIData(bool bInitialMapLoad)
+void AITAC_ClearHiveNavData()
+{
+	for (auto HiveIt = Hives.begin(); HiveIt != Hives.end(); HiveIt++)
+	{
+		AvHAIHive* ThisHive = &(*HiveIt);
+
+		if (!ThisHive) { continue; }
+
+		ThisHive->ClearNavInformation();
+	}
+}
+
+void AITAC_ClearMapAIData()
 {
 	UTIL_ClearLocalizations();
 
-	ResourceNodes.clear();
-
-	// If we're clearing AI data due to a map load, then we just clear the hive data immediately since we've reloaded the nav mesh
-	// If we're clearing AI data due to a round restart, then ensure we properly clear all temp obstacles and connections since we're not reloading the mesh
-	if (!bInitialMapLoad)
+	// If we are clearing with the nav mesh still loaded (e.g. round restart rather than a new map) then clean up the nav mesh nicely.
+	if (AIMESH_IsNavMeshLoaded())
 	{
 		AITAC_ClearStructureNavData();
-
-		int NumAttempts = 0;
-
-		while (!AIMESH_IsNavMeshUpToDate(EAINavMeshIndex::NAV_MESH_REGULAR) && NumAttempts < 30)
-		{
-			AIMESH_UpdateTileCache(EAINavMeshIndex::NAV_MESH_REGULAR);
-			NumAttempts++;
-		}
-	}
-	else
-	{
-		Hives.clear();
+		AITAC_ClearHiveNavData();
 	}
 
 	MarineDroppedItemMap.clear();
 	TeamAStructureMap.clear();
 	TeamBStructureMap.clear();
+	ResourceNodes.clear();
 
 	StructureRefreshFrame = 1;
 	ItemRefreshFrame = 1;
 
 	last_structure_refresh_time = 0.0f;
 	last_item_refresh_time = 0.0f;
-
-	TeamAStartingLocation = ZERO_VECTOR;
-	TeamBStartingLocation = ZERO_VECTOR;
 }
 
 void AITAC_RefreshTeamStartingLocations()
 {
-	TeamAStartingLocation = ZERO_VECTOR;
-	TeamBStartingLocation = ZERO_VECTOR;
-
 	AITAC_GetTeamStartingLocation(GetGameRules()->GetTeamANumber());
 }
 
@@ -1484,7 +1444,7 @@ bool AITAC_MarineResearchIsAvailable(const AvHTeamNumber Team, const AvHMessageI
 	return PlayerTeam->GetResearchManager().GetIsMessageAvailable(Message);
 }
 
-const AvHAIHiveDefinition* AITAC_GetHiveFromEdict(const edict_t* Edict)
+const AvHAIHive* AITAC_GetHiveFromEdict(const edict_t* Edict)
 {
 	if (Edict->v.iuser3 != AVH_USER3_HIVE) { return nullptr; }
 
@@ -1798,7 +1758,7 @@ vector<edict_t*> AITAC_GetAllPlayersOfClassInArea(const AvHTeamNumber Team, cons
 	return Result;
 }
 
-const AvHAIHiveDefinition* AITAC_GetTeamHiveWithTech(const AvHTeamNumber Team, const EAIHiveTechStatus Tech)
+const AvHAIHive* AITAC_GetTeamHiveWithTech(const AvHTeamNumber Team, const EAIHiveTechStatus Tech)
 {
 	AvHTeam* TeamRef = GetGameRules()->GetTeam(Team);
 
@@ -1807,7 +1767,7 @@ const AvHAIHiveDefinition* AITAC_GetTeamHiveWithTech(const AvHTeamNumber Team, c
 
 	for (auto it = Hives.begin(); it != Hives.end(); it++)
 	{
-		const AvHAIHiveDefinition* HiveRef = &(*it);
+		const AvHAIHive* HiveRef = &(*it);
 
 		if (!HiveRef) { continue; }
 
@@ -1863,10 +1823,10 @@ Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)
 	AvHTeamNumber StructureTeam = (AvHTeamNumber)StructureToMine->Edict->v.team;
 
 	NavAgentProfile MineCheckProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
-	MineCheckProfile.Filters.addExcludeFlags(EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM1);
-	MineCheckProfile.Filters.addExcludeFlags(EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM2);
-	MineCheckProfile.Filters.addExcludeFlags(EAINavMovementFlag::NAV_FLAG_JUMP);
-	MineCheckProfile.Filters.addExcludeFlags(EAINavMovementFlag::NAV_FLAG_WELD);
+	MineCheckProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM1));
+	MineCheckProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM2));
+	MineCheckProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_JUMP));
+	MineCheckProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
 
 	Vector FwdVector = UTIL_GetForwardVector2D(StructureToMine->Edict->v.angles);
 	Vector RightVector = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(FwdVector, UP_VECTOR));
@@ -1920,9 +1880,9 @@ Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)
 	{
 		Vector SearchLocation = StructureToMine->Location + (FwdVector * Size);
 
-		Vector BuildLocation = UTIL_ProjectPointToNavmesh(SearchLocation, MineCheckProfile);
+		Vector BuildLocation = AIMESH_ProjectPointToNavmesh(&MineCheckProfile, SearchLocation);
 
-		if (BuildLocation != ZERO_VECTOR)
+		if (!vIsZero(BuildLocation))
 		{
 			return BuildLocation;
 		}
@@ -1932,9 +1892,9 @@ Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)
 	{
 		Vector SearchLocation = StructureToMine->Location - (FwdVector * Size);
 
-		Vector BuildLocation = UTIL_ProjectPointToNavmesh(SearchLocation, MineCheckProfile);
+		Vector BuildLocation = AIMESH_ProjectPointToNavmesh(&MineCheckProfile, SearchLocation);
 
-		if (BuildLocation != ZERO_VECTOR)
+		if (!vIsZero(BuildLocation))
 		{
 			return BuildLocation;
 		}
@@ -1944,9 +1904,9 @@ Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)
 	{
 		Vector SearchLocation = StructureToMine->Location + (RightVector * Size);
 
-		Vector BuildLocation = UTIL_ProjectPointToNavmesh(SearchLocation, MineCheckProfile);
+		Vector BuildLocation = AIMESH_ProjectPointToNavmesh(&MineCheckProfile, SearchLocation);
 
-		if (BuildLocation != ZERO_VECTOR)
+		if (!vIsZero(BuildLocation))
 		{
 			return BuildLocation;
 		}
@@ -1956,9 +1916,9 @@ Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)
 	{
 		Vector SearchLocation = StructureToMine->Location - (RightVector * Size);
 
-		Vector BuildLocation = UTIL_ProjectPointToNavmesh(SearchLocation, MineCheckProfile);
+		Vector BuildLocation = AIMESH_ProjectPointToNavmesh(&MineCheckProfile, SearchLocation);
 
-		if (BuildLocation != ZERO_VECTOR)
+		if (!vIsZero(BuildLocation))
 		{
 			return BuildLocation;
 		}
@@ -2159,7 +2119,7 @@ EAIStructureType UTIL_GetChamberTypeForHiveTech(EAIHiveTechStatus HiveTech)
 {
 	switch (HiveTech)
 	{
-		case EAIHiveTechStatus::HIVE_TECH_DEFENCE:
+		case EAIHiveTechStatus::HIVE_TECH_DEFENSE:
 			return EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
 		case EAIHiveTechStatus::HIVE_TECH_MOVEMENT:
 			return EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
@@ -2219,9 +2179,9 @@ const vector<AvHAIResourceNode*> AITAC_GetAllResourceNodes()
 	return Results;
 }
 
-const vector<AvHAIHiveDefinition*> AITAC_GetAllHives()
+const vector<AvHAIHive*> AITAC_GetAllHives()
 {
-	vector<AvHAIHiveDefinition*> Results;
+	vector<AvHAIHive*> Results;
 
 	for (auto it = Hives.begin(); it != Hives.end(); it++)
 	{
@@ -2231,9 +2191,9 @@ const vector<AvHAIHiveDefinition*> AITAC_GetAllHives()
 	return Results;
 }
 
-const vector<AvHAIHiveDefinition*> AITAC_GetAllTeamHives(AvHTeamNumber Team, bool bFullyBuiltOnly)
+const vector<AvHAIHive*> AITAC_GetAllTeamHives(AvHTeamNumber Team, bool bFullyBuiltOnly)
 {
-	vector<AvHAIHiveDefinition*> Results;
+	vector<AvHAIHive*> Results;
 
 	for (auto it = Hives.begin(); it != Hives.end(); it++)
 	{
@@ -2332,7 +2292,7 @@ bool AITAC_IsAlienUpgradeAvailableForTeam(AvHTeamNumber Team, EAIHiveTechStatus 
 
 	switch (DesiredTech)
 	{
-		case EAIHiveTechStatus::HIVE_TECH_DEFENCE:
+		case EAIHiveTechStatus::HIVE_TECH_DEFENSE:
 			SearchType = EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
 			break;
 		case EAIHiveTechStatus::HIVE_TECH_MOVEMENT:
@@ -2395,4 +2355,116 @@ void AvHAITeamStartingLocation::RefreshReachabilityMap()
 			continue;
 		}
 	}
+}
+
+void AvHAIBuildableStructure::ClearNavInformation()
+{
+	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
+	{
+		NavTempObstacle* ThisObstacle = (*ObsIt);
+
+		if (!ThisObstacle || !ThisObstacle->IsValid()) { continue; }
+
+		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
+	}
+
+	for (auto ConnIt = OffMeshConnections.begin(); ConnIt != OffMeshConnections.end(); ConnIt++)
+	{
+		NavOffMeshConnection* ThisConnection = (*ConnIt);
+
+		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+
+		AIMESH_RemoveOffMeshConnection(ThisConnection);
+	}
+
+	TempObstacles.clear();
+	OffMeshConnections.clear();
+}
+
+void AvHAIHive::Update()
+{
+	if (!IsValid()) { return; }
+
+	TechStatus = UTIL_GetHiveTechStatusFromMessageID(HiveEntity->GetTechnology());
+	bIsUnderAttack = GetGameRules()->GetIsEntityUnderAttack(ENTINDEX(Edict));
+
+	OwningTeam = HiveEntity->GetTeamNumber();
+
+	const EAIHiveStatus PreviousStatus = Status;
+
+	Status = (HiveEntity->GetIsActive())
+		? EAIHiveStatus::HIVE_STATUS_BUILT
+		: (HiveEntity->GetIsSpawning()) ? EAIHiveStatus::HIVE_STATUS_BUILDING : EAIHiveStatus::HIVE_STATUS_UNBUILT;
+
+	HealthPercent = (IsBuilt())
+		? (Edict->v.health / Edict->v.max_health)
+		: 1.0f;
+
+	if (PreviousStatus != Status)
+	{
+		OnBuiltStatusChanged(PreviousStatus, Status);
+	}
+
+}
+
+void AvHAIHive::OnBuiltStatusChanged(const EAIHiveStatus OldStatus, const EAIHiveStatus NewStatus)
+{
+	// Gone from the "ghost" to a solid hive. Add temporary obstacles.
+	if (OldStatus == EAIHiveStatus::HIVE_STATUS_UNBUILT)
+	{
+		NavMeshList MeshList = AIMESH_GetAllNavMeshes();
+
+		if (MeshList.size() == 0) { return; }
+
+		const float HiveWidth = fmaxf(Edict->v.size.x, Edict->v.size.y);
+		const float HiveHeight = Edict->v.size.z;
+
+		const EAINavArea NewObstacleType = (OwningTeam == GetGameRules()->GetTeamANumber())
+			? EAINavArea::NAV_AREA_BLOCKAGE_TEAM1
+			: EAINavArea::NAV_AREA_BLOCKAGE_TEAM2;
+
+		for (NavMesh* Mesh : MeshList)
+		{
+			NavTempObstacle* NewObstacle = AIMESH_AddTemporaryObstacle(Mesh->MeshIndex, UTIL_GetCentreOfEntity(Edict), HiveWidth, HiveHeight, NewObstacleType);
+
+			if (NewObstacle)
+			{
+				TempObstacles.push_back(NewObstacle);
+			}
+		}
+
+		// TODO: Add off-mesh connections here so aliens can eventually use hives to teleport around
+
+		return;
+	}
+
+	// Hive was destroyed
+	if (NewStatus == EAIHiveStatus::HIVE_STATUS_UNBUILT)
+	{
+		ClearNavInformation();
+	}
+}
+
+void AvHAIHive::ClearNavInformation()
+{
+	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
+	{
+		NavTempObstacle* ThisObstacle = (*ObsIt);
+
+		if (!ThisObstacle || !ThisObstacle->IsValid()) { continue; }
+
+		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
+	}
+
+	for (auto ConnIt = OffMeshConnections.begin(); ConnIt != OffMeshConnections.end(); ConnIt++)
+	{
+		NavOffMeshConnection* ThisConnection = (*ConnIt);
+
+		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+
+		AIMESH_RemoveOffMeshConnection(ThisConnection);
+	}
+
+	TempObstacles.clear();
+	OffMeshConnections.clear();
 }
