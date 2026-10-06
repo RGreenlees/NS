@@ -619,8 +619,10 @@ dtStatus dtTileCache::queryTiles(const float* bmin, const float* bmax,
 }
 
 dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
-							 bool* upToDate)
+							 bool* upToDate, bool* workDone)
 {
+	if (workDone) { *workDone = false; }
+
 	if (m_nupdate == 0)
 	{
 		// Process requests.
@@ -772,6 +774,7 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 	// Process updates
 	if (m_nupdate)
 	{
+		if (workDone) { *workDone = true; }
 		// Build mesh
 		const dtCompressedTileRef ref = m_update[0];
 		status = buildNavMeshTile(ref, navmesh);
@@ -831,6 +834,7 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 				navmesh->baseOffMeshLinks(con);
 				navmesh->GlobalOffMeshLinks(con);
 				con->state = DT_OFFMESH_CLEAN;
+				if (workDone) { *workDone = true; }
 			}
 
 			if (con->state == DT_OFFMESH_REMOVING)
@@ -841,6 +845,7 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 					con->salt++;
 				con->next = m_nextFreeOffMeshConnection;
 				m_nextFreeOffMeshConnection = con;
+				if (workDone) { *workDone = true; }
 			}
 		}
 	}
