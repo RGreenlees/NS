@@ -15,6 +15,7 @@
 #include <dlls/extdll.h>
 #include <dlls/util.h>
 #include "DetourNavMeshQuery.h"
+#include "AvHAIHelper.h"
 
 // How far a bot can be from a useable object when trying to interact with it. Used also for melee attacks. We make it slightly less than actual to avoid edge cases
 constexpr float max_ai_use_reach = 55.0f;

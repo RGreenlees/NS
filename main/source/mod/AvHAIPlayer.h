@@ -23,6 +23,405 @@ static const float f_fnwidth = f_fnheight * BOT_ASPECT_RATIO;
 static const float f_ffheight = 2.0f * tan((BOT_FOV * 0.0174532925f) * 0.5f) * BOT_MAX_VIEW;
 static const float f_ffwidth = f_ffheight * BOT_ASPECT_RATIO;
 
+// Bot's role on the team. For marines, this only governs what they do when left to their own devices.
+// Marine bots will always listen to orders from the commander regardless of role.
+enum class EAIPlayerRole
+{
+	BOT_ROLE_NONE,			 // No defined role
+
+	// General Roles
+
+	BOT_ROLE_FIND_RESOURCES, // Will hunt for uncapped resource nodes and cap them. Will attack enemy resource towers
+	BOT_ROLE_SWEEPER,		 // Defensive role to protect infrastructure and build at base. Will patrol to keep outposts secure
+	BOT_ROLE_ASSAULT,		 // Will go to attack the enemy base. In combat mode, used for Fade-focus aliens
+
+	// Marine-only Roles
+
+	BOT_ROLE_COMMAND,		 // Will attempt to take command
+	BOT_ROLE_BOMBARDIER,	 // Bot is armed with a GL and wants to wreck your shit. In combat mode, used for Onos-focus aliens
+
+	// Alien-only roles
+
+	BOT_ROLE_BUILDER,		 // Will focus on building chambers and hives. Stays gorge most of the time
+	BOT_ROLE_HARASS		 // Focuses on taking down enemy resource nodes and hunting the enemy
+};
+
+enum class EAICombatStrategy
+{
+	COMBAT_STRATEGY_IGNORE = 0, // Don't engage this enemy
+	COMBAT_STRATEGY_AMBUSH,		// Set up an ambush for this enemy
+	COMBAT_STRATEGY_RETREAT,	// Retreat and find health
+	COMBAT_STRATEGY_SKIRMISH,	// Maintain distance, whittle down their health from range and generally be a pain the arse
+	COMBAT_STRATEGY_ATTACK		// Attack the enemy
+};
+
+struct AvHAIMovementInput
+{
+	float			ForwardMove = 0.0f;
+	float			SideMove = 0.0f;
+	float			UpMove = 0.0f;
+	int				Button = 0;
+	int				Impulse = 0;
+	Vector			RequiredLookLocation = ZERO_VECTOR; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
+	Vector			DesiredLookLocation = ZERO_VECTOR;  // Where the bot might want to look if they're not doing a precise movement (e.g. an enemy target)
+	EAIWeaponId		RequiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot MUST switch to for movement purposes (e.g. leap/blink)
+	EAIWeaponId		DesiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
+	Vector			DesiredMoveDirection = ZERO_VECTOR;
+	Vector			VelocityOverride = ZERO_VECTOR; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
+	bool			bHasAttemptedJump = false;
+	bool			bShouldWalk = false;
+	bool			bShouldCrouch = false;
+
+	void Clear()
+	{
+		ForwardMove = 0.0f;
+		SideMove = 0.0f;
+		UpMove = 0.0f;
+		Button = 0;
+		Impulse = 0;
+		RequiredLookLocation = ZERO_VECTOR;
+		DesiredLookLocation = ZERO_VECTOR;
+		RequiredWeapon = EAIWeaponId::WEAPON_INVALID;
+		DesiredWeapon = EAIWeaponId::WEAPON_INVALID;
+		DesiredMoveDirection = ZERO_VECTOR;
+		VelocityOverride = ZERO_VECTOR;
+		bHasAttemptedJump = false;
+		bShouldWalk = false;
+		bShouldCrouch = false;
+	}
+
+	void ClearMovementOutputs()
+	{
+		ForwardMove = 0.0f;
+		SideMove = 0.0f;
+		UpMove = 0.0f;
+	}
+
+	void GenerateMovementOutputs(const Vector& CurrentViewAngles, float MaxSpeed);
+};
+
+
+struct AvHAIViewInfo
+{
+	Vector InterpolatingViewTarget = ZERO_VECTOR;
+	Vector CurrentInterpolatedView = ZERO_VECTOR;
+	Vector LookTargetLocation = g_vecZero; // This is the bot's current desired look target. Could be an enemy (see LookTarget), or point of interest
+	Vector MoveLookLocation = g_vecZero; // If the bot has to look somewhere specific for movement (e.g. up for a ladder or wall-climb), this will override LookTargetLocation so the bot doesn't get distracted and mess the move up
+	bool bSnapView = false; // Use for rapid, precise snapping of the bot's view to the target. Useful if the bot requires more precise view angles for movement or other reasons
+	float LastTargetTrackUpdate = 0.0f; // Add a delay to how frequently a bot can track a target's movements
+	float ViewInterpolationSpeed = 0.0f; // How fast should the bot turn its view for this interpolated movement? Depends on distance to turn
+	float ViewInterpStartedTime = 0.0f; // Used for interpolation
+
+	float ViewUpdateRate = 0.2f; // How frequently the bot can react to new sightings of enemies etc.
+	float LastViewUpdateTime = 0.0f; // Used to throttle view updates based on ViewUpdateRate
+
+	AvHBotViewFrustumPlane ViewFrustumPlanes[6]; // Bot's view frustum. Essentially, their "screen" for determining visibility of stuff
+};
+
+
+struct AvHAIMoveTask
+{
+	EAIMovementTaskType TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
+	Vector TaskLocation = ZERO_VECTOR;
+	const edict_t* TaskTarget = nullptr;
+	const edict_t* TriggerToActivate = nullptr;
+	AvHAIPath TaskPath;
+
+	void Clear()
+	{
+		TaskPath.Clear();
+		TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
+		TaskLocation = ZERO_VECTOR;
+		TaskTarget = nullptr;
+		TriggerToActivate = nullptr;
+	}
+
+	bool HasPath() const
+	{
+		return TaskPath.IsValidPath();
+	}
+
+	bool IsValid() const
+	{
+		return TaskType != EAIMovementTaskType::MOVE_TASK_NONE;
+	}
+};
+typedef std::vector<AvHAIMoveTask> AIMoveTaskList;
+
+struct AvHAIStuckTracker
+{
+	float LastStuckCheckTime = 0.0f; // Last time the bot checked if it had successfully moved
+	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
+	Vector LastBotPosition = g_vecZero;
+	Vector MoveDestination = g_vecZero;
+	bool bPathFollowFailed = false;
+
+	void Clear()
+	{
+		LastStuckCheckTime = 0.0f;
+		TotalStuckTime = 0.0f;
+		LastBotPosition = g_vecZero;
+		MoveDestination = g_vecZero;
+		bPathFollowFailed = false;
+	}
+};
+
+// Pending message a bot wants to say. Allows for a delay in sending a message to simulate typing, or prevent too many messages on the same frame
+struct AvHAIBotMsg
+{
+	char Message[64]; // Message to send
+	float SendTime = 0.0f; // When the bot should send this message
+	bool bIsPending = false; // Represents a valid pending message
+	bool bIsTeamSay = false; // Is this a team-only message?
+};
+typedef std::vector<AvHAIBotMsg> AvHAIPendingMessageList;
+
+struct AvHAIGuardInfo
+{
+	Vector GuardLocation = g_vecZero; // What position are we guarding?
+	Vector GuardStandPosition = g_vecZero; // Where the bot should stand to guard position (moves around a bit)
+	std::vector<Vector> GuardPoints; // All potential areas to watch that an enemy could approach from
+	int NumGuardPoints = 0; // How many watch areas there are for the current location
+	Vector GuardLookLocation = g_vecZero; // Which area are we currently watching?
+	float GuardStartLookTime = 0.0f; // When did we start watching the current area?
+	float ThisGuardLookTime = 0.0f; // How long should we watch this area for?
+	float ThisGuardStandTime = 0.0f; // How long should we watch this area for?
+	float GuardStartStandTime = 0.0f; // How long should we watch this area for?
+};
+
+// Bot skill settings. Affects things like aim accuracy and speed.
+struct AvHAISkillLevel
+{
+	float marine_bot_reaction_time = 0.2f; // How quickly the bot will react to seeing an enemy
+	float marine_bot_aim_skill = 0.5f; // How quickly the bot can lock on to an enemy
+	float marine_bot_motion_tracking_skill = 0.5f; // How well the bot can follow an enemy target's motion
+	float marine_bot_view_speed = 1.0f; // How fast a bot can spin its view to aim in a given direction
+	float alien_bot_reaction_time = 0.2f; // How quickly the bot will react to seeing an enemy
+	float alien_bot_aim_skill = 0.5f; // How quickly the bot can lock on to an enemy
+	float alien_bot_motion_tracking_skill = 0.5f; // How well the bot can follow an enemy target's motion
+	float alien_bot_view_speed = 0.5f; // How fast a bot can spin its view to aim in a given direction
+};
+
+// A bot task is a goal the bot wants to perform, such as attacking a structure, placing a structure etc. NOT USED BY COMMANDER
+struct AvHAIPlayerTask
+{
+	EAITaskType TaskType = EAITaskType::TASK_NONE; // Task Type (e.g. build, attack, defend, heal etc)
+	Vector TaskLocation = g_vecZero; // Task location, if task needs one (e.g. where to place structure for TASK_BUILD)
+	edict_t* TaskTarget = nullptr; // Reference to a target, if task needs one (e.g. TASK_ATTACK)
+	edict_t* TaskSecondaryTarget = nullptr; // Secondary target, if task needs one (e.g. TASK_REINFORCE)
+	EAIStructureType StructureType = EAIStructureType::STRUCTURE_NONE; // For Gorges, what structure to build (if TASK_BUILD)
+	float TaskStartedTime = 0.0f; // When the bot started this task. Helps time-out if the bot gets stuck trying to complete it
+	bool bIssuedByCommander = false; // Was this task issued by the commander? Top priority if so
+	bool bTargetIsPlayer = false; // Is the TaskTarget a player?
+	bool bTaskIsUrgent = false; // Determines whether this task is prioritised over others if bot has multiple
+	bool bIsWaitingForBuildLink = false; // If true, Gorge has sent the build impulse and is waiting to see if the building materialised
+	float LastBuildAttemptTime = 0.0f; // When did the Gorge last try to place a structure?
+	int BuildAttempts = 0; // How many attempts the Gorge has tried to place it, so it doesn't keep trying forever
+	AvHMessageID Evolution = MESSAGE_NULL; // Used by TASK_EVOLVE to determine what to evolve into
+	float TaskLength = 0.0f; // If a task has gone on longer than this time, it will be considered completed
+};
+
+// Contains the bot's current navigation info, such as current path
+struct AvHAINavStatus
+{
+	Vector LastNavMeshCheckPosition = ZERO_VECTOR;
+	Vector LastNavMeshPosition = ZERO_VECTOR; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
+	Vector LastOpenLocation = ZERO_VECTOR; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
+
+	int CurrentMoveType = MOVETYPE_NONE; // Tracks the edict's current movement type
+
+	unsigned int CurrentPoly = 0; // Which nav mesh poly the bot is currently on
+
+	float LastStuckCheckTime = 0.0f; // Last time the bot checked if it had successfully moved
+	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
+	float LastDistanceFromDestination = 0.0f; // How far from its destination was it last stuck check
+
+	Vector StuckCheckMoveLocation = ZERO_VECTOR; // Where is the bot trying to go that we're checking if they're stuck?
+	Vector UnstuckMoveLocation = ZERO_VECTOR; // If the bot is unable to find a path, blindly move here to try and fix the problem
+
+	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
+	float AirStartedTime = 0.0f; // When the bot left the ground if in the air
+	float LeapAttemptedTime = 0.0f; // When the bot last attempted to leap/blink. Avoid spam that sends it flying around too fast
+	bool IsOnGround = true; // Is the bot currently on the ground, or on a ladder?
+	bool bHasAttemptedJump = false; // Last frame, the bot tried a jump. If the bot is still on the ground, it probably tried to jump in a vent or something
+	float LastFlapTime = 0.0f; // When the bot last flapped its wings (if Lerk). Prevents per-frame spam draining adrenaline
+
+	bool bShouldWalk = false; // Should the bot walk at this point?
+
+	EAIMoveStyle PreviousMoveStyle = EAIMoveStyle::MOVESTYLE_NORMAL; // Previous desired move style (e.g. normal, ambush, hide). Will trigger new path calculations if this changes
+	EAIMoveStyle MoveStyle = EAIMoveStyle::MOVESTYLE_NORMAL; // Current desired move style (e.g. normal, ambush, hide). Will trigger new path calculations if this changes
+	float LastPathCalcTime = 0.0f; // When the bot last calculated a path, to limit how frequently it can recalculate
+
+	float NextForceRecalc = 0.0f; // If set, then the bot will force-recalc its current path
+
+	NavAgentProfile NavProfile;
+	bool bNavProfileChanged = false;
+
+	AvHAIStuckTracker StuckInfo;
+
+	EAINavMovementFlag SpecialMovementFlags = EAINavMovementFlag::NAV_FLAG_NONE; // Any special movement flags required for the current path (e.g. needs to pick up an item)
+
+	AIMoveTaskList MovementTasks;
+	AvHAIMoveTask UnstuckTask;
+
+	void Reset()
+	{
+		StuckInfo.Clear();
+		MovementTasks.clear();
+		UnstuckTask.Clear();
+	}
+
+	void ClearPath()
+	{
+		MovementTasks.clear();
+		UnstuckTask.Clear();
+	}
+};
+
+struct AvHAIPlayer
+{
+	AvHPlayer* Player = nullptr;
+	edict_t* Edict = nullptr;
+	AvHTeamNumber	Team = TEAM_IND;
+	AvHAIMovementInput NextFrameMovementInput;
+	byte			AdjustedMsec = 0;
+
+	bool bIsPendingKill = false;
+	bool bIsInactive = false;
+
+	float LastUseTime = 0.0f;
+
+	Vector SpawnLocation = g_vecZero;
+	Vector DesiredMovementDir = g_vecZero;
+	Vector CurrentEyePosition = g_vecZero;
+	Vector CurrentFloorPosition = g_vecZero;
+
+	Vector CollisionHullBottomLocation = g_vecZero;
+	Vector CollisionHullTopLocation = g_vecZero;
+
+	EAIWeaponId DesiredMoveWeapon = EAIWeaponId::WEAPON_INVALID;
+	EAIWeaponId DesiredCombatWeapon = EAIWeaponId::WEAPON_INVALID;
+
+	AvHBotViewFrustumPlane viewFrustum[6]; // Bot's view frustum. Essentially, their "screen" for determining visibility of stuff
+
+	AvHAIEnemyStatus TrackedEnemies[32];
+	int CurrentEnemy = -1;
+	EAICombatStrategy CurrentCombatStrategy = EAICombatStrategy::COMBAT_STRATEGY_ATTACK;
+	edict_t* CurrentEnemyRef = nullptr;
+
+	AvHAIPlayerTask PrimaryBotTask;
+	AvHAIPlayerTask SecondaryBotTask;
+	AvHAIPlayerTask WantsAndNeedsTask;
+	AvHAIPlayerTask CommanderTask; // Task assigned by the commander
+	AvHAIPlayerTask* CurrentTask = &PrimaryBotTask; // Bot's current task they're performing
+
+	float BotNextTaskEvaluationTime = 0.0f;
+
+	AvHAISkillLevel BotSkillSettings;
+
+	char PathStatus[128]; // Debug used to help figure out what's going on with a bot's path finding
+	char MoveStatus[128]; // Debug used to help figure out what's going on with a bot's steering
+
+	AvHAINavStatus BotNavInfo; // Bot's movement information, their current path, where in the path they are etc.
+
+	AvHAIPendingMessageList PendingMessages;
+
+	float LastCombatTime = 0.0f;
+
+	AvHAIGuardInfo GuardInfo;
+
+	float LastRequestTime = 0.0f; // When bot last used a voice line to request something. Prevents spam
+
+	float LastTeleportTime = 0.0f; // Last time the bot teleported somewhere
+
+	AvHAIViewInfo ViewInfo;
+
+	Vector DesiredLookDirection = g_vecZero; // What view angle is the bot currently turning towards
+	Vector InterpolatedLookDirection = g_vecZero; // Used to smoothly interpolate the bot's view rather than snap instantly like an aimbot
+	edict_t* LookTarget = nullptr; // Used to work out what view angle is needed to look at the desired entity
+	Vector LookTargetLocation = g_vecZero; // This is the bot's current desired look target. Could be an enemy (see LookTarget), or point of interest
+	Vector MoveLookLocation = g_vecZero; // If the bot has to look somewhere specific for movement (e.g. up for a ladder or wall-climb), this will override LookTargetLocation so the bot doesn't get distracted and mess the move up
+	bool bSnapView = false; // Use for rapid, precise snapping of the bot's view to the target. Useful if the bot requires more precise view angles for movement or other reasons
+	float LastTargetTrackUpdate = 0.0f; // Add a delay to how frequently a bot can track a target's movements
+	float ViewInterpolationSpeed = 0.0f; // How fast should the bot turn its view? Depends on distance to turn
+	float ViewInterpStartedTime = 0.0f; // Used for interpolation
+
+	float ViewUpdateRate = 0.2f; // How frequently the bot can react to new sightings of enemies etc.
+	float LastViewUpdateTime = 0.0f; // Used to throttle view updates based on ViewUpdateRate
+
+	Vector ViewForwardVector = g_vecZero; // Bot's current forward unit vector
+	Vector LastSafeLocation = g_vecZero;
+
+	EAIPlayerRole BotRole = EAIPlayerRole::BOT_ROLE_NONE;
+
+	int ExperiencePointsAvailable = 0; // How much experience the bot has to spend
+	AvHMessageID NextCombatModeUpgrade = MESSAGE_NULL;
+
+	float ThinkDelta = 0.0f; // How long since this bot last ran AIPlayerThink
+	float LastThinkTime = 0.0f; // When the bot last ran AIPlayerThink
+
+	float ServerUpdateDelta = 0.0f; // How long since we last called RunPlayerMove
+	float LastServerUpdateTime = 0.0f; // When we last called RunPlayerMove
+
+	float HearingThreshold = 0.0f; // How loud does a sound need to be before the bot detects it? This is set when hearing a sound so that louder sounds drown out quieter ones, and decrements quickly
+
+	int DebugValue = 0; // Used for debugging the bot
+
+	Vector DebugDestination = ZERO_VECTOR;
+
+	bool IsValid() const { return Player != nullptr && !FNullEnt(Edict) && !Edict->free; }
+	bool HasValidPath() const;
+	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
+	bool IsOnGround() const;
+	bool IsOnLadder() const;
+	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
+	bool CanCrouch() const;
+	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
+	enum_hull GetPlayerHull() const;
+	float GetPlayerRadius() const;
+	float GetPlayerHeight() const;
+	void AddMovementTask(AvHAIMoveTask& NewTask);
+	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
+	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
+	EAINavMoveResult ProgressMovementTasks();
+	Vector GetLocation() const { return Edict->v.origin; }
+	Vector GetVelocity() const { return Edict->v.velocity; }
+	Vector GetEyePosition() const;
+	void Jump(AvHAIMovementInput& Outputs, bool bDuckJump) const;
+	void Suicide();
+	bool IsDead() const;
+	float GetDesiredMovementSpeed(bool bShouldWalk) const;
+	Vector GetBottomOfHitbox() const;
+	Vector GetTopOfHitbox() const;
+	void CheckAndSendMessages();
+	void Think(float DeltaTime);
+	void StartThink(float DeltaTime);
+	void EndThink(float DeltaTime);
+	void UpdateView(float DeltaTime);
+	void BotUpdateDesiredViewRotation();
+	void InterpolateView(float DeltaTime);
+	void LookAt(const Vector& LocationTarget);
+	void LookAt(const edict_t* Target);
+	void UpdateViewFrustum();
+	bool IsObjectInFOV(const edict_t* Object) const;
+	bool UseObject(edict_t* Object, bool bUseContinuously = false);
+	void DropWeapon();
+	void ReloadWeapon();
+	void InterruptReload();
+	EAIWeaponId GetCurrentWeapon() const;
+	void LeaveCommChair();
+	void UpdateReceivedOrders();
+	void OnReceiveMoveOrder(const Vector& TargetLocation);
+	void OnReceiveBuildOrder(const edict_t* TargetObject);
+	void SwitchToWeapon(EAIWeaponId NewWeaponId);
+	void RequestEvolveUpgrade(EAIAlienUpgrade DesiredUpgrade);
+	void RequestEvolveLifeform(EAIAlienLifeform DesiredLifeform);
+	void Say(const char* ThingToSay, bool bTeamSay, float Delay = 0.0f);
+	bool ShouldThink() const;
+	void HearEnemy(const edict_t* EmittingEdict, float Volume);
+	void OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex);
+};
+
 
 Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer);
 

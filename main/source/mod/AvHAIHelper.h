@@ -6,6 +6,12 @@
 #include "AvHPlayer.h"
 #include "AvHAIConstants.h"
 
+template<class T> inline bool EnumHasAnyFlags(T a, T b) { return (static_cast<uint32>(a) & static_cast<uint32>(b)) > 0; }
+template<class T> inline bool EnumHasAllFlags(T a, T b) { return (static_cast<uint32>(a) & static_cast<uint32>(b)) == static_cast<uint32>(b); }
+template<class T> inline void EnumAddFlags(T& a, T b) { a = static_cast<T>(static_cast<uint32>(a) | static_cast<uint32>(b)); }
+template<class T> inline void EnumRemoveFlags(T& a, T b) { a = static_cast<T>(static_cast<uint32>(a) & ~static_cast<uint32>(b)); }
+template<class T> inline T EnumGetCombinedFlags(T a, T b) { return static_cast<T>(static_cast<uint32>(a) | static_cast<uint32>(b)); }
+
 bool UTIL_IsEdictActive(const edict_t* Edict);
 bool UTIL_QuickTrace(const edict_t* pEdict, const Vector& start, const Vector& end, bool bAllowStartSolid = false);
 bool UTIL_QuickHullTrace(const edict_t* pEdict, const Vector& start, const Vector& end, bool bAllowStartSolid = false);
