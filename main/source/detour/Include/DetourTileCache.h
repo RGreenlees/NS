@@ -122,7 +122,7 @@ public:
 	inline dtOffMeshConnection* getOffMeshConnection(const int i) const { return &m_offMeshConnections[i]; }
 
 	const dtTileCacheObstacle* getObstacleByRef(dtObstacleRef ref);
-	dtOffMeshConnection* dtTileCache::getOffMeshConnectionByRef(dtOffMeshConnectionRef ref);
+	dtOffMeshConnection* getOffMeshConnectionByRef(dtOffMeshConnectionRef ref);
 
 	dtObstacleRef getObstacleRef(const dtTileCacheObstacle* obmin) const;
 	dtOffMeshConnectionRef getOffMeshRef(const dtOffMeshConnection* con) const;
