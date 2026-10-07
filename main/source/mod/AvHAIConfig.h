@@ -4,6 +4,8 @@
 #define AVH_AI_CONFIG_H
 
 #include "AvHAIConstants.h"
+#include "AvHAITactical.h"
+#include "AvHAIPlayer.h"
 
 // Bot fill mode determines how bots should be automatically added/removed from teams
 enum class EAIFillMode

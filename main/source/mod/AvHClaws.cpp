@@ -5,7 +5,7 @@
 // Charles G. Cleveland, or in accordance with the terms and conditions stipulated in
 // the agreement/contract under which the contents have been supplied.
 //
-// Purpose: 
+// Purpose:
 //
 // $Workfile: AvHClaws.cpp $
 // $Date: 2002/11/22 21:28:16 $
@@ -98,7 +98,7 @@ int	AvHClaws::GetDeployAnimation() const
 	int theDeployAnimation = 27;
 
 	AvHWeaponID thePreviousID = this->GetPreviousWeaponID();
-	
+
 	switch(thePreviousID)
 	{
 	case AVH_ABILITY_CHARGE:
@@ -111,7 +111,7 @@ int	AvHClaws::GetDeployAnimation() const
 		theDeployAnimation = 15;
 		break;
 	}
-	
+
 	return theDeployAnimation;
 }
 
@@ -135,7 +135,7 @@ bool AvHClaws::GetFiresUnderwater() const
 {
 	return true;
 }
-	
+
 bool AvHClaws::GetIsDroppable() const
 {
 	return false;
@@ -160,7 +160,7 @@ char* AvHClaws::GetViewModel() const
 void AvHClaws::Precache(void)
 {
 	AvHAlienWeapon::Precache();
-	
+
 	PRECACHE_UNMODIFIED_SOUND(kClawsSound1);
 	PRECACHE_UNMODIFIED_SOUND(kClawsSound2);
 	PRECACHE_UNMODIFIED_SOUND(kClawsSound3);
@@ -168,25 +168,25 @@ void AvHClaws::Precache(void)
 	PRECACHE_UNMODIFIED_SOUND(kClawsHitSound1);
 	PRECACHE_UNMODIFIED_SOUND(kClawsHitSound2);
 	PRECACHE_UNMODIFIED_SOUND(kClawsKillSound);
-	
+
 	this->mEvent = PRECACHE_EVENT(1, kClawsEventName);
 }
 
 void AvHClaws::Spawn()
 {
-    AvHAlienWeapon::Spawn(); 
-	
+    AvHAlienWeapon::Spawn();
+
 	Precache();
-	
+
 	this->m_iId = AVH_WEAPON_CLAWS;
-	
+
     // Set our class name
 	this->pev->classname = MAKE_STRING(kwsClaws);
-	
+
 	SET_MODEL(ENT(this->pev), kNullModel);
-	
+
 	FallInit();// get ready to fall down.
-	
+
 }
 
 bool AvHClaws::UsesAmmo(void) const
@@ -206,7 +206,7 @@ void AvHClaws::FireProjectiles(void)
 	// TODO: Check team
 
 	float theDamage = this->mDamage*AvHPlayerUpgrade::GetAlienMeleeDamageUpgrade(this->m_pPlayer->pev->iuser4, AvHSHUGetIsWeaponFocusable(AvHWeaponID(this->m_iId)));
-	
+
 	// Do trace hull here
 	CBaseEntity* pHurt = this->m_pPlayer->CheckTraceHullAttack(kClawsRange, theDamage, this->GetDamageType());
 	if(pHurt)
@@ -214,7 +214,7 @@ void AvHClaws::FireProjectiles(void)
 		if(pHurt->pev->flags & (FL_MONSTER | FL_CLIENT))
 		{
             AvHSUKnockPlayerAbout(CBaseEntity::Instance(this->m_pPlayer->edict()), pHurt, 300);
-			
+
 			int theSoundIndex = RANDOM_LONG(0, 1);
 			char* theSoundToPlay = "";
 			switch(theSoundIndex)
@@ -226,7 +226,7 @@ void AvHClaws::FireProjectiles(void)
 				theSoundToPlay = kClawsHitSound2;
 				break;
 			}
-			
+
 			if(pHurt->pev->health <= 0)
 			{
 				theSoundToPlay = kClawsKillSound;
@@ -237,13 +237,13 @@ void AvHClaws::FireProjectiles(void)
 			CBaseEntity* theAttacker = this->m_pPlayer;
 			AvHSUExplosiveForce(pHurt->pev->origin, 100, theForceScalar, theAttacker, theAttacker);
 
-			AISND_RegisterNewSound(pHurt->entindex(), this->m_pPlayer->pev->origin, AI_SOUND_LANDING, 1.0f);
-			
+			AISND_RegisterNewSound(pHurt->entindex(), this->m_pPlayer->pev->origin, EAISoundType::AI_SOUND_SHOOT, 1.0f);
+
 			// Played in event now
 			//EMIT_SOUND_DYN(ENT(pev), CHAN_WEAPON, theSoundToPlay, 1.0, ATTN_NORM, 0, 100 + theAdrenalineFactor*30 + RANDOM_LONG(-3,3) );
 		}
 	}
 
-	#endif	
+	#endif
 }
 

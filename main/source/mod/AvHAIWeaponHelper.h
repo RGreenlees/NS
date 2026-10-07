@@ -5,6 +5,8 @@
 
 #include "AvHAIPlayer.h"
 
+class AvHPlayer;
+
 int GetPlayerCurrentWeaponClipAmmo(const AvHPlayer* Player);
 int GetPlayerCurrentWeaponMaxClipAmmo(const AvHPlayer* Player);
 int GetPlayerCurrentWeaponReserveAmmo(const AvHPlayer* Player);
@@ -54,6 +56,10 @@ EAIWeaponId OnosGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target)
 EAIWeaponId SkulkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
 EAIWeaponId GorgeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
 EAIWeaponId LerkGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target);
+
+EAIWeaponId UTIL_GetPlayerCurrentWeapon(const AvHPlayer* Player);
+
+bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon);
 
 float GetReloadTimeForWeapon(EAIWeaponId Weapon);
 

@@ -77,8 +77,6 @@ int AIMGR_GetNumHumanPlayersOnTeam(AvHTeamNumber Team);
 int AIMGR_GetNumHumanPlayersOnServer();
 int AIMGR_GetNumActiveHumanPlayers();
 
-int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, EAIPlayerRole Role, AvHAIPlayer* IgnoreAIPlayer);
-
 int AIMGR_GetNumHumansOfClassOnTeam(AvHTeamNumber Team, AvHUser3 PlayerType);
 
 bool AIMGR_IsBotEnabled();

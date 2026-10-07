@@ -1916,6 +1916,8 @@ const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgent
 			return ThisConnection;
 		}
 	}
+
+	return nullptr;
 }
 
 bool AIMAP_CanBoardPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& BoardingPoint, const Vector& DesiredStop)

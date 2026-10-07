@@ -5,7 +5,7 @@
 // Charles G. Cleveland, or in accordance with the terms and conditions stipulated in
 // the agreement/contract under which the contents have been supplied.
 //
-// Purpose: 
+// Purpose:
 //
 // $Workfile: AvHSwipe.cpp $
 // $Date: 2002/11/22 21:28:17 $
@@ -101,12 +101,12 @@ int	AvHSwipe::GetIdleAnimation() const
 	int theAnimation = 0;
 	const int kMax = 41;
 	int theRandomNumber = UTIL_SharedRandomLong(this->m_pPlayer->random_seed, 0, kMax);
-	
+
 	if(theRandomNumber == kMax)
 	{
 		// Return flavor anim
 		theAnimation = 2;
-	} 
+	}
 	else if(theRandomNumber < (kMax-1)/2)
 	{
 		theAnimation = 0;
@@ -115,7 +115,7 @@ int	AvHSwipe::GetIdleAnimation() const
 	{
 		theAnimation = 1;
 	}
-	
+
 	return theAnimation;
 }
 
@@ -129,9 +129,9 @@ int	AvHSwipe::GetDeployAnimation() const
 {
 	// Look at most recently used weapon and see if we can transition from it
 	int theDeployAnimation = 5;
-	
+
 	AvHWeaponID thePreviousID = this->GetPreviousWeaponID();
-	
+
 	switch(thePreviousID)
 	{
 	case AVH_WEAPON_SWIPE:
@@ -148,7 +148,7 @@ int	AvHSwipe::GetDeployAnimation() const
 		theDeployAnimation = 12;
 		break;
 	}
-	
+
 	return theDeployAnimation;
 }
 
@@ -179,7 +179,7 @@ char* AvHSwipe::GetViewModel() const
 void AvHSwipe::Precache(void)
 {
 	AvHAlienWeapon::Precache();
-	
+
 	PRECACHE_UNMODIFIED_SOUND(kSwipeSound1);
 	PRECACHE_UNMODIFIED_SOUND(kSwipeSound2);
 	PRECACHE_UNMODIFIED_SOUND(kSwipeSound3);
@@ -194,19 +194,19 @@ void AvHSwipe::Precache(void)
 
 void AvHSwipe::Spawn()
 {
-    AvHAlienWeapon::Spawn(); 
-	
+    AvHAlienWeapon::Spawn();
+
 	Precache();
-	
+
 	this->m_iId = AVH_WEAPON_SWIPE;
-	
+
     // Set our class name
 	this->pev->classname = MAKE_STRING(kwsSwipe);
-	
+
 	SET_MODEL(ENT(this->pev), kNullModel);
-	
+
 	FallInit();// get ready to fall down.
-	
+
 }
 
 bool AvHSwipe::UsesAmmo(void) const
@@ -226,7 +226,7 @@ void AvHSwipe::FireProjectiles(void)
 	// TODO: Check team
 
 	float theDamage = this->mDamage*AvHPlayerUpgrade::GetAlienMeleeDamageUpgrade(this->m_pPlayer->pev->iuser4, AvHSHUGetIsWeaponFocusable(AvHWeaponID(this->m_iId)));
-	
+
 	// Do trace hull here
 	CBaseEntity* pHurt = this->m_pPlayer->CheckTraceHullAttack(kSwipeRange, theDamage, this->GetDamageType());
 	if(pHurt)
@@ -234,7 +234,7 @@ void AvHSwipe::FireProjectiles(void)
 		if(pHurt->pev->flags & (FL_MONSTER | FL_CLIENT))
 		{
             AvHSUKnockPlayerAbout(CBaseEntity::Instance(this->m_pPlayer->edict()), pHurt, 300);
-			
+
 			int theSoundIndex = RANDOM_LONG(0, 1);
 			char* theSoundToPlay = NULL;
 			switch(theSoundIndex)
@@ -246,20 +246,20 @@ void AvHSwipe::FireProjectiles(void)
 				theSoundToPlay = kSwipeHitSound2;
 				break;
 			}
-			
+
 			if(pHurt->pev->health <= 0)
 			{
 				theSoundToPlay = kSwipeKillSound;
 			}
-			
+
 			ASSERT(theSoundToPlay);
 
 			EMIT_SOUND(ENT(pev), CHAN_WEAPON, theSoundToPlay, 1.0, ATTN_NORM);
 
-			AISND_RegisterNewSound(pHurt->entindex(), this->m_pPlayer->pev->origin, AI_SOUND_LANDING, 1.0f);
+			AISND_RegisterNewSound(pHurt->entindex(), this->m_pPlayer->pev->origin, EAISoundType::AI_SOUND_SHOOT, 1.0f);
 		}
 	}
 
-	#endif	
+	#endif
 }
 

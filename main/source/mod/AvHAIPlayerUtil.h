@@ -5,6 +5,8 @@
 
 #include "AvHPlayer.h"
 #include "AvHAIConstants.h"
+#include "AvHAIWeaponHelper.h"
+#include "AvHAITactical.h"
 
 // How far a bot can be from a useable object when trying to interact with it. Used also for melee attacks
 static const float max_player_use_reach = 55.0f;
@@ -149,14 +151,14 @@ bool PlayerHasHeavyArmour(const edict_t* Player);
 
 bool PlayerHasJetpack(const edict_t* Player);
 
-bool PlayerHasWeapon(const AvHPlayer* Player, const AvHAIWeapon DesiredCombatWeapon);
+bool PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon);
 bool PlayerHasEquipment(edict_t* Player);
 bool PlayerHasSpecialWeapon(const AvHPlayer* Player);
 
 bool UTIL_PlayerHasLOSToEntity(const edict_t* Player, const edict_t* Target, const float MaxRange, const bool bUseHullSweep);
 bool UTIL_PlayerHasLOSToLocation(const edict_t* Player, const Vector Target, const float MaxRange);
 
-bool PlayerHasAlienUpgradeOfType(const edict_t* Player, const HiveTechStatus TechType);
+bool PlayerHasAlienUpgradeOfType(const edict_t* Player, const EAIHiveTechStatus TechType);
 
 float GetPlayerCloakAmount(const edict_t* Player);
 

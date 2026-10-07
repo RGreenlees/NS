@@ -834,26 +834,6 @@ int AIMGR_GetNumActiveHumanPlayers()
 	return Result;
 }
 
-int AIMGR_GetNumAIPlayersWithRoleOnTeam(AvHTeamNumber Team, EAIPlayerRole Role, AvHAIPlayer* IgnoreAIPlayer)
-{
-	int Result = 0;
-
-	for (auto it = ActiveAIPlayers.begin(); it != ActiveAIPlayers.end(); it++)
-	{
-		if (&(*it) == IgnoreAIPlayer) { continue; }
-
-		if (it->Player->GetTeam() == Team && IsPlayerActiveInGame((*it).Edict))
-		{
-			if (it->BotRole == Role)
-			{
-				Result++;
-			}
-		}
-	}
-
-	return Result;
-}
-
 int AIMGR_GetNumHumansOfClassOnTeam(AvHTeamNumber Team, AvHUser3 PlayerType)
 {
 	int Result = 0;
@@ -1283,7 +1263,7 @@ void AIDEBUG_DisplayTeamGoals()
 
 		if (!FNullEnt(ThisPlayer->CurrentTask->TaskTarget))
 		{
-			sprintf(interbuf, "%s: %s (%s)\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType), UTIL_StructTypeToChar(UTIL_IUSER3ToStructureType(ThisPlayer->CurrentTask->TaskTarget->v.iuser3)));
+			sprintf(interbuf, "%s: %s (%s)\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType), AITAC_StructTypeToChar(UTIL_IUSER3ToStructureType(ThisPlayer->CurrentTask->TaskTarget->v.iuser3)));
 		}
 		else
 		{
@@ -1306,7 +1286,7 @@ void AIDEBUG_DisplayTeamGoals()
 
 		if (!FNullEnt(ThisPlayer->CurrentTask->TaskTarget))
 		{
-			sprintf(interbuf, "%s: %s (%s)\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType), UTIL_StructTypeToChar(UTIL_IUSER3ToStructureType(ThisPlayer->CurrentTask->TaskTarget->v.iuser3)));
+			sprintf(interbuf, "%s: %s (%s)\n", STRING(ThisPlayer->Player->pev->netname), UTIL_TaskTypeToChar(ThisPlayer->CurrentTask->TaskType), AITAC_StructTypeToChar(UTIL_IUSER3ToStructureType(ThisPlayer->CurrentTask->TaskTarget->v.iuser3)));
 		}
 		else
 		{

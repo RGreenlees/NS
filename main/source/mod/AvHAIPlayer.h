@@ -3,6 +3,10 @@
 
 #include "AvHPlayer.h"
 #include "AvHAIConstants.h"
+#include "AvHAINavConstants.h"
+#include "AvHAIMath.h"
+#include "AvHAITactical.h"
+#include "AvHAINavigation.h"
 
 // These define the bot's view frustum sides
 #define FRUSTUM_PLANE_TOP 0
@@ -23,29 +27,6 @@ static const float f_fnwidth = f_fnheight * BOT_ASPECT_RATIO;
 static const float f_ffheight = 2.0f * tan((BOT_FOV * 0.0174532925f) * 0.5f) * BOT_MAX_VIEW;
 static const float f_ffwidth = f_ffheight * BOT_ASPECT_RATIO;
 
-// Bot's role on the team. For marines, this only governs what they do when left to their own devices.
-// Marine bots will always listen to orders from the commander regardless of role.
-enum class EAIPlayerRole
-{
-	BOT_ROLE_NONE,			 // No defined role
-
-	// General Roles
-
-	BOT_ROLE_FIND_RESOURCES, // Will hunt for uncapped resource nodes and cap them. Will attack enemy resource towers
-	BOT_ROLE_SWEEPER,		 // Defensive role to protect infrastructure and build at base. Will patrol to keep outposts secure
-	BOT_ROLE_ASSAULT,		 // Will go to attack the enemy base. In combat mode, used for Fade-focus aliens
-
-	// Marine-only Roles
-
-	BOT_ROLE_COMMAND,		 // Will attempt to take command
-	BOT_ROLE_BOMBARDIER,	 // Bot is armed with a GL and wants to wreck your shit. In combat mode, used for Onos-focus aliens
-
-	// Alien-only roles
-
-	BOT_ROLE_BUILDER,		 // Will focus on building chambers and hives. Stays gorge most of the time
-	BOT_ROLE_HARASS		 // Focuses on taking down enemy resource nodes and hunting the enemy
-};
-
 enum class EAICombatStrategy
 {
 	COMBAT_STRATEGY_IGNORE = 0, // Don't engage this enemy
@@ -62,12 +43,12 @@ struct AvHAIMovementInput
 	float			UpMove = 0.0f;
 	int				Button = 0;
 	int				Impulse = 0;
-	Vector			RequiredLookLocation = ZERO_VECTOR; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
-	Vector			DesiredLookLocation = ZERO_VECTOR;  // Where the bot might want to look if they're not doing a precise movement (e.g. an enemy target)
+	Vector			RequiredLookLocation = g_vecZero; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
+	Vector			DesiredLookLocation = g_vecZero;  // Where the bot might want to look if they're not doing a precise movement (e.g. an enemy target)
 	EAIWeaponId		RequiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot MUST switch to for movement purposes (e.g. leap/blink)
 	EAIWeaponId		DesiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
-	Vector			DesiredMoveDirection = ZERO_VECTOR;
-	Vector			VelocityOverride = ZERO_VECTOR; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
+	Vector			DesiredMoveDirection = g_vecZero;
+	Vector			VelocityOverride = g_vecZero; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
 	bool			bHasAttemptedJump = false;
 	bool			bShouldWalk = false;
 	bool			bShouldCrouch = false;
@@ -79,12 +60,12 @@ struct AvHAIMovementInput
 		UpMove = 0.0f;
 		Button = 0;
 		Impulse = 0;
-		RequiredLookLocation = ZERO_VECTOR;
-		DesiredLookLocation = ZERO_VECTOR;
+		RequiredLookLocation = g_vecZero;
+		DesiredLookLocation = g_vecZero;
 		RequiredWeapon = EAIWeaponId::WEAPON_INVALID;
 		DesiredWeapon = EAIWeaponId::WEAPON_INVALID;
-		DesiredMoveDirection = ZERO_VECTOR;
-		VelocityOverride = ZERO_VECTOR;
+		DesiredMoveDirection = g_vecZero;
+		VelocityOverride = g_vecZero;
 		bHasAttemptedJump = false;
 		bShouldWalk = false;
 		bShouldCrouch = false;
@@ -103,8 +84,8 @@ struct AvHAIMovementInput
 
 struct AvHAIViewInfo
 {
-	Vector InterpolatingViewTarget = ZERO_VECTOR;
-	Vector CurrentInterpolatedView = ZERO_VECTOR;
+	Vector InterpolatingViewTarget = g_vecZero;
+	Vector CurrentInterpolatedView = g_vecZero;
 	Vector LookTargetLocation = g_vecZero; // This is the bot's current desired look target. Could be an enemy (see LookTarget), or point of interest
 	Vector MoveLookLocation = g_vecZero; // If the bot has to look somewhere specific for movement (e.g. up for a ladder or wall-climb), this will override LookTargetLocation so the bot doesn't get distracted and mess the move up
 	bool bSnapView = false; // Use for rapid, precise snapping of the bot's view to the target. Useful if the bot requires more precise view angles for movement or other reasons
@@ -116,54 +97,6 @@ struct AvHAIViewInfo
 	float LastViewUpdateTime = 0.0f; // Used to throttle view updates based on ViewUpdateRate
 
 	AvHBotViewFrustumPlane ViewFrustumPlanes[6]; // Bot's view frustum. Essentially, their "screen" for determining visibility of stuff
-};
-
-
-struct AvHAIMoveTask
-{
-	EAIMovementTaskType TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
-	Vector TaskLocation = ZERO_VECTOR;
-	const edict_t* TaskTarget = nullptr;
-	const edict_t* TriggerToActivate = nullptr;
-	AvHAIPath TaskPath;
-
-	void Clear()
-	{
-		TaskPath.Clear();
-		TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
-		TaskLocation = ZERO_VECTOR;
-		TaskTarget = nullptr;
-		TriggerToActivate = nullptr;
-	}
-
-	bool HasPath() const
-	{
-		return TaskPath.IsValidPath();
-	}
-
-	bool IsValid() const
-	{
-		return TaskType != EAIMovementTaskType::MOVE_TASK_NONE;
-	}
-};
-typedef std::vector<AvHAIMoveTask> AIMoveTaskList;
-
-struct AvHAIStuckTracker
-{
-	float LastStuckCheckTime = 0.0f; // Last time the bot checked if it had successfully moved
-	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
-	Vector LastBotPosition = g_vecZero;
-	Vector MoveDestination = g_vecZero;
-	bool bPathFollowFailed = false;
-
-	void Clear()
-	{
-		LastStuckCheckTime = 0.0f;
-		TotalStuckTime = 0.0f;
-		LastBotPosition = g_vecZero;
-		MoveDestination = g_vecZero;
-		bPathFollowFailed = false;
-	}
 };
 
 // Pending message a bot wants to say. Allows for a delay in sending a message to simulate typing, or prevent too many messages on the same frame
@@ -221,12 +154,30 @@ struct AvHAIPlayerTask
 	float TaskLength = 0.0f; // If a task has gone on longer than this time, it will be considered completed
 };
 
+struct AvHAIStuckTracker
+{
+	float LastStuckCheckTime = 0.0f; // Last time the bot checked if it had successfully moved
+	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
+	Vector LastBotPosition = g_vecZero;
+	Vector MoveDestination = g_vecZero;
+	bool bPathFollowFailed = false;
+
+	void Clear()
+	{
+		LastStuckCheckTime = 0.0f;
+		TotalStuckTime = 0.0f;
+		LastBotPosition = g_vecZero;
+		MoveDestination = g_vecZero;
+		bPathFollowFailed = false;
+	}
+};
+
 // Contains the bot's current navigation info, such as current path
 struct AvHAINavStatus
 {
-	Vector LastNavMeshCheckPosition = ZERO_VECTOR;
-	Vector LastNavMeshPosition = ZERO_VECTOR; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
-	Vector LastOpenLocation = ZERO_VECTOR; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
+	Vector LastNavMeshCheckPosition = g_vecZero;
+	Vector LastNavMeshPosition = g_vecZero; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
+	Vector LastOpenLocation = g_vecZero; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
 
 	int CurrentMoveType = MOVETYPE_NONE; // Tracks the edict's current movement type
 
@@ -236,8 +187,8 @@ struct AvHAINavStatus
 	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
 	float LastDistanceFromDestination = 0.0f; // How far from its destination was it last stuck check
 
-	Vector StuckCheckMoveLocation = ZERO_VECTOR; // Where is the bot trying to go that we're checking if they're stuck?
-	Vector UnstuckMoveLocation = ZERO_VECTOR; // If the bot is unable to find a path, blindly move here to try and fix the problem
+	Vector StuckCheckMoveLocation = g_vecZero; // Where is the bot trying to go that we're checking if they're stuck?
+	Vector UnstuckMoveLocation = g_vecZero; // If the bot is unable to find a path, blindly move here to try and fix the problem
 
 	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
 	float AirStartedTime = 0.0f; // When the bot left the ground if in the air
@@ -352,8 +303,6 @@ struct AvHAIPlayer
 	Vector ViewForwardVector = g_vecZero; // Bot's current forward unit vector
 	Vector LastSafeLocation = g_vecZero;
 
-	EAIPlayerRole BotRole = EAIPlayerRole::BOT_ROLE_NONE;
-
 	int ExperiencePointsAvailable = 0; // How much experience the bot has to spend
 	AvHMessageID NextCombatModeUpgrade = MESSAGE_NULL;
 
@@ -367,7 +316,7 @@ struct AvHAIPlayer
 
 	int DebugValue = 0; // Used for debugging the bot
 
-	Vector DebugDestination = ZERO_VECTOR;
+	Vector DebugDestination = g_vecZero;
 
 	bool IsValid() const { return Player != nullptr && !FNullEnt(Edict) && !Edict->free; }
 	bool HasValidPath() const;
@@ -420,6 +369,7 @@ struct AvHAIPlayer
 	bool ShouldThink() const;
 	void HearEnemy(const edict_t* EmittingEdict, float Volume);
 	void OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex);
+	void TakeDamage(float DamageAmount, const edict_t* Inflictor);
 };
 
 

@@ -75,21 +75,6 @@ bool UTIL_IsEdictActive(const edict_t* Edict)
 	return (!FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO);
 }
 
-EAIWeaponId UTIL_GetPlayerCurrentWeapon(const AvHPlayer* Player)
-{
-	if (!Player) { return EAIWeaponId::WEAPON_INVALID; }
-
-	AvHBasePlayerWeapon* theBasePlayerWeapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_pActiveItem);
-
-	if (theBasePlayerWeapon)
-	{
-		return static_cast<EAIWeaponId>(theBasePlayerWeapon->m_iId);
-	}
-
-	return EAIWeaponId::WEAPON_INVALID;
-}
-
-
 Vector UTIL_GetHullTraceHitLocation(const Vector Start, const Vector End, int HullNum)
 {
 	TraceResult hit;
@@ -127,7 +112,7 @@ Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity)
 
 	while (hit.flFraction < 1.0f)
 	{
-		if (IsEdictPlayer(hit.pHit) || IsEdictStructure(hit.pHit) || IsEdictHive(hit.pHit))
+		if (IsEdictPlayer(hit.pHit) || AITAC_IsEdictStructure(hit.pHit) || IsEdictHive(hit.pHit))
 		{
 			TraceStart.z = hit.pHit->v.origin.z;
 			TraceEnd = (TraceStart - Vector(0.0f, 0.0f, 1000.0f));
@@ -169,115 +154,10 @@ Vector UTIL_GetClosestPointOnEntityToLocation(const Vector Location, const edict
 	return Vector(clampf(Location.x, MinVec.x, MaxVec.x), clampf(Location.y, MinVec.y, MaxVec.y), clampf(Location.z, MinVec.z, MaxVec.z));
 }
 
-EAIStructureType IUSER3ToStructureType(const int inIUSER3)
-{
-	switch (inIUSER3)
-	{
-		case AVH_USER3_COMMANDER_STATION:
-			return EAIStructureType::STRUCTURE_MARINE_COMMCHAIR;
-		case AVH_USER3_RESTOWER:
-			return EAIStructureType::STRUCTURE_MARINE_RESTOWER;
-		case AVH_USER3_INFANTRYPORTAL:
-			return EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL;
-		case AVH_USER3_ARMORY:
-			return EAIStructureType::STRUCTURE_MARINE_ARMORY;
-		case AVH_USER3_ADVANCED_ARMORY:
-			return EAIStructureType::STRUCTURE_MARINE_ADVARMORY;
-		case AVH_USER3_TURRET_FACTORY:
-			return EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY;
-		case AVH_USER3_ADVANCED_TURRET_FACTORY:
-			return EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY;
-		case AVH_USER3_TURRET:
-			return EAIStructureType::STRUCTURE_MARINE_TURRET;
-		case AVH_USER3_SIEGETURRET:
-			return EAIStructureType::STRUCTURE_MARINE_SIEGETURRET;
-		case AVH_USER3_ARMSLAB:
-			return EAIStructureType::STRUCTURE_MARINE_ARMSLAB;
-		case AVH_USER3_PROTOTYPE_LAB:
-			return EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB;
-		case AVH_USER3_OBSERVATORY:
-			return EAIStructureType::STRUCTURE_MARINE_OBSERVATORY;
-		case AVH_USER3_PHASEGATE:
-			return EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
-		case AVH_USER3_MINE:
-			return EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE;
-
-		case AVH_USER3_HIVE:
-			return EAIStructureType::STRUCTURE_ALIEN_HIVE;
-		case AVH_USER3_ALIENRESTOWER:
-			return EAIStructureType::STRUCTURE_ALIEN_RESTOWER;
-		case AVH_USER3_DEFENSE_CHAMBER:
-			return EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
-		case AVH_USER3_SENSORY_CHAMBER:
-			return EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER;
-		case AVH_USER3_MOVEMENT_CHAMBER:
-			return EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
-		case AVH_USER3_OFFENSE_CHAMBER:
-			return EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER;
-		default:
-			return EAIStructureType::STRUCTURE_NONE;
-	}
-
-	return EAIStructureType::STRUCTURE_NONE;
-}
-
-EAIStructureType GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict)
-{
-	if (FNullEnt(StructureEdict)) { return EAIStructureType::STRUCTURE_NONE; }
-
-	return IUSER3ToStructureType(StructureEdict->v.iuser3);
-}
-
-EAIHiveTechStatus UTIL_GetHiveTechStatusFromMessageID(const AvHMessageID TechID)
-{
-	switch (TechID)
-	{
-		case ALIEN_BUILD_DEFENSE_CHAMBER:
-			return EAIHiveTechStatus::HIVE_TECH_DEFENSE;
-		case ALIEN_BUILD_MOVEMENT_CHAMBER:
-			return EAIHiveTechStatus::HIVE_TECH_MOVEMENT;
-		case ALIEN_BUILD_SENSORY_CHAMBER:
-			return EAIHiveTechStatus::HIVE_TECH_SENSORY;
-		default:
-			return EAIHiveTechStatus::HIVE_TECH_NONE;
-	}
-}
-
-bool IsEdictStructure(const edict_t* edict)
-{
-	return (GetDeployableObjectTypeFromEdict(edict) != EAIStructureType::STRUCTURE_NONE);
-}
-
 bool IsEdictHive(const edict_t* edict)
 {
 	if (FNullEnt(edict)) { return false; }
 	return (edict->v.iuser3 == AVH_USER3_HIVE);
-}
-
-bool IsDamagingStructure(const edict_t* StructureEdict)
-{
-	return IsDamagingStructure(GetStructureTypeFromEdict(StructureEdict));
-}
-
-bool IsDamagingStructure(EAIStructureType StructureType)
-{
-	switch (StructureType)
-	{
-		case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
-		case EAIStructureType::STRUCTURE_MARINE_TURRET:
-			return true;
-		default:
-			return false;
-	}
-
-	return false;
-}
-
-EAIStructureType GetStructureTypeFromEdict(const edict_t* StructureEdict)
-{
-	if (FNullEnt(StructureEdict)) { return EAIStructureType::STRUCTURE_NONE; }
-
-	return IUSER3ToStructureType(StructureEdict->v.iuser3);
 }
 
 bool GetNearestMapLocationAtPoint(vec3_t SearchLocation, string& outLocation)
@@ -320,77 +200,6 @@ bool UTIL_IsPointInSwimArea(const Vector& TestPoint)
 	return UTIL_PointContents(TestPoint) == CONTENTS_WATER
 		|| UTIL_PointContents(TestPoint) == CONTENTS_SLIME
 		|| UTIL_PointContents(TestPoint) == CONTENTS_LAVA;
-}
-
-bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon)
-{
-	if (!Player || DesiredCombatWeapon == EAIWeaponId::WEAPON_INVALID) { return false; }
-
-	bool HasWeaponInInventory = (Player->pev->weapons & (1 << static_cast<int>(DesiredCombatWeapon)));
-
-	// Marines don't have a fixed inventory, so we can just do a simple check for them. Same goes to confirm the alien has the weapon in their inventory
-	if (IsPlayerMarine(Player) || !HasWeaponInInventory)
-	{
-		if (DesiredCombatWeapon == EAIWeaponId::WEAPON_MARINE_GRENADE && HasWeaponInInventory)
-		{
-			AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[5]);
-
-			if (!Weapon) { return false; }
-
-			return Weapon->m_iClip > 0;
-		}
-
-		return HasWeaponInInventory;
-	}
-
-	// Aliens always have all weapons in their inventory, but they are enabled/disabled based on hive count (or combat unlocks).
-	// Now we check to see if the weapon is enabled for them.
-
-	edict_t* pEdict = ENT(Player->pev);
-
-	// Which slot the weapon sits in
-	int DesiredWeaponIndex = -1;
-
-	switch (DesiredCombatWeapon)
-	{
-		case EAIWeaponId::WEAPON_SKULK_BITE:
-		case EAIWeaponId::WEAPON_GORGE_SPIT:
-		case EAIWeaponId::WEAPON_LERK_BITE:
-		case EAIWeaponId::WEAPON_FADE_SWIPE:
-		case EAIWeaponId::WEAPON_ONOS_GORE:
-			DesiredWeaponIndex = 1;
-			break;
-		case EAIWeaponId::WEAPON_SKULK_PARASITE:
-		case EAIWeaponId::WEAPON_GORGE_HEALINGSPRAY:
-		case EAIWeaponId::WEAPON_LERK_SPORES:
-		case EAIWeaponId::WEAPON_FADE_BLINK:
-		case EAIWeaponId::WEAPON_ONOS_DEVOUR:
-			DesiredWeaponIndex = 2;
-			break;
-		case EAIWeaponId::WEAPON_SKULK_LEAP:
-		case EAIWeaponId::WEAPON_GORGE_BILEBOMB:
-		case EAIWeaponId::WEAPON_LERK_UMBRA:
-		case EAIWeaponId::WEAPON_FADE_METABOLIZE:
-		case EAIWeaponId::WEAPON_ONOS_STOMP:
-			DesiredWeaponIndex = 3;
-			break;
-		case EAIWeaponId::WEAPON_SKULK_XENOCIDE:
-		case EAIWeaponId::WEAPON_GORGE_WEB:
-		case EAIWeaponId::WEAPON_LERK_PRIMALSCREAM:
-		case EAIWeaponId::WEAPON_FADE_ACIDROCKET:
-		case EAIWeaponId::WEAPON_ONOS_CHARGE:
-			DesiredWeaponIndex = 4;
-			break;
-		default:
-			DesiredWeaponIndex = -1;
-			break;
-	}
-
-	if (DesiredWeaponIndex < 0) { return false; }
-
-	AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[DesiredWeaponIndex]);
-
-	return (Weapon && Weapon->m_iEnabled);
 }
 
 bool UTIL_IsCloakedPlayerInvisible(const edict_t* Observer, const AvHPlayer* Player)
@@ -847,58 +656,6 @@ void UTIL_LocalizeText(const char* InputText, string& OutputText)
 
 }
 
-char* UTIL_StructTypeToChar(const EAIStructureType StructureType)
-{
-	switch (StructureType)
-	{
-		case EAIStructureType::STRUCTURE_MARINE_RESTOWER:
-			return "RT";
-		case EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL:
-			return "IP";
-		case EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY:
-			return "TF";
-		case EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY:
-			return "Adv TF";
-		case EAIStructureType::STRUCTURE_MARINE_ARMORY:
-			return "Armoury";
-		case EAIStructureType::STRUCTURE_MARINE_ADVARMORY:
-			return "Adv Armoury";
-		case EAIStructureType::STRUCTURE_MARINE_ARMSLAB:
-			return "Armslab";
-		case EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB:
-			return "ProtoLab";
-		case EAIStructureType::STRUCTURE_MARINE_OBSERVATORY:
-			return "Obs";
-		case EAIStructureType::STRUCTURE_MARINE_PHASEGATE:
-			return "PG";
-		case EAIStructureType::STRUCTURE_MARINE_TURRET:
-			return "Sentry";
-		case EAIStructureType::STRUCTURE_MARINE_SIEGETURRET:
-			return "Siege T";
-		case EAIStructureType::STRUCTURE_MARINE_COMMCHAIR:
-			return "CC";
-		case EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE:
-			return "Mine";
-
-		case EAIStructureType::STRUCTURE_ALIEN_HIVE:
-			return "Hive";
-		case EAIStructureType::STRUCTURE_ALIEN_RESTOWER:
-			return "RT";
-		case EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER:
-			return "DC";
-		case EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER:
-			return "SC";
-		case EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER:
-			return "MC";
-		case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
-			return "OC";
-		default:
-			return "None";
-	}
-
-	return "None";
-}
-
 char* UTIL_TaskTypeToChar(const EAITaskType TaskType)
 {
 	switch (TaskType)
@@ -943,31 +700,6 @@ char* UTIL_TaskTypeToChar(const EAITaskType TaskType)
 			return "Weld Target";
 		case EAITaskType::TASK_ASSAULT_MARINE_BASE:
 			return "Assault Marine Base";
-		default:
-			return "None";
-	}
-
-	return "None";
-}
-
-char* UTIL_BotRoleToChar(const EAIPlayerRole Role)
-{
-	switch (Role)
-	{
-		case EAIPlayerRole::BOT_ROLE_ASSAULT:
-			return "Assault";
-		case EAIPlayerRole::BOT_ROLE_BOMBARDIER:
-			return "Bombardier";
-		case EAIPlayerRole::BOT_ROLE_BUILDER:
-			return "Builder";
-		case EAIPlayerRole::BOT_ROLE_COMMAND:
-			return "Commander";
-		case EAIPlayerRole::BOT_ROLE_FIND_RESOURCES:
-			return "Res Capper";
-		case EAIPlayerRole::BOT_ROLE_HARASS:
-			return "Harrasser";
-		case EAIPlayerRole::BOT_ROLE_SWEEPER:
-			return "Sweeper";
 		default:
 			return "None";
 	}

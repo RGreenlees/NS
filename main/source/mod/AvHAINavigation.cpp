@@ -94,20 +94,20 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 	float searchExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
 
 	// find the start polygon
-	status = FoundMesh->NavQuery->findNearestPoly(dtStartPos, searchExtents, m_navFilter, &StartPoly, dtStartNearest);
+	status = FoundMesh->NavQueryRef->findNearestPoly(dtStartPos, searchExtents, m_navFilter, &StartPoly, dtStartNearest);
 	if (!dtStatusSucceed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	// find the end polygon
-	status = FoundMesh->NavQuery->findNearestPoly(dtEndPos, searchExtents, m_navFilter, &EndPoly, dtEndNearest);
+	status = FoundMesh->NavQueryRef->findNearestPoly(dtEndPos, searchExtents, m_navFilter, &EndPoly, dtEndNearest);
 	if (!dtStatusSucceed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
-	status = FoundMesh->NavQuery->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
+	status = FoundMesh->NavQueryRef->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
 
 	if (nPathCount == 0)
 	{
@@ -119,7 +119,7 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 		float dtEndPoint[3];
 		dtVcopy(dtEndPoint, dtEndNearest);
 
-		FoundMesh->NavQuery->closestPointOnPoly(PolyPath[nPathCount - 1], dtEndNearest, dtEndPoint, 0);
+		FoundMesh->NavQueryRef->closestPointOnPoly(PolyPath[nPathCount - 1], dtEndNearest, dtEndPoint, 0);
 
 		if (dtVdistSqr(dtEndNearest, dtEndPoint) <= sqrf(MaxAcceptableDistance))
 		{
@@ -201,20 +201,20 @@ Vector AINAV_FindClosestNavigablePointTo(const NavAgentProfile* NavProfile, cons
 	float dtSearchExtents[3] = { 400.0f, 400.0f, 400.0f };
 
 	// find the start polygon
-	status = FoundMesh->NavQuery->findNearestPoly(dtStartPos, dtSearchExtents, m_navFilter, &StartPoly, dtStartNearest);
+	status = FoundMesh->NavQueryRef->findNearestPoly(dtStartPos, dtSearchExtents, m_navFilter, &StartPoly, dtStartNearest);
 	if (!dtStatusSucceed(status))
 	{
 		return FromLocation; // couldn't find a polygon
 	}
 
 	// find the end polygon
-	status = FoundMesh->NavQuery->findNearestPoly(dtEndPos, dtSearchExtents, m_navFilter, &EndPoly, dtEndNearest);
+	status = FoundMesh->NavQueryRef->findNearestPoly(dtEndPos, dtSearchExtents, m_navFilter, &EndPoly, dtEndNearest);
 	if (!dtStatusSucceed(status))
 	{
 		return FromLocation; // couldn't find a polygon
 	}
 
-	status = FoundMesh->NavQuery->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
+	status = FoundMesh->NavQueryRef->findPath(StartPoly, EndPoly, dtStartNearest, dtEndNearest, m_navFilter, PolyPath, &nPathCount, MAX_PATH_POLY);
 
 	if (nPathCount == 0)
 	{
@@ -355,27 +355,27 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 	int nVertCount = 0;
 
 	// find the start polygon
-	status = FoundMesh->NavQuery->findNearestPoly(dtStartPos, dtDefaultProjectionExtents, m_navFilter, &dtStartPoly, dtStartNearest);
+	status = FoundMesh->NavQueryRef->findNearestPoly(dtStartPos, dtDefaultProjectionExtents, m_navFilter, &dtStartPoly, dtStartNearest);
 	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	// find the end polygon
-	status = FoundMesh->NavQuery->findNearestPoly(dtEndPos, dtDefaultProjectionExtents, m_navFilter, &dtEndPoly, dtEndNearest);
+	status = FoundMesh->NavQueryRef->findNearestPoly(dtEndPos, dtDefaultProjectionExtents, m_navFilter, &dtEndPoly, dtEndNearest);
 	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
 	{
 		return false; // couldn't find a polygon
 	}
 
-	status = FoundMesh->NavQuery->findPath(dtStartPoly, dtEndPoly, dtStartNearest, dtEndNearest, m_navFilter, dtPolyPath, &nPathCount, MAX_PATH_POLY);
+	status = FoundMesh->NavQueryRef->findPath(dtStartPoly, dtEndPoly, dtStartNearest, dtEndNearest, m_navFilter, dtPolyPath, &nPathCount, MAX_PATH_POLY);
 
 	if (dtPolyPath[nPathCount - 1] != dtEndPoly)
 	{
 		float epos[3];
 		dtVcopy(epos, dtEndNearest);
 
-		FoundMesh->NavQuery->closestPointOnPoly(dtPolyPath[nPathCount - 1], dtEndNearest, epos, 0);
+		FoundMesh->NavQueryRef->closestPointOnPoly(dtPolyPath[nPathCount - 1], dtEndNearest, epos, 0);
 
 		if (dtVdistSqr(dtEndNearest, epos) > sqrf(MaxAcceptableDistance))
 		{
@@ -405,7 +405,7 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		}
 	}
 
-	status = FoundMesh->NavQuery->findStraightPath(dtStartNearest, dtEndNearest, dtPolyPath, nPathCount, dtStraightPath, dtStraightPathFlags, dtStraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_AREA_CROSSINGS);
+	status = FoundMesh->NavQueryRef->findStraightPath(dtStartNearest, dtEndNearest, dtPolyPath, nPathCount, dtStraightPath, dtStraightPathFlags, dtStraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_AREA_CROSSINGS);
 
 	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
 	{
@@ -420,8 +420,8 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 	unsigned int dtCurrFlags;
 	unsigned char dtCurrArea;
 
-	FoundMesh->NavMesh->getPolyFlags(dtStraightPolyPath[0], &dtCurrFlags);
-	FoundMesh->NavMesh->getPolyArea(dtStraightPolyPath[0], &dtCurrArea);
+	FoundMesh->NavMeshRef->getPolyFlags(dtStraightPolyPath[0], &dtCurrFlags);
+	FoundMesh->NavMeshRef->getPolyArea(dtStraightPolyPath[0], &dtCurrArea);
 
 	EAINavMovementFlag CurrFlags = static_cast<EAINavMovementFlag>(dtCurrFlags);
 	EAINavArea CurrArea = static_cast<EAINavArea>(dtCurrArea);
@@ -528,8 +528,8 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		NextPathNode.MovementArea = CurrArea;
 		NextPathNode.MeshPoly = dtStraightPolyPath[nVert];
 
-		FoundMesh->NavMesh->getPolyFlags(dtStraightPolyPath[nVert], &dtCurrFlags);
-		FoundMesh->NavMesh->getPolyArea(dtStraightPolyPath[nVert], &dtCurrArea);
+		FoundMesh->NavMeshRef->getPolyFlags(dtStraightPolyPath[nVert], &dtCurrFlags);
+		FoundMesh->NavMeshRef->getPolyArea(dtStraightPolyPath[nVert], &dtCurrArea);
 
 		CurrFlags = static_cast<EAINavMovementFlag>(dtCurrFlags);
 		CurrArea = static_cast<EAINavArea>(dtCurrArea);
@@ -744,174 +744,7 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 	return ZERO_VECTOR;
 }
 
-bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
-	EAINavMovementFlag CurrentNavFlag = CurrentPathNode->MovementFlag;
-	Vector MoveFrom = CurrentPathNode->FromLocation;
-	Vector MoveTo = CurrentPathNode->ToLocation;
-
-	if (UTIL_IsPointInSwimArea(MoveTo))
-	{
-		Vector ClosestPointToPath = vClosestPointOnLine(MoveFrom, MoveTo, AIPlayer->Edict->v.origin);
-		bool bAtOrPastDestination = vEquals(ClosestPointToPath, MoveTo, 32.0f);
-
-		return vPointOverlaps3D(MoveTo, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax) || bAtOrPastDestination;
-	}
-
-	switch (CurrentNavFlag)
-	{
-		case EAINavMovementFlag::NAV_FLAG_WALK:
-			return AINAV_HasBotCompletedWalkMove(AIPlayer, CurrentPathNode, NextPathNode);
-		case EAINavMovementFlag::NAV_FLAG_LADDER:
-			return AINAV_HasBotCompletedLadderMove(AIPlayer, CurrentPathNode, NextPathNode);
-		case EAINavMovementFlag::NAV_FLAG_FALL:
-			return AINAV_HasBotCompletedFallMove(AIPlayer, CurrentPathNode, NextPathNode);
-		case EAINavMovementFlag::NAV_FLAG_JUMP:
-			return AINAV_HasBotCompletedJumpMove(AIPlayer, CurrentPathNode, NextPathNode);
-		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
-			return AINAV_HasBotCompletedLiftMove(AIPlayer, CurrentPathNode, NextPathNode);
-		case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
-			return AINAV_HasBotCompletedWallClimbMove(AIPlayer, CurrentPathNode, NextPathNode);
-		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
-		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
-			return AINAV_HasBotCompletedPhaseGateMove(AIPlayer, CurrentPathNode, NextPathNode);
-		default:
-			return AINAV_HasBotCompletedWalkMove(AIPlayer, CurrentPathNode, NextPathNode);
-	}
-
-	return AINAV_HasBotCompletedWalkMove(AIPlayer, CurrentPathNode, NextPathNode);
-}
-
-bool AINAV_HasBotCompletedWalkMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
-	{
-		const Vector CurrentPosition = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
-		if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), CurrentPosition, NextPathNode->ToLocation, 5.0f))
-		{
-			if (UTIL_QuickHullTrace(nullptr, AIPlayer->Edict->v.origin, NextPathNode->ToLocation, head_hull))
-			{
-				return true;
-			}
-		}
-	}
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax)
-		|| (vDist2DSq(AIPlayer->Edict->v.origin, CurrentPathNode->ToLocation) < sqrf(GetPlayerRadius(AIPlayer->Edict) * 2.0f));
-}
-
-bool AINAV_HasBotCompletedLadderMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	if (IsPlayerOnLadder(AIPlayer->Edict)) { return false; }
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
-}
-
-bool AINAV_HasBotCompletedFallMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
-	{
-		Vector ThisMoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
-		Vector NextMoveDir = UTIL_GetVectorNormal2D(NextPathNode->ToLocation - NextPathNode->FromLocation);
-
-		float MoveDot = UTIL_GetDotProduct2D(ThisMoveDir, NextMoveDir);
-
-		if (MoveDot > 0.0f)
-		{
-			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
-
-			if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), FloorPosition, NextPathNode->ToLocation, 5.0f)
-				&& UTIL_QuickTrace(AIPlayer->Edict, AIPlayer->Edict->v.origin, NextPathNode->ToLocation)
-				&& fabsf(AIPlayer->CollisionHullBottomLocation.z - CurrentPathNode->ToLocation.z) < 100.0f)
-			{
-				return true;
-			}
-		}
-	}
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
-}
-
-bool AINAV_HasBotCompletedJumpMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	const Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, AIPlayer->Edict->v.origin);
-
-	if (!vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 2.0f)) { return false; }
-
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
-	{
-		Vector ThisMoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
-		Vector NextMoveDir = UTIL_GetVectorNormal2D(NextPathNode->ToLocation - NextPathNode->FromLocation);
-
-		float MoveDot = UTIL_GetDotProduct2D(ThisMoveDir, NextMoveDir);
-
-		if (MoveDot >= 0.0f)
-		{
-			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
-			Vector HullTraceEnd = CurrentPathNode->ToLocation;
-			HullTraceEnd.z = AIPlayer->Edict->v.origin.z;
-
-			if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), FloorPosition, NextPathNode->ToLocation, 5.0f)
-				&& UTIL_QuickHullTrace(AIPlayer->Edict, AIPlayer->Edict->v.origin, HullTraceEnd, head_hull, false)
-				&& fabsf(AIPlayer->CollisionHullBottomLocation.z - NextPathNode->ToLocation.z) < 100.0f)
-			{
-				return true;
-			}
-		}
-	}
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
-}
-
-bool AINAV_HasBotCompletedLiftMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
-}
-
-bool AINAV_HasBotCompletedWallClimbMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
-	{
-		if (!IsPlayerClimbingWall(AIPlayer->Edict))
-		{
-			const Vector FloorLocation = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
-
-			if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), FloorLocation, NextPathNode->ToLocation)) { return true; }
-		}
-	}
-
-	Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, AIPlayer->Edict->v.origin);
-
-	return vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 4.0f) && AIPlayer->IsOnGround();
-}
-
-bool AINAV_HasBotCompletedObstacleMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
-}
-
-bool AINAV_HasBotCompletedPhaseGateMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax) || vDist2DSq(AIPlayer->Edict->v.origin, CurrentPathNode->ToLocation) < sqrf(32.0f);
-}
 
 bool AINAV_IsBotOffPathNode(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* PathNode)
 {
@@ -1116,9 +949,7 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 			return EAINavMoveResult::NAV_MOVE_SUCCESS;
 		}
 
-		AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
-
-		return;
+		return AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 	}
 
 	AvHPlayer* RidingPlayer = AINAV_GetPlayerRidingOnBot(AIPlayer);
@@ -1143,7 +974,7 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 	if (AINAV_CheckAndAddRequiredMovementTasks(AIPlayer->GetNavProfile(), Path, NewMoveTask))
 	{
 		AIPlayer->AddMovementTask(NewMoveTask);
-		return;
+		return EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
 	if (AIPlayer->IsInWater())
@@ -1170,6 +1001,8 @@ EAINavMoveResult AINAV_FollowPath(AvHAIPlayer* AIPlayer, AvHAIPath* Path)
 			FurthestView = FurthestView + (LookNormal * 1000.0f);
 		}
 	}
+
+	return EAINavMoveResult::NAV_MOVE_SUCCESS;
 }
 
 void AINAV_HandlePlayerAvoidance(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode)
@@ -1287,19 +1120,19 @@ bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vecto
 
 	switch (Trigger->Type)
 	{
-		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
-		case EAIDynamicMapObjectType::TRIGGER_BREAK:
-			return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-			break;
-		case EAIDynamicMapObjectType::TRIGGER_TOUCH:
-			return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-			break;
-		case EAIDynamicMapObjectType::TRIGGER_USE:
-			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-			break;
-		default:
-			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-			break;
+	case EAIDynamicMapObjectType::TRIGGER_SHOOT:
+	case EAIDynamicMapObjectType::TRIGGER_BREAK:
+		return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
+		break;
+	case EAIDynamicMapObjectType::TRIGGER_TOUCH:
+		return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
+		break;
+	case EAIDynamicMapObjectType::TRIGGER_USE:
+		return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
+		break;
+	default:
+		return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
+		break;
 	}
 }
 
@@ -1382,6 +1215,175 @@ bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& 
 	NewTask.TaskLocation = TestPath.GetFinalDestination();
 
 	return true;
+}
+
+bool AINAV_HasBotCompletedPathPoint(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	EAINavMovementFlag CurrentNavFlag = CurrentPathNode->MovementFlag;
+	Vector MoveFrom = CurrentPathNode->FromLocation;
+	Vector MoveTo = CurrentPathNode->ToLocation;
+
+	if (UTIL_IsPointInSwimArea(MoveTo))
+	{
+		Vector ClosestPointToPath = vClosestPointOnLine(MoveFrom, MoveTo, AIPlayer->Edict->v.origin);
+		bool bAtOrPastDestination = vEquals(ClosestPointToPath, MoveTo, 32.0f);
+
+		return vPointOverlaps3D(MoveTo, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax) || bAtOrPastDestination;
+	}
+
+	switch (CurrentNavFlag)
+	{
+	case EAINavMovementFlag::NAV_FLAG_WALK:
+		return AINAV_HasBotCompletedWalkMove(AIPlayer, CurrentPathNode, NextPathNode);
+	case EAINavMovementFlag::NAV_FLAG_LADDER:
+		return AINAV_HasBotCompletedLadderMove(AIPlayer, CurrentPathNode, NextPathNode);
+	case EAINavMovementFlag::NAV_FLAG_FALL:
+		return AINAV_HasBotCompletedFallMove(AIPlayer, CurrentPathNode, NextPathNode);
+	case EAINavMovementFlag::NAV_FLAG_JUMP:
+		return AINAV_HasBotCompletedJumpMove(AIPlayer, CurrentPathNode, NextPathNode);
+	case EAINavMovementFlag::NAV_FLAG_PLATFORM:
+		return AINAV_HasBotCompletedLiftMove(AIPlayer, CurrentPathNode, NextPathNode);
+	case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
+		return AINAV_HasBotCompletedWallClimbMove(AIPlayer, CurrentPathNode, NextPathNode);
+	case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+	case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+		return AINAV_HasBotCompletedPhaseGateMove(AIPlayer, CurrentPathNode, NextPathNode);
+	default:
+		return AINAV_HasBotCompletedWalkMove(AIPlayer, CurrentPathNode, NextPathNode);
+	}
+
+	return AINAV_HasBotCompletedWalkMove(AIPlayer, CurrentPathNode, NextPathNode);
+}
+
+bool AINAV_HasBotCompletedWalkMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	{
+		const Vector CurrentPosition = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
+		if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), CurrentPosition, NextPathNode->ToLocation, 5.0f))
+		{
+			if (UTIL_QuickHullTrace(nullptr, AIPlayer->Edict->v.origin, NextPathNode->ToLocation, head_hull))
+			{
+				return true;
+			}
+		}
+	}
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax)
+		|| (vDist2DSq(AIPlayer->Edict->v.origin, CurrentPathNode->ToLocation) < sqrf(GetPlayerRadius(AIPlayer->Edict) * 2.0f));
+}
+
+bool AINAV_HasBotCompletedLadderMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	if (IsPlayerOnLadder(AIPlayer->Edict)) { return false; }
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
+}
+
+bool AINAV_HasBotCompletedFallMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	{
+		Vector ThisMoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+		Vector NextMoveDir = UTIL_GetVectorNormal2D(NextPathNode->ToLocation - NextPathNode->FromLocation);
+
+		float MoveDot = UTIL_GetDotProduct2D(ThisMoveDir, NextMoveDir);
+
+		if (MoveDot > 0.0f)
+		{
+			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
+
+			if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), FloorPosition, NextPathNode->ToLocation, 5.0f)
+				&& UTIL_QuickTrace(AIPlayer->Edict, AIPlayer->Edict->v.origin, NextPathNode->ToLocation)
+				&& fabsf(AIPlayer->CollisionHullBottomLocation.z - CurrentPathNode->ToLocation.z) < 100.0f)
+			{
+				return true;
+			}
+		}
+	}
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
+}
+
+bool AINAV_HasBotCompletedJumpMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	const Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, AIPlayer->Edict->v.origin);
+
+	if (!vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 2.0f)) { return false; }
+
+	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	{
+		Vector ThisMoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+		Vector NextMoveDir = UTIL_GetVectorNormal2D(NextPathNode->ToLocation - NextPathNode->FromLocation);
+
+		float MoveDot = UTIL_GetDotProduct2D(ThisMoveDir, NextMoveDir);
+
+		if (MoveDot >= 0.0f)
+		{
+			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
+			Vector HullTraceEnd = CurrentPathNode->ToLocation;
+			HullTraceEnd.z = AIPlayer->Edict->v.origin.z;
+
+			if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), FloorPosition, NextPathNode->ToLocation, 5.0f)
+				&& UTIL_QuickHullTrace(AIPlayer->Edict, AIPlayer->Edict->v.origin, HullTraceEnd, head_hull, false)
+				&& fabsf(AIPlayer->CollisionHullBottomLocation.z - NextPathNode->ToLocation.z) < 100.0f)
+			{
+				return true;
+			}
+		}
+	}
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
+}
+
+bool AINAV_HasBotCompletedLiftMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
+}
+
+bool AINAV_HasBotCompletedWallClimbMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	{
+		if (!IsPlayerClimbingWall(AIPlayer->Edict))
+		{
+			const Vector FloorLocation = UTIL_GetFloorUnderEntity(AIPlayer->Edict);
+
+			if (AINAV_IsPointDirectlyReachable(AIPlayer->GetNavProfile(), FloorLocation, NextPathNode->ToLocation)) { return true; }
+		}
+	}
+
+	Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, AIPlayer->Edict->v.origin);
+
+	return vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 4.0f) && AIPlayer->IsOnGround();
+}
+
+bool AINAV_HasBotCompletedObstacleMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax);
+}
+
+bool AINAV_HasBotCompletedPhaseGateMove(const AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->Edict->v.absmin, AIPlayer->Edict->v.absmax) || vDist2DSq(AIPlayer->Edict->v.origin, CurrentPathNode->ToLocation) < sqrf(32.0f);
 }
 
 AvHPlayer* AINAV_GetPlayerRidingOnBot(AvHAIPlayer* AIPlayer)
@@ -1489,6 +1491,8 @@ bool AINAV_NewGroundMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 			}
 		}
 	}
+
+	return true;
 }
 
 bool AINAV_NewFallMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
@@ -1516,7 +1520,7 @@ bool AINAV_NewFallMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNo
 		OutMovementInput.DesiredMoveDirection = vForward;
 	}
 
-	if (!AIPlayer->CanCrouch()) { return; }
+	if (!AIPlayer->CanCrouch()) { return true; }
 
 	const Vector HeadLocation = GetPlayerTopOfCollisionHull(AIPlayer->Edict, false);
 
@@ -1524,6 +1528,8 @@ bool AINAV_NewFallMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNo
 	{
 		OutMovementInput.bShouldCrouch = true;
 	}
+
+	return true;
 }
 
 bool AINAV_NewJumpMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
@@ -1558,7 +1564,7 @@ bool AINAV_NewJumpMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNo
 
 	AIPlayer->Jump(OutMovementInput, true);
 
-	if (!AIPlayer->CanCrouch()) { return; }
+	if (!AIPlayer->CanCrouch()) { return true; }
 
 	Vector HeadLocation = GetPlayerTopOfCollisionHull(AIPlayer->Edict, false);
 
@@ -1566,6 +1572,8 @@ bool AINAV_NewJumpMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNo
 	{
 		OutMovementInput.bShouldCrouch = true;
 	}
+
+	return true;
 }
 
 Vector AINAV_GetLadderMountPoint(const edict_t* MountLadder, const Vector StartPoint)
@@ -1634,8 +1642,7 @@ bool AINAV_NewMountLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* Curren
 
 	if (FNullEnt(MountLadder))
 	{
-		AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
-		return;
+		return AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
 	const Vector BotCurrentLocation = AIPlayer->GetLocation();
@@ -1663,6 +1670,8 @@ bool AINAV_NewMountLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* Curren
 	}
 
 	OutMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(MountPoint - BotCurrentLocation);
+
+	return true;
 }
 
 bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
@@ -1680,13 +1689,11 @@ bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 	{
 		if (!AIPlayer->IsOnGround() || AINAV_IsPointDirectlyReachable(NavProfile, AIPlayer->GetBottomOfHitbox(), CurrentPathNode->ToLocation))
 		{
-			AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
-			return;
+			return AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 		}
 		else
 		{
-			AINAV_NewMountLadderMove(AIPlayer, CurrentPathNode, NextPathNode);
-			return;
+			return AINAV_NewMountLadderMove(AIPlayer, CurrentPathNode, NextPathNode);
 		}
 	}
 
@@ -1762,7 +1769,7 @@ bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 				AIPlayer->Jump(OutMovementInput, true);
 			}
 
-			return;
+			return true;
 		}
 	}
 	else
@@ -1776,7 +1783,7 @@ bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 			{
 				AIPlayer->MoveToWithoutNav(CurrentPathNode->ToLocation);
 				AIPlayer->Jump(OutMovementInput, true);
-				return;
+				return true;
 			}
 		}
 	}
@@ -1805,7 +1812,7 @@ bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 		OutMovementInput.RequiredLookLocation = LookLocation;
 		OutMovementInput.DesiredMoveDirection = ClimbRightNormal;
 
-		return;
+		return true;
 	}
 
 	if (bBlockedRight && !bBlockedLeft)
@@ -1816,7 +1823,7 @@ bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 		OutMovementInput.RequiredLookLocation = LookLocation;
 		OutMovementInput.DesiredMoveDirection = -ClimbRightNormal;
 
-		return;
+		return true;
 	}
 
 	if (AIPlayer->CanCrouch())
@@ -1842,6 +1849,8 @@ bool AINAV_NewLadderMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPath
 	}
 
 	OutMovementInput.RequiredLookLocation = LookTarget;
+
+	return true;
 }
 
 bool AINAV_NewPlatformMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
@@ -1849,6 +1858,8 @@ bool AINAV_NewPlatformMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPa
 	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
 	AvHAIMovementInput& OutMovementInput = AIPlayer->NextFrameMovementInput;
+
+	return true;
 }
 
 bool AINAV_NextMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
@@ -1886,6 +1897,8 @@ bool AINAV_NextMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode,
 bool AINAV_NextSwimMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
 	if (!AIPlayer || !AIPlayer->IsValid() || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	return true;
 }
 
 Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const AvHAIPath* Path)
@@ -1959,7 +1972,7 @@ bool AINAV_NewPhaseGateMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentP
 
 	const AvHAIBuildableStructure* NearestPhaseGate = AITAC_FindSingleMatchingStructure(CurrentPathNode->FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
 
-	if (!NearestPhaseGate || !NearestPhaseGate->IsValid()) { return; }
+	if (!NearestPhaseGate || !NearestPhaseGate->IsValid()) { return true; }
 
 	if (IsPlayerInUseRange(AIPlayer->Edict, NearestPhaseGate->Edict))
 	{
@@ -1972,10 +1985,12 @@ bool AINAV_NewPhaseGateMove(AvHAIPlayer* AIPlayer, const AvHAIPathNode* CurrentP
 			OutMovementInput.DesiredMoveDirection = UTIL_GetForwardVector2D(AIPlayer->Edict->v.angles);
 		}
 
-		return;
+		return true;
 	}
 	else
 	{
 		OutMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NearestPhaseGate->Location - AIPlayer->GetLocation());
 	}
+
+	return true;
 }

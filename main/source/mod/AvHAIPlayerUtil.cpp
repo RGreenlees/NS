@@ -2,7 +2,6 @@
 #include "AvHAIPlayerUtil.h"
 #include "AvHAIPlayer.h"
 #include "AvHAIHelper.h"
-#include "AvHAIWeaponHelper.h"
 
 #include "AvHPlayerUpgrade.h"
 #include "AvHAIMath.h"
@@ -360,7 +359,7 @@ float GetPlayerEnergyRegenPerSecond(edict_t* Player)
 
 float GetPlayerOverallHealthPercent(const edict_t* Player)
 {
-	if (IsEdictStructure(Player)) { return (Player->v.health / Player->v.max_health); }
+	if (AITAC_IsEdictStructure(Player)) { return (Player->v.health / Player->v.max_health); }
 
 	float MaxHealthAndArmour = Player->v.max_health + GetPlayerMaxArmour(Player);
 	float CurrentHealthAndArmour = Player->v.health + Player->v.armorvalue;
@@ -657,9 +656,9 @@ bool PlayerHasSpecialWeapon(const AvHPlayer* Player)
 {
 	if (!IsPlayerMarine(Player)) { return false; }
 
-	AvHAIWeapon PrimaryWeaponType = UTIL_GetPlayerPrimaryWeapon(Player);
+	EAIWeaponId PrimaryWeaponType = UTIL_GetPlayerPrimaryWeapon(Player);
 
-	return PrimaryWeaponType != WEAPON_INVALID && PrimaryWeaponType != WEAPON_MARINE_MG;
+	return PrimaryWeaponType != EAIWeaponId::WEAPON_INVALID && PrimaryWeaponType != EAIWeaponId::WEAPON_MARINE_MG;
 }
 
 bool UTIL_PlayerHasLOSToEntity(const edict_t* Player, const edict_t* Target, const float MaxRange, const bool bUseHullSweep)
@@ -708,14 +707,14 @@ bool UTIL_PlayerHasLOSToLocation(const edict_t* Player, const Vector Target, con
 
 }
 
-bool PlayerHasWeapon(const AvHPlayer* Player, const AvHAIWeapon DesiredCombatWeapon)
+bool PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon)
 {
-	bool HasWeaponInInventory = (Player->pev->weapons & (1 << DesiredCombatWeapon));
+	bool HasWeaponInInventory = (Player->pev->weapons & (1 << static_cast<int>(DesiredCombatWeapon)));
 
 	// Marines don't have a fixed inventory, so we can just do a simple check for them. Same goes to confirm the alien has the weapon in their inventory
 	if (IsPlayerMarine(Player) || !HasWeaponInInventory)
 	{
-		if (DesiredCombatWeapon == WEAPON_MARINE_GRENADE && HasWeaponInInventory)
+		if (DesiredCombatWeapon == EAIWeaponId::WEAPON_MARINE_GRENADE && HasWeaponInInventory)
 		{
 			AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[5]);
 
@@ -735,32 +734,32 @@ bool PlayerHasWeapon(const AvHPlayer* Player, const AvHAIWeapon DesiredCombatWea
 
 	switch (DesiredCombatWeapon)
 	{
-		case WEAPON_SKULK_BITE:
-		case WEAPON_GORGE_SPIT:
-		case WEAPON_LERK_BITE:
-		case WEAPON_FADE_SWIPE:
-		case WEAPON_ONOS_GORE:
+		case EAIWeaponId::WEAPON_SKULK_BITE:
+		case EAIWeaponId::WEAPON_GORGE_SPIT:
+		case EAIWeaponId::WEAPON_LERK_BITE:
+		case EAIWeaponId::WEAPON_FADE_SWIPE:
+		case EAIWeaponId::WEAPON_ONOS_GORE:
 			DesiredWeaponIndex = 1;
 			break;
-		case WEAPON_SKULK_PARASITE:
-		case WEAPON_GORGE_HEALINGSPRAY:
-		case WEAPON_LERK_SPORES:
-		case WEAPON_FADE_BLINK:
-		case WEAPON_ONOS_DEVOUR:
+		case EAIWeaponId::WEAPON_SKULK_PARASITE:
+		case EAIWeaponId::WEAPON_GORGE_HEALINGSPRAY:
+		case EAIWeaponId::WEAPON_LERK_SPORES:
+		case EAIWeaponId::WEAPON_FADE_BLINK:
+		case EAIWeaponId::WEAPON_ONOS_DEVOUR:
 			DesiredWeaponIndex = 2;
 			break;
-		case WEAPON_SKULK_LEAP:
-		case WEAPON_GORGE_BILEBOMB:
-		case WEAPON_LERK_UMBRA:
-		case WEAPON_FADE_METABOLIZE:
-		case WEAPON_ONOS_STOMP:
+		case EAIWeaponId::WEAPON_SKULK_LEAP:
+		case EAIWeaponId::WEAPON_GORGE_BILEBOMB:
+		case EAIWeaponId::WEAPON_LERK_UMBRA:
+		case EAIWeaponId::WEAPON_FADE_METABOLIZE:
+		case EAIWeaponId::WEAPON_ONOS_STOMP:
 			DesiredWeaponIndex = 3;
 			break;
-		case WEAPON_SKULK_XENOCIDE:
-		case WEAPON_GORGE_WEB:
-		case WEAPON_LERK_PRIMALSCREAM:
-		case WEAPON_FADE_ACIDROCKET:
-		case WEAPON_ONOS_CHARGE:
+		case EAIWeaponId::WEAPON_SKULK_XENOCIDE:
+		case EAIWeaponId::WEAPON_GORGE_WEB:
+		case EAIWeaponId::WEAPON_LERK_PRIMALSCREAM:
+		case EAIWeaponId::WEAPON_FADE_ACIDROCKET:
+		case EAIWeaponId::WEAPON_ONOS_CHARGE:
 			DesiredWeaponIndex = 4;
 			break;
 		default:
@@ -775,20 +774,20 @@ bool PlayerHasWeapon(const AvHPlayer* Player, const AvHAIWeapon DesiredCombatWea
 	return (Weapon && Weapon->m_iEnabled);
 }
 
-bool PlayerHasAlienUpgradeOfType(const edict_t* Player, const HiveTechStatus TechType)
+bool PlayerHasAlienUpgradeOfType(const edict_t* Player, const EAIHiveTechStatus TechType)
 {
 	if (!IsPlayerAlien(Player)) { return false; }
 
 	switch (TechType)
 	{
-	case HIVE_TECH_DEFENSE:
-		return ((Player->v.iuser4 & MASK_UPGRADE_1) || (Player->v.iuser4 & MASK_UPGRADE_2) || (Player->v.iuser4 & MASK_UPGRADE_3));
-	case HIVE_TECH_MOVEMENT:
-		return ((Player->v.iuser4 & MASK_UPGRADE_4) || (Player->v.iuser4 & MASK_UPGRADE_5) || (Player->v.iuser4 & MASK_UPGRADE_6));
-	case HIVE_TECH_SENSORY:
-		return ((Player->v.iuser4 & MASK_UPGRADE_7) || (Player->v.iuser4 & MASK_UPGRADE_8) || (Player->v.iuser4 & MASK_UPGRADE_9));
-	default:
-		return false;
+		case EAIHiveTechStatus::HIVE_TECH_DEFENSE:
+			return ((Player->v.iuser4 & MASK_UPGRADE_1) || (Player->v.iuser4 & MASK_UPGRADE_2) || (Player->v.iuser4 & MASK_UPGRADE_3));
+		case EAIHiveTechStatus::HIVE_TECH_MOVEMENT:
+			return ((Player->v.iuser4 & MASK_UPGRADE_4) || (Player->v.iuser4 & MASK_UPGRADE_5) || (Player->v.iuser4 & MASK_UPGRADE_6));
+		case EAIHiveTechStatus::HIVE_TECH_SENSORY:
+			return ((Player->v.iuser4 & MASK_UPGRADE_7) || (Player->v.iuser4 & MASK_UPGRADE_8) || (Player->v.iuser4 & MASK_UPGRADE_9));
+		default:
+			return false;
 	}
 }
 

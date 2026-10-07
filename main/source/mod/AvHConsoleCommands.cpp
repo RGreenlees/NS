@@ -1458,101 +1458,6 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		theSuccess = true;
 	}
-	else if (FStrEq(pcmd, "bot_evolveskulk"))
-	{
-		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
-
-		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
-		{
-			AvHAIPlayer* thisBot = (*it);
-
-			if (!IsPlayerAlien(thisBot->Edict) || !IsPlayerActiveInGame(thisBot->Edict)) { continue; }
-
-			AITASK_SetEvolveTask(thisBot, &thisBot->PrimaryBotTask, thisBot->CurrentFloorPosition, ALIEN_LIFEFORM_ONE, true);
-		}
-
-		theSuccess = true;
-	}
-	else if (FStrEq(pcmd, "bot_evolvegorge"))
-	{
-		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
-
-		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
-		{
-			AvHAIPlayer* thisBot = (*it);
-
-			if (!IsPlayerAlien(thisBot->Edict) || !IsPlayerActiveInGame(thisBot->Edict)) { continue; }
-
-			if (thisBot->Player->GetResources() < BALANCE_VAR(kGorgeCost))
-			{
-				thisBot->Player->GiveResources(BALANCE_VAR(kGorgeCost));
-			}
-
-			AITASK_SetEvolveTask(thisBot, &thisBot->PrimaryBotTask, thisBot->CurrentFloorPosition, ALIEN_LIFEFORM_TWO, true);
-		}
-
-		theSuccess = true;
-	}
-	else if (FStrEq(pcmd, "bot_evolvelerk"))
-	{
-		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
-
-		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
-		{
-			AvHAIPlayer* thisBot = (*it);
-
-			if (!IsPlayerAlien(thisBot->Edict) || !IsPlayerActiveInGame(thisBot->Edict)) { continue; }
-
-			if (thisBot->Player->GetResources() < BALANCE_VAR(kLerkCost))
-			{
-				thisBot->Player->GiveResources(BALANCE_VAR(kLerkCost));
-			}
-
-			AITASK_SetEvolveTask(thisBot, &thisBot->PrimaryBotTask, thisBot->CurrentFloorPosition, ALIEN_LIFEFORM_THREE, true);
-		}
-
-		theSuccess = true;
-	}
-	else if (FStrEq(pcmd, "bot_evolvefade"))
-	{
-		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
-
-		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
-		{
-			AvHAIPlayer* thisBot = (*it);
-
-			if (!IsPlayerAlien(thisBot->Edict) || !IsPlayerActiveInGame(thisBot->Edict)) { continue; }
-
-			if (thisBot->Player->GetResources() < BALANCE_VAR(kFadeCost))
-			{
-				thisBot->Player->GiveResources(BALANCE_VAR(kFadeCost));
-			}
-
-			AITASK_SetEvolveTask(thisBot, &thisBot->PrimaryBotTask, thisBot->CurrentFloorPosition, ALIEN_LIFEFORM_FOUR, true);
-		}
-
-		theSuccess = true;
-	}
-	else if (FStrEq(pcmd, "bot_evolveonos"))
-	{
-		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
-
-		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
-		{
-			AvHAIPlayer* thisBot = (*it);
-
-			if (!IsPlayerAlien(thisBot->Edict) || !IsPlayerActiveInGame(thisBot->Edict)) { continue; }
-
-			if (thisBot->Player->GetResources() < BALANCE_VAR(kOnosCost))
-			{
-				thisBot->Player->GiveResources(BALANCE_VAR(kOnosCost));
-			}
-
-			AITASK_SetEvolveTask(thisBot, &thisBot->PrimaryBotTask, thisBot->CurrentFloorPosition, ALIEN_LIFEFORM_FIVE, true);
-		}
-
-		theSuccess = true;
-	}
 	else if (FStrEq(pcmd, "bot_debugobject"))
 	{
 		edict_t* ListenEdict = INDEXENT(1);
@@ -1565,7 +1470,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		edict_t* HitEdict = Result.pHit;
 
-		DynamicMapObject* BlockingObject = nullptr;
+		const DynamicMapObject* BlockingObject = nullptr;
 
 		if (!FNullEnt(HitEdict))
 		{

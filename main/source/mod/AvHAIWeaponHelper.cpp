@@ -571,7 +571,7 @@ bool BotAnyWeaponNeedsReloading(AvHAIPlayer* pBot)
 
 EAIWeaponId BotAlienChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target)
 {
-	EAIStructureType StructureType = GetStructureTypeFromEdict(target);
+	EAIStructureType StructureType = AITAC_GetStructureTypeFromEdict(target);
 
 	if (StructureType == EAIStructureType::STRUCTURE_NONE)
 	{
@@ -583,7 +583,7 @@ EAIWeaponId BotAlienChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* tar
 		return EAIWeaponId::WEAPON_GORGE_BILEBOMB;
 	}
 
-	if (PlayerHasWeapon(pBot->Player, EAIWeaponId::WEAPON_FADE_ACIDROCKET) && (StructureType == EAIStructureType::STRUCTURE_ALIEN_HIVE || IsDamagingStructure(StructureType)))
+	if (PlayerHasWeapon(pBot->Player, EAIWeaponId::WEAPON_FADE_ACIDROCKET) && (StructureType == EAIStructureType::STRUCTURE_ALIEN_HIVE || AITAC_IsDamagingStructure(target)))
 	{
 		return EAIWeaponId::WEAPON_FADE_ACIDROCKET;
 	}
@@ -786,6 +786,91 @@ EAIWeaponId OnosGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target)
 EAIWeaponId FadeGetBestWeaponForCombatTarget(AvHAIPlayer* pBot, edict_t* Target)
 {
 	return EAIWeaponId::WEAPON_FADE_SWIPE;
+}
+
+EAIWeaponId UTIL_GetPlayerCurrentWeapon(const AvHPlayer* Player)
+{
+	if (!Player) { return EAIWeaponId::WEAPON_INVALID; }
+
+	AvHBasePlayerWeapon* theBasePlayerWeapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_pActiveItem);
+
+	if (theBasePlayerWeapon)
+	{
+		return static_cast<EAIWeaponId>(theBasePlayerWeapon->m_iId);
+	}
+
+	return EAIWeaponId::WEAPON_INVALID;
+}
+
+bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon)
+{
+	if (!Player || DesiredCombatWeapon == EAIWeaponId::WEAPON_INVALID) { return false; }
+
+	bool HasWeaponInInventory = (Player->pev->weapons & (1 << static_cast<int>(DesiredCombatWeapon)));
+
+	// Marines don't have a fixed inventory, so we can just do a simple check for them. Same goes to confirm the alien has the weapon in their inventory
+	if (IsPlayerMarine(Player) || !HasWeaponInInventory)
+	{
+		if (DesiredCombatWeapon == EAIWeaponId::WEAPON_MARINE_GRENADE && HasWeaponInInventory)
+		{
+			AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[5]);
+
+			if (!Weapon) { return false; }
+
+			return Weapon->m_iClip > 0;
+		}
+
+		return HasWeaponInInventory;
+	}
+
+	// Aliens always have all weapons in their inventory, but they are enabled/disabled based on hive count (or combat unlocks).
+	// Now we check to see if the weapon is enabled for them.
+
+	edict_t* pEdict = ENT(Player->pev);
+
+	// Which slot the weapon sits in
+	int DesiredWeaponIndex = -1;
+
+	switch (DesiredCombatWeapon)
+	{
+		case EAIWeaponId::WEAPON_SKULK_BITE:
+		case EAIWeaponId::WEAPON_GORGE_SPIT:
+		case EAIWeaponId::WEAPON_LERK_BITE:
+		case EAIWeaponId::WEAPON_FADE_SWIPE:
+		case EAIWeaponId::WEAPON_ONOS_GORE:
+			DesiredWeaponIndex = 1;
+			break;
+		case EAIWeaponId::WEAPON_SKULK_PARASITE:
+		case EAIWeaponId::WEAPON_GORGE_HEALINGSPRAY:
+		case EAIWeaponId::WEAPON_LERK_SPORES:
+		case EAIWeaponId::WEAPON_FADE_BLINK:
+		case EAIWeaponId::WEAPON_ONOS_DEVOUR:
+			DesiredWeaponIndex = 2;
+			break;
+		case EAIWeaponId::WEAPON_SKULK_LEAP:
+		case EAIWeaponId::WEAPON_GORGE_BILEBOMB:
+		case EAIWeaponId::WEAPON_LERK_UMBRA:
+		case EAIWeaponId::WEAPON_FADE_METABOLIZE:
+		case EAIWeaponId::WEAPON_ONOS_STOMP:
+			DesiredWeaponIndex = 3;
+			break;
+		case EAIWeaponId::WEAPON_SKULK_XENOCIDE:
+		case EAIWeaponId::WEAPON_GORGE_WEB:
+		case EAIWeaponId::WEAPON_LERK_PRIMALSCREAM:
+		case EAIWeaponId::WEAPON_FADE_ACIDROCKET:
+		case EAIWeaponId::WEAPON_ONOS_CHARGE:
+			DesiredWeaponIndex = 4;
+			break;
+		default:
+			DesiredWeaponIndex = -1;
+			break;
+	}
+
+	if (DesiredWeaponIndex < 0) { return false; }
+
+	AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[DesiredWeaponIndex]);
+
+	return (Weapon && Weapon->m_iEnabled);
 }
 
 EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const edict_t* Target)

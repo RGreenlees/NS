@@ -53,8 +53,6 @@ AvHAIBuildableStructure* AICOMM_DeployStructure(AvHAIPlayer* pBot, const EAIStru
 
 	pBot->Player->PayPurchaseCost(theCost);
 
-	pBot->next_commander_action_time = gpGlobals->time + 1.0f;
-
 	return NewStructure;
 }
 
@@ -79,8 +77,6 @@ bool AICOMM_DeployItem(AvHAIPlayer* pBot, EAIDeployableItemType ItemToDeploy, co
 	AITAC_RegisterNewDroppedItem(NewItem, ItemToDeploy);
 
 	pBot->Player->PayPurchaseCost(theCost);
-
-	pBot->next_commander_action_time = gpGlobals->time + 0.2f;
 
 	return true;
 }
@@ -120,8 +116,6 @@ bool AICOMM_ResearchTech(AvHAIPlayer* pBot, const AvHAIBuildableStructure* Struc
 
 	pBot->NextFrameMovementInput.Button |= IN_ATTACK2;
 	pBot->NextFrameMovementInput.Impulse = Research;
-
-	pBot->next_commander_action_time = gpGlobals->time + 0.2f;
 
 	return true;
 }

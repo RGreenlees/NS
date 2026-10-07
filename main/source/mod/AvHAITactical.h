@@ -13,15 +13,138 @@
 
 #include <unordered_map>
 
-#include "AvHAIPlayer.h"
 #include "AvHAIConstants.h"
 #include "AvHAINavMesh.h"
+
+class AvHHive;
+class AvHFuncResource;
+// Forward declare AvHAIPlayer to avoid header cycles. Tactical APIs accept AvHAIPlayer* in some places.
+struct AvHAIPlayer;
 
 // How frequently to update the global list of built structures (in seconds). 0 = every frame
 static const float structure_inventory_refresh_rate = 0.2f;
 
 // How frequently to update the global list of dropped marine items (in seconds). 0 = every frame
 static const float item_inventory_refresh_rate = 0.2f;
+
+enum class EAIStructureStatus : uint16
+{
+	STRUCTURE_STATUS_NONE = 0,				// No filters, all buildings will be returned
+	STRUCTURE_STATUS_GHOST = 1u << 0,		// For marine structure, this is their "ghost" form before anyone has started building it
+	STRUCTURE_STATUS_PARTIAL = 1u << 1,		// Partially finished, but not yet completed
+	STRUCTURE_STATUS_COMPLETED = 1u << 2,	// Structure is fully built
+	STRUCTURE_STATUS_ELECTRIFIED = 1u << 3,
+	STRUCTURE_STATUS_RECYCLING = 1u << 4,
+	STRUCTURE_STATUS_PARASITED = 1u << 5,
+	STRUCTURE_STATUS_UNDERATTACK = 1u << 6,
+	STRUCTURE_STATUS_RESEARCHING = 1u << 7,
+	STRUCTURE_STATUS_DAMAGED = 1u << 8,		// When it's completed, but at less than 100% health
+	STRUCTURE_STATUS_DISABLED = 1u << 9,		// For marine turrets when there's no TF
+
+	STRUCTURE_STATUS_ALL = 0xFFFF
+};
+
+inline EAIStructureStatus operator|(EAIStructureStatus a, EAIStructureStatus b)
+{
+	return static_cast<EAIStructureStatus>(static_cast<uint16>(a) | static_cast<uint16>(b));
+}
+
+inline EAIStructureStatus operator&(EAIStructureStatus a, EAIStructureStatus b)
+{
+	return static_cast<EAIStructureStatus>(static_cast<uint16>(a) & static_cast<uint16>(b));
+}
+
+enum class EAIStructureType : uint32
+{
+	STRUCTURE_NONE = 0,
+	STRUCTURE_MARINE_RESTOWER = 1u << 0,
+	STRUCTURE_MARINE_INFANTRYPORTAL = 1u << 1,
+	STRUCTURE_MARINE_TURRETFACTORY = 1u << 2,
+	STRUCTURE_MARINE_ADVTURRETFACTORY = 1u << 3,
+	STRUCTURE_MARINE_ARMORY = 1u << 4,
+	STRUCTURE_MARINE_ADVARMORY = 1u << 5,
+	STRUCTURE_MARINE_ARMSLAB = 1u << 6,
+	STRUCTURE_MARINE_PROTOTYPELAB = 1u << 7,
+	STRUCTURE_MARINE_OBSERVATORY = 1u << 8,
+	STRUCTURE_MARINE_PHASEGATE = 1u << 9,
+	STRUCTURE_MARINE_TURRET = 1u << 10,
+	STRUCTURE_MARINE_SIEGETURRET = 1u << 11,
+	STRUCTURE_MARINE_COMMCHAIR = 1u << 12,
+	STRUCTURE_MARINE_DEPLOYEDMINE = 1u << 13,
+
+	STRUCTURE_ALIEN_HIVE = 1u << 14,
+	STRUCTURE_ALIEN_RESTOWER = 1u << 15,
+	STRUCTURE_ALIEN_DEFENSECHAMBER = 1u << 16,
+	STRUCTURE_ALIEN_SENSORYCHAMBER = 1u << 17,
+	STRUCTURE_ALIEN_MOVEMENTCHAMBER = 1u << 18,
+	STRUCTURE_ALIEN_OFFENSECHAMBER = 1u << 19,
+
+	ALL_MARINE_STRUCTURES = 0xFFF,
+	ALL_ALIEN_STRUCTURES = (STRUCTURE_ALIEN_HIVE | STRUCTURE_ALIEN_RESTOWER | STRUCTURE_ALIEN_DEFENSECHAMBER | STRUCTURE_ALIEN_SENSORYCHAMBER | STRUCTURE_ALIEN_MOVEMENTCHAMBER | STRUCTURE_ALIEN_OFFENSECHAMBER),
+	ANY_RES_TOWER = (STRUCTURE_MARINE_RESTOWER | STRUCTURE_ALIEN_RESTOWER),
+
+	ALL_STRUCTURES = ((uint32)-1 & ~(STRUCTURE_MARINE_DEPLOYEDMINE))
+};
+
+inline EAIStructureType operator|(EAIStructureType a, EAIStructureType b)
+{
+	return static_cast<EAIStructureType>(static_cast<uint32>(a) | static_cast<uint32>(b));
+}
+
+inline EAIStructureType operator&(EAIStructureType a, EAIStructureType b)
+{
+	return static_cast<EAIStructureType>(static_cast<uint32>(a) & static_cast<uint32>(b));
+}
+
+enum class EAIDeployableItemType : uint16
+{
+	DEPLOYABLE_ITEM_NONE = 0,
+	DEPLOYABLE_ITEM_RESUPPLY = 1u, // For combat mode
+	DEPLOYABLE_ITEM_HEAVYARMOUR = 1u << 1,
+	DEPLOYABLE_ITEM_JETPACK = 1u << 2,
+	DEPLOYABLE_ITEM_CATALYSTS = 1u << 3,
+	DEPLOYABLE_ITEM_SCAN = 1u << 4,
+	DEPLOYABLE_ITEM_HEALTHPACK = 1u << 5,
+	DEPLOYABLE_ITEM_AMMO = 1u << 6,
+	DEPLOYABLE_ITEM_MINES = 1u << 7,
+	DEPLOYABLE_ITEM_WELDER = 1u << 8,
+	DEPLOYABLE_ITEM_SHOTGUN = 1u << 9,
+	DEPLOYABLE_ITEM_LMG = 1u << 10,
+	DEPLOYABLE_ITEM_HMG = 1u << 11,
+	DEPLOYABLE_ITEM_GRENADELAUNCHER = 1u << 12,
+
+	DEPLOYABLE_ITEM_WEAPONS = 0xF80,
+	DEPLOYABLE_ITEM_EQUIPMENT = 0x6,
+
+	DEPLOYABLE_ITEM_ALL = 0xFFFF
+};
+
+inline EAIDeployableItemType operator|(EAIDeployableItemType a, EAIDeployableItemType b)
+{
+	return static_cast<EAIDeployableItemType>(static_cast<uint16>(a) | static_cast<uint16>(b));
+}
+
+inline EAIDeployableItemType operator&(EAIDeployableItemType a, EAIDeployableItemType b)
+{
+	return static_cast<EAIDeployableItemType>(static_cast<uint16>(a) & static_cast<uint16>(b));
+}
+
+// Hives can either be unbuilt ("ghost" hive), in progress or fully built (active)
+enum class EAIHiveStatus
+{
+	HIVE_STATUS_UNBUILT = 0,
+	HIVE_STATUS_BUILDING = 1,
+	HIVE_STATUS_BUILT = 2
+};
+
+// All tech statuses that can be assigned to a hive
+enum class EAIHiveTechStatus
+{
+	HIVE_TECH_NONE = 0, // Hive doesn't have any tech assigned to it yet (no chambers built for it)
+	HIVE_TECH_DEFENSE = 1,
+	HIVE_TECH_SENSORY = 2,
+	HIVE_TECH_MOVEMENT = 3
+};
 
 // Data structure to hold information on any kind of buildable structure (hive, resource tower, chamber, marine building etc)
 struct AvHAIBuildableStructure
@@ -242,7 +365,6 @@ void						AITAC_OnStructureBecomeSolid(AvHAIBuildableStructure* Structure);
 void						AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure);
 void						AITAC_OnStructureBeginRecycling(AvHAIBuildableStructure* RecyclingStructure);
 void						AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure);
-void						AITAC_LinkDeployedItemToAction(AvHAIPlayer* CommanderBot, const AvHAIDroppedItem* NewItem);
 void						AITAC_LinkStructureToPlayer(const AvHAIBuildableStructure* NewStructure);
 
 AvHAIDroppedItem*			AITAC_RegisterNewDroppedItem(CBaseEntity* NewItem, EAIDeployableItemType ItemType);
@@ -288,6 +410,16 @@ const AvHAIResourceNode* AITAC_FindNearestResourceNodeToLocation(const Vector Lo
 vector<const AvHAIResourceNode*> AITAC_GetAllMatchingResourceNodes(const Vector Location, const ResourceNodeSearchFilter* Filter);
 
 EAIWeaponId UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict);
+
+EAIStructureType AITAC_IUSER3ToStructureType(const int inIUSER3);
+
+EAIStructureType AITAC_GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict);
+EAIHiveTechStatus AITAC_GetHiveTechStatusFromMessageID(const AvHMessageID TechID);
+EAIStructureType AITAC_GetStructureTypeFromEdict(const edict_t* StructureEdict);
+bool AITAC_IsDamagingStructure(const edict_t* StructureEdict);
+bool AITAC_IsEdictStructure(const edict_t* edict);
+
+char* AITAC_StructTypeToChar(const EAIStructureType StructureType);
 
 int AITAC_GetNumActivePlayersOnTeam(const AvHTeamNumber Team);
 int AITAC_GetNumPlayersOfTeamInArea(const AvHTeamNumber Team, const Vector SearchLocation, const float SearchRadius, const bool bConsiderPhaseDist, const edict_t* IgnorePlayer, const AvHUser3 IgnoreClass);

@@ -413,7 +413,7 @@ AvHGamerules::AvHGamerules() : mTeamA(TEAM_ONE), mTeamB(TEAM_TWO)
 		{
 			if (avh_botsenabled.value > 0)
 			{
-				AIMGR_ReloadNavigationData();
+
 			}
 			else
 			{
@@ -564,7 +564,7 @@ void AvHGamerules::AutoAssignPlayer(AvHPlayer* inPlayer)
 {
 	int theTeamACount = this->mTeamA.GetPlayerCount();
 	int theTeamBCount = this->mTeamB.GetPlayerCount();
-	
+
 	bool joinTeamA = (theTeamACount < theTeamBCount) || ( (theTeamACount == theTeamBCount) && RANDOM_LONG(0,1) );
 
 	AvHTeamNumber theTeam = (joinTeamA ? this->mTeamA.GetTeamNumber() : this->mTeamB.GetTeamNumber());
@@ -600,7 +600,7 @@ void AvHGamerules::RewardPlayerForKill(AvHPlayer* inPlayer, CBaseEntity* inTarge
 				{
 					theResourceValue = 2;
 				}
-				else 
+				else
 				{
 					int theMin = BALANCE_VAR(kKillRewardMin);
 					int theMax = BALANCE_VAR(kKillRewardMax);
@@ -721,7 +721,7 @@ BOOL AvHGamerules::CanHavePlayerItem(CBasePlayer *pPlayer, CBasePlayerItem *pWea
 		int theCurrentFlag = (theWeaponFlags & (PRIMARY_WEAPON | SECONDARY_WEAPON));
 		CBasePlayerItem* theCurrentItem = NULL;
 		bool theHasWeaponWithFlag = pPlayer->HasItemWithFlag(theCurrentFlag, theCurrentItem);
-		
+
 		if(theHasWeaponWithFlag)
 		{
 			int playerAutoSwapWeapon = 1;
@@ -732,7 +732,7 @@ BOOL AvHGamerules::CanHavePlayerItem(CBasePlayer *pPlayer, CBasePlayerItem *pWea
 			AvHBasePlayerWeapon* theNewWeapon = dynamic_cast<AvHBasePlayerWeapon*>(pWeapon);
 			if (theNewWeapon)
 				newWeaponCanFire = theNewWeapon->GetIsCapableOfFiring();
-			
+
 			//if (theCurrentItem->iWeight() < pWeapon->iWeight())
 			if(theCurrentItem->iWeight() < pWeapon->iWeight() && (playerAutoSwapWeapon == 1 || (playerAutoSwapWeapon == 2 && newWeaponCanFire)))
 			{
@@ -818,7 +818,7 @@ BOOL AvHGamerules::GetIsClientAuthorizedToPlay(edict_t* inEntity, bool inDisplay
         theAuthMask = GetGameRules()->GetAuthenticationMask(theAuthID);
     }
 
-	if ( inEntity->v.flags & FL_PROXY ) 
+	if ( inEntity->v.flags & FL_PROXY )
 	{
 		if(inDisplayMessage)
 		{
@@ -946,7 +946,7 @@ void AvHGamerules::ClientKill( edict_t *pEntity )
 
 void AvHGamerules::ClientUserInfoChanged(CBasePlayer *pPlayer, char *infobuffer)
 {
-	// NOTE: Not currently calling down to parent CHalfLifeTeamplay 
+	// NOTE: Not currently calling down to parent CHalfLifeTeamplay
 
 	const char* theAutoWeapSwapValue = g_engfuncs.pfnInfoKeyValue(infobuffer, "cl_weaponswap");
 
@@ -1387,7 +1387,7 @@ bool AvHGamerules::GetCheatsEnabled(void) const
 	return (theCheatsEnabled == 1.0f);
 }
 
-float AvHGamerules::GetFirstScanThinkTime() const 
+float AvHGamerules::GetFirstScanThinkTime() const
 {
 	return this->GetIsCombatMode() ? 0.25f : 0.5f;
 }
@@ -2583,7 +2583,7 @@ void AvHGamerules::VoteMap(int inPlayerIndex, int inMapIndex)
 		{
 			//	typedef map< int, int >		PlayerMapVoteListType;
 			PlayerMapVoteListType::iterator theMappedPlayer = this->mPlayersVoted.find(inPlayerIndex);
-			
+
 			//	typedef vector< pair <string, int> >	MapVoteListType;
             // Increment votes for map
            // MapVoteListType::iterator theIter = (MapVoteListType::iterator)&this->mMapVoteList[inMapIndex-1]; //to fix 20214
@@ -2601,7 +2601,7 @@ void AvHGamerules::VoteMap(int inPlayerIndex, int inMapIndex)
 			{
 				this->mPlayersVoted.insert(pair < int, int >(inPlayerIndex, inMapIndex));
 			}
-			
+
             // Tell everyone
             CBaseEntity* theVotingPlayer = CBaseEntity::Instance(g_engfuncs.pfnPEntityOfEntIndex(inPlayerIndex));
             ASSERT(theVotingPlayer);
@@ -2617,7 +2617,7 @@ void AvHGamerules::VoteMap(int inPlayerIndex, int inMapIndex)
                 strcpy(theLevelName, this->mMapVoteList.at(inMapIndex - 1).first.c_str());
                 CHANGE_LEVEL(theLevelName, NULL);
             }
-			
+
 		}
 	}
 }
@@ -2636,8 +2636,8 @@ void AvHGamerules::RemovePlayerFromVotemap(int inPlayerIndex)
 
 	// trigger mapchange check
 	int theVotesNeeded = this->GetVotesNeededForMapChange();
-	for(MapVoteListType::iterator theMapIterator = this->mMapVoteList.begin(); 
-		theMapIterator != this->mMapVoteList.end(); 
+	for(MapVoteListType::iterator theMapIterator = this->mMapVoteList.begin();
+		theMapIterator != this->mMapVoteList.end();
 		theMapIterator++)
 	{
 		if (theMapIterator->second >= theVotesNeeded)
@@ -3084,7 +3084,7 @@ CBaseEntity* AvHGamerules::GetRandomHiveSpawnPoint(CBaseEntity* inPlayer, const 
 
 	return theSpawnPoint;
 }
-bool AvHGamerules::CanPlayerBeacon(CBaseEntity *inPlayer) 
+bool AvHGamerules::CanPlayerBeacon(CBaseEntity *inPlayer)
 {
 	bool result=true;
 	SpawnListType::const_iterator theSpawnIter;
@@ -3097,7 +3097,7 @@ bool AvHGamerules::CanPlayerBeacon(CBaseEntity *inPlayer)
 		string theClassName = theSpawnIter->GetClassName();
 		if(theClassName == kesTeamStart)
 		{
-			if(theSpawnIter->GetTeamNumber() == thePlayerTeamNumber && 
+			if(theSpawnIter->GetTeamNumber() == thePlayerTeamNumber &&
 				VectorDistance(theSpawnIter->GetOrigin(), inPlayer->pev->origin) < BALANCE_VAR(kDistressBeaconRange))
 			{
 				result=false;
@@ -3267,7 +3267,7 @@ void AvHGamerules::UpdateHLTVProxy()
 			}
 		}
 
-			
+
 		const float kHLTVProxyUpdateTime = 6.0f;
 		const float kForcedHLTVProxyUpdateTime = 30.0f;
 
@@ -3303,9 +3303,9 @@ void AvHGamerules::UpdateHLTVProxy()
 
 				this->mTimeOfForcedLastHLTVProxyUpdate=gpGlobals->time;
 			}
-			else {			
+			else {
 				AvHEntityHierarchy& theEntityList = GetGameRules()->GetEntityHierarchy(TEAM_SPECT);
-				if ( theEntityList.SendToNetworkStream(mHLTVEntityHierarchy, NULL, true) ) 
+				if ( theEntityList.SendToNetworkStream(mHLTVEntityHierarchy, NULL, true) )
 				{
 					mHLTVEntityHierarchy = theEntityList;
 				}
@@ -3647,7 +3647,7 @@ void AvHGamerules::Think(void)
 	this->UpdateGameTime();
 
     if(GET_RUN_CODE(4))
-    {	
+    {
 		AIMGR_UpdateAISystem();
 
 	    if(!this->GetGameStarted())
@@ -4507,7 +4507,7 @@ int	AvHGamerules::GetBuildTimeForMessageID(AvHMessageID inMessageID) const
 
 		// Scan Duration
 		case BUILD_SCAN:				time = BALANCE_VAR(kScanDuration); break;
-		
+
 		// Alien Structures
 		case ALIEN_BUILD_RESOURCES:			time = BALANCE_VAR(kAlienResourceTowerBuildTime); break;
 		case ALIEN_BUILD_OFFENSE_CHAMBER:	time = BALANCE_VAR(kOffenseChamberBuildTime); break;
@@ -4528,7 +4528,7 @@ int	AvHGamerules::GetBuildTimeForMessageID(AvHMessageID inMessageID) const
 		case ALIEN_EVOLUTION_TWELVE:		time = BALANCE_VAR(kEvolutionGestateTime)*CO_Scalar;	break;
         case ALIEN_HIVE_TWO_UNLOCK:			time = BALANCE_VAR(kEvolutionGestateTime)*CO_Scalar;	break;
         case ALIEN_HIVE_THREE_UNLOCK:		time = BALANCE_VAR(kEvolutionGestateTime)*CO_Scalar;	break;
-	
+
 		// Alien Lifeforms
 		case ALIEN_LIFEFORM_ONE:		time = BALANCE_VAR(kSkulkGestateTime)*CO_GScalar; break;
 		case ALIEN_LIFEFORM_TWO:		time = BALANCE_VAR(kGorgeGestateTime)*CO_GScalar; break;
@@ -4633,7 +4633,7 @@ int	AvHGamerules::GetCostForMessageID(AvHMessageID inMessageID) const
 			case RESEARCH_MOTIONTRACK:		cost = BALANCE_VAR(kMotionTrackingResearchCost); break;
 			case RESEARCH_PHASETECH:		cost = BALANCE_VAR(kPhaseTechResearchCost); break;
 			case RESEARCH_DISTRESSBEACON:	cost = BALANCE_VAR(kDistressBeaconCost); break;
-		
+
 			// Marine Structures
 			case BUILD_HEAVY:				cost = BALANCE_VAR(kHeavyArmorCost); break;
 			case BUILD_JETPACK:				cost = BALANCE_VAR(kJetpackCost); break;
@@ -4649,7 +4649,7 @@ int	AvHGamerules::GetCostForMessageID(AvHMessageID inMessageID) const
 			case BUILD_TURRET:				cost = BALANCE_VAR(kSentryCost); break;
 			case BUILD_SIEGE:				cost = BALANCE_VAR(kSiegeCost); break;
 			case BUILD_COMMANDSTATION:		cost = BALANCE_VAR(kCommandStationCost); break;
-			
+
 			// Marine Equipment
 			case BUILD_HEALTH:					cost = BALANCE_VAR(kHealthCost); break;
 			case BUILD_AMMO:					cost = BALANCE_VAR(kAmmoCost); break;
@@ -4678,7 +4678,7 @@ int	AvHGamerules::GetCostForMessageID(AvHMessageID inMessageID) const
 			case ALIEN_EVOLUTION_TEN:			cost = BALANCE_VAR(kEvolutionCost); break;
 			case ALIEN_EVOLUTION_ELEVEN:		cost = BALANCE_VAR(kEvolutionCost); break;
 			case ALIEN_EVOLUTION_TWELVE:		cost = BALANCE_VAR(kEvolutionCost); break;
-		
+
 			// Alien Lifeforms
 			case ALIEN_LIFEFORM_ONE:			cost = BALANCE_VAR(kSkulkCost) * theGameStarted; break;
 			case ALIEN_LIFEFORM_TWO:			cost = BALANCE_VAR(kGorgeCost) * theGameStarted; break;
@@ -4690,7 +4690,7 @@ int	AvHGamerules::GetCostForMessageID(AvHMessageID inMessageID) const
 			case BUILD_SCAN:					cost = BALANCE_VAR(kScanEnergyCost); break;
 		}
 	}
-	
+
 	return cost;
 }
 

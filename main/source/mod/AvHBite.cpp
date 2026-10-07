@@ -5,7 +5,7 @@
 // Charles G. Cleveland, or in accordance with the terms and conditions stipulated in
 // the agreement/contract under which the contents have been supplied.
 //
-// Purpose: 
+// Purpose:
 //
 // $Workfile: AvHBite.cpp $
 // $Date: 2002/11/22 21:28:16 $
@@ -87,7 +87,7 @@ bool AvHBite::GetIsGunPositionValid() const
 {
     return true;
 }
-    
+
 float AvHBite::GetRateOfFire() const
 {
 	return BALANCE_VAR(kBiteROF);
@@ -102,9 +102,9 @@ int	AvHBite::GetDeployAnimation() const
 {
 	// Only play deploy anim when changing to skulk
 	int theDeployAnimation = 5;
-	
+
 	AvHWeaponID thePreviousID = this->GetPreviousWeaponID();
-	
+
 	switch(thePreviousID)
 	{
 	case AVH_WEAPON_BITE:
@@ -114,7 +114,7 @@ int	AvHBite::GetDeployAnimation() const
 		theDeployAnimation = -1;
 		break;
 	}
-	
+
 	return theDeployAnimation;
 }
 
@@ -132,7 +132,7 @@ int	AvHBite::GetIdleAnimation() const
 	{
 		// Return flavor anim
 		theAnimation = 2;
-	} 
+	}
 	else if(theRandomNumber < (kMax-1)/2)
 	{
 		theAnimation = 0;
@@ -167,38 +167,38 @@ void AvHBite::Precache()
 	PRECACHE_UNMODIFIED_SOUND(kBiteHitSound1);
 	PRECACHE_UNMODIFIED_SOUND(kBiteHitSound2);
 	PRECACHE_UNMODIFIED_SOUND(kBiteKillSound);
-	
+
 	this->mEvent = PRECACHE_EVENT(1, kBiteEventName);
 }
 
 
-void AvHBite::Spawn() 
-{ 
-    AvHAlienWeapon::Spawn(); 
-	
+void AvHBite::Spawn()
+{
+    AvHAlienWeapon::Spawn();
+
 	this->Precache();
-	
+
 	this->m_iId = AVH_WEAPON_BITE;
-	
+
     // Set our class name
 	this->pev->classname = MAKE_STRING(kwsBiteGun);
-	
+
 	SET_MODEL(ENT(this->pev), kNullModel);
-	
+
 	FallInit();// get ready to fall down.
-} 
+}
 
 
 void AvHBite::FireProjectiles(void)
 {
 #ifdef AVH_SERVER
-	
+
 	// TODO: Check team
 	float theDamage = this->mDamage*AvHPlayerUpgrade::GetAlienMeleeDamageUpgrade(this->m_pPlayer->pev->iuser4, AvHSHUGetIsWeaponFocusable(AvHWeaponID(this->m_iId)));
 
 	// Do trace hull here
 	Vector theTestAiming = this->m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
-	
+
 	CBaseEntity* pHurt = this->m_pPlayer->CheckTraceHullAttack(this->mRange, theDamage, this->GetDamageType());
 	if(pHurt)
 	{
@@ -217,18 +217,18 @@ void AvHBite::FireProjectiles(void)
 				theSoundToPlay = kBiteHitSound2;
 				break;
 			}
-			
+
 			if(pHurt->pev->health <= 0)
 			{
 				theSoundToPlay = kBiteKillSound;
 			}
 
-			AISND_RegisterNewSound(this->m_pPlayer->entindex(), this->m_pPlayer->pev->origin, AI_SOUND_LANDING, 1.0f);
-			
+			AISND_RegisterNewSound(this->m_pPlayer->entindex(), this->m_pPlayer->pev->origin, EAISoundType::AI_SOUND_SHOOT, 1.0f);
+
 			EMIT_SOUND(ENT(pev), CHAN_WEAPON, theSoundToPlay, 1.0, ATTN_NORM);
 		}
 	}
-#endif	
+#endif
 }
 
 bool AvHBite::GetFiresUnderwater() const

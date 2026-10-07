@@ -31,16 +31,14 @@ string UTIL_GetLocationName(Vector Location);
 Vector UTIL_GetClosestPointOnEntityToLocation(const Vector UserLocation, const edict_t* Entity);
 Vector UTIL_GetClosestPointOnEntityToLocation(const Vector Location, const edict_t* Entity, const Vector EntityLocation);
 
-EAIStructureType IUSER3ToStructureType(const int inIUSER3);
 
-bool IsEdictStructure(const edict_t* edict);
 bool IsEdictHive(const edict_t* edict);
 
 AvHMessageID UTIL_GetVoicelineId(EAIVoiceLine RequiredVoiceLine);
 
-EAIWeaponId UTIL_GetPlayerCurrentWeapon(const AvHPlayer* Player);
 
-bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWeapon);
+
+
 
 bool UTIL_IsCloakedPlayerInvisible(const edict_t* Observer, const AvHPlayer* Player);
 
@@ -48,20 +46,8 @@ AvHMessageID UTIL_GetEvolveUpgradeImpulse(EAIAlienUpgrade DesiredUpgrade);
 AvHMessageID UTIL_GetEvolveLifeformImpulse(EAIAlienLifeform DesiredLifeform);
 float UTIL_GetEvolveLifeformCost(EAIAlienLifeform DesiredLifeform);
 
-EAIStructureType GetStructureTypeFromEdict(const edict_t* StructureEdict);
-
-// Returns true if this structure shoots back (turret or offence chamber)
-bool IsDamagingStructure(const edict_t* StructureEdict);
-// Returns true if this structure shoots back (turret or offence chamber)
-bool IsDamagingStructure(EAIStructureType StructureType);
-
 bool GetNearestMapLocationAtPoint(vec3_t SearchLocation, string& outLocation);
 
-EAIStructureType GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict);
-
-void AIDEBUG_DrawPath(edict_t* OutputPlayer, vector<AvHAIPathNode>& Path, float DrawTime = 0.0f);
-
-EAIHiveTechStatus UTIL_GetHiveTechStatusFromMessageID(const AvHMessageID TechID);
 
 // Draws a white line between start and end for the given player (pEntity) for 0.1s
 void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end);
@@ -81,9 +67,6 @@ void UTIL_ClearLocalizations();
 void UTIL_LocalizeText(const char* InputText, string& OutputText);
 
 char* UTIL_TaskTypeToChar(const EAITaskType TaskType);
-char* UTIL_StructTypeToChar(const EAIStructureType StructureType);
-
-char* UTIL_BotRoleToChar(const EAIPlayerRole Role);
 
 bool UTIL_IsPointInSwimArea(const Vector& TestPoint);
 

@@ -565,16 +565,16 @@ void AITAC_CalculateMarineReachabilityFlags(const Vector& FromLocation, const Ve
 
 	if (!AIMESH_IsPointOnNavmesh(MarineBaseProfile->MeshIndex, ToLocation)) { return; }
 
-	if (UTIL_PointIsReachable(MarineBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+	if (AINAV_IsPointReachable(MarineBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 	{
 		OutReachabilityFlags = EnumGetCombinedFlags(EAIReachabilityFlags::AI_REACHABILITY_MARINE, EAIReachabilityFlags::AI_REACHABILITY_WELDER);
 		return;
 	}
 
 	NavAgentProfile WelderProfile = *MarineBaseProfile;
-	WelderProfile.Filters.addIncludeFlags(EAINavMovementFlag::NAV_FLAG_WELD);
+	WelderProfile.Filters.addIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
 
-	if (UTIL_PointIsReachable(&WelderProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+	if (AINAV_IsPointReachable(&WelderProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 	{
 		OutReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_WELDER;
 	}
@@ -589,7 +589,7 @@ void AITAC_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vec
 	{
 		if (AIMESH_IsPointOnNavmesh(OnosBaseProfile->MeshIndex, ToLocation))
 		{
-			if (UTIL_PointIsReachable(OnosBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			if (AINAV_IsPointReachable(OnosBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 			{
 				EnumAddFlags(OutReachabilityFlags, EAIReachabilityFlags::AI_REACHABILITY_ONOS);
 			}
@@ -601,7 +601,7 @@ void AITAC_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vec
 	{
 		if (AIMESH_IsPointOnNavmesh(GorgeBaseProfile->MeshIndex, ToLocation))
 		{
-			if (UTIL_PointIsReachable(GorgeBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			if (AINAV_IsPointReachable(GorgeBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 			{
 				OutReachabilityFlags = (EAIReachabilityFlags::AI_REACHABILITY_GORGE
 					| EAIReachabilityFlags::AI_REACHABILITY_SKULK
@@ -618,7 +618,7 @@ void AITAC_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vec
 	{
 		if (AIMESH_IsPointOnNavmesh(SkulkBaseProfile->MeshIndex, ToLocation))
 		{
-			if (UTIL_PointIsReachable(SkulkBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			if (AINAV_IsPointReachable(SkulkBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 			{
 				// Assume that if a basic skulk can reach it, so can fade and lerk (which can blink/fly respectively)
 				OutReachabilityFlags = (EAIReachabilityFlags::AI_REACHABILITY_SKULK
@@ -631,9 +631,9 @@ void AITAC_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vec
 			else
 			{
 				NavAgentProfile SkulkWithLeapProfile = *SkulkBaseProfile;
-				SkulkWithLeapProfile.Filters.addIncludeFlags(EAINavMovementFlag::NAV_FLAG_LEAP);
+				SkulkWithLeapProfile.Filters.addIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_LEAP));
 
-				if (UTIL_PointIsReachable(&SkulkWithLeapProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+				if (AINAV_IsPointReachable(&SkulkWithLeapProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 				{
 					// If a skulk with leap can, then assume lerk and fade also can (since they can blink/fly for leap)
 					OutReachabilityFlags = (EAIReachabilityFlags::AI_REACHABILITY_SKULK_LEAP
@@ -651,7 +651,7 @@ void AITAC_CalculateAlienReachabilityFlags(const Vector& FromLocation, const Vec
 	{
 		if (AIMESH_IsPointOnNavmesh(LerkBaseProfile->MeshIndex, ToLocation))
 		{
-			if (UTIL_PointIsReachable(LerkBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
+			if (AINAV_IsPointReachable(LerkBaseProfile, FromLocation, ToLocation, MaxAcceptableDistance))
 			{
 				OutReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_LERK;
 				return;
@@ -795,6 +795,160 @@ void AITAC_CheckNavMeshModified()
 
 }
 
+EAIStructureType AITAC_GetDeployableObjectTypeFromEdict(const edict_t* StructureEdict)
+{
+	if (FNullEnt(StructureEdict)) { return EAIStructureType::STRUCTURE_NONE; }
+
+	return AITAC_IUSER3ToStructureType(StructureEdict->v.iuser3);
+}
+
+EAIHiveTechStatus AITAC_GetHiveTechStatusFromMessageID(const AvHMessageID TechID)
+{
+	switch (TechID)
+	{
+	case ALIEN_BUILD_DEFENSE_CHAMBER:
+		return EAIHiveTechStatus::HIVE_TECH_DEFENSE;
+	case ALIEN_BUILD_MOVEMENT_CHAMBER:
+		return EAIHiveTechStatus::HIVE_TECH_MOVEMENT;
+	case ALIEN_BUILD_SENSORY_CHAMBER:
+		return EAIHiveTechStatus::HIVE_TECH_SENSORY;
+	default:
+		return EAIHiveTechStatus::HIVE_TECH_NONE;
+	}
+}
+
+EAIStructureType AITAC_GetStructureTypeFromEdict(const edict_t* StructureEdict)
+{
+	if (FNullEnt(StructureEdict)) { return EAIStructureType::STRUCTURE_NONE; }
+
+	return AITAC_IUSER3ToStructureType(StructureEdict->v.iuser3);
+}
+
+bool AITAC_IsDamagingStructure(const edict_t* StructureEdict)
+{
+	if (!UTIL_IsEdictActive(StructureEdict)) { return false; }
+
+	const EAIStructureType StructureType = AITAC_IUSER3ToStructureType(StructureEdict->v.iuser3);
+
+	switch (StructureType)
+	{
+		 case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
+		 case EAIStructureType::STRUCTURE_MARINE_TURRET:
+			 return true;
+		 default:
+			 return false;
+	}
+}
+
+bool AITAC_IsEdictStructure(const edict_t* edict)
+{
+	if (!UTIL_IsEdictActive(edict)) { return false; }
+
+	return (AITAC_IUSER3ToStructureType(edict->v.iuser3) != EAIStructureType::STRUCTURE_NONE);
+}
+
+char* AITAC_StructTypeToChar(const EAIStructureType StructureType)
+{
+	switch (StructureType)
+	{
+		case EAIStructureType::STRUCTURE_MARINE_RESTOWER:
+			return "RT";
+		case EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL:
+			return "IP";
+		case EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY:
+			return "TF";
+		case EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY:
+			return "Adv TF";
+		case EAIStructureType::STRUCTURE_MARINE_ARMORY:
+			return "Armoury";
+		case EAIStructureType::STRUCTURE_MARINE_ADVARMORY:
+			return "Adv Armoury";
+		case EAIStructureType::STRUCTURE_MARINE_ARMSLAB:
+			return "Armslab";
+		case EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB:
+			return "ProtoLab";
+		case EAIStructureType::STRUCTURE_MARINE_OBSERVATORY:
+			return "Obs";
+		case EAIStructureType::STRUCTURE_MARINE_PHASEGATE:
+			return "PG";
+		case EAIStructureType::STRUCTURE_MARINE_TURRET:
+			return "Sentry";
+		case EAIStructureType::STRUCTURE_MARINE_SIEGETURRET:
+			return "Siege T";
+		case EAIStructureType::STRUCTURE_MARINE_COMMCHAIR:
+			return "CC";
+		case EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE:
+			return "Mine";
+
+		case EAIStructureType::STRUCTURE_ALIEN_HIVE:
+			return "Hive";
+		case EAIStructureType::STRUCTURE_ALIEN_RESTOWER:
+			return "RT";
+		case EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER:
+			return "DC";
+		case EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER:
+			return "SC";
+		case EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER:
+			return "MC";
+		case EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER:
+			return "OC";
+		default:
+			return "None";
+	}
+}
+
+EAIStructureType AITAC_IUSER3ToStructureType(const int inIUSER3)
+{
+	switch (inIUSER3)
+	{
+		case AVH_USER3_COMMANDER_STATION:
+			return EAIStructureType::STRUCTURE_MARINE_COMMCHAIR;
+		case AVH_USER3_RESTOWER:
+			return EAIStructureType::STRUCTURE_MARINE_RESTOWER;
+		case AVH_USER3_INFANTRYPORTAL:
+			return EAIStructureType::STRUCTURE_MARINE_INFANTRYPORTAL;
+		case AVH_USER3_ARMORY:
+			return EAIStructureType::STRUCTURE_MARINE_ARMORY;
+		case AVH_USER3_ADVANCED_ARMORY:
+			return EAIStructureType::STRUCTURE_MARINE_ADVARMORY;
+		case AVH_USER3_TURRET_FACTORY:
+			return EAIStructureType::STRUCTURE_MARINE_TURRETFACTORY;
+		case AVH_USER3_ADVANCED_TURRET_FACTORY:
+			return EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY;
+		case AVH_USER3_TURRET:
+			return EAIStructureType::STRUCTURE_MARINE_TURRET;
+		case AVH_USER3_SIEGETURRET:
+			return EAIStructureType::STRUCTURE_MARINE_SIEGETURRET;
+		case AVH_USER3_ARMSLAB:
+			return EAIStructureType::STRUCTURE_MARINE_ARMSLAB;
+		case AVH_USER3_PROTOTYPE_LAB:
+			return EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB;
+		case AVH_USER3_OBSERVATORY:
+			return EAIStructureType::STRUCTURE_MARINE_OBSERVATORY;
+		case AVH_USER3_PHASEGATE:
+			return EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
+		case AVH_USER3_MINE:
+			return EAIStructureType::STRUCTURE_MARINE_DEPLOYEDMINE;
+
+		case AVH_USER3_HIVE:
+			return EAIStructureType::STRUCTURE_ALIEN_HIVE;
+		case AVH_USER3_ALIENRESTOWER:
+			return EAIStructureType::STRUCTURE_ALIEN_RESTOWER;
+		case AVH_USER3_DEFENSE_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_DEFENSECHAMBER;
+		case AVH_USER3_SENSORY_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_SENSORYCHAMBER;
+		case AVH_USER3_MOVEMENT_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_MOVEMENTCHAMBER;
+		case AVH_USER3_OFFENSE_CHAMBER:
+			return EAIStructureType::STRUCTURE_ALIEN_OFFENSECHAMBER;
+		default:
+			return EAIStructureType::STRUCTURE_NONE;
+	}
+
+	return EAIStructureType::STRUCTURE_NONE;
+}
+
 void AITAC_RefreshBuildableStructures()
 {
 	if (!AIMESH_IsNavMeshLoaded()) { return; }
@@ -891,16 +1045,6 @@ void AITAC_OnItemDropped(const AvHAIDroppedItem* NewItem)
 
 	AvHAIPlayer* TeamACommander = AIMGR_GetAICommander(TeamANumber);
 	AvHAIPlayer* TeamBCommander = AIMGR_GetAICommander(TeamBNumber);
-
-	if (TeamACommander)
-	{
-		AITAC_LinkDeployedItemToAction(TeamACommander, NewItem);
-	}
-
-	if (TeamBCommander)
-	{
-		AITAC_LinkDeployedItemToAction(TeamBCommander, NewItem);
-	}
 }
 
 void AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
@@ -1161,11 +1305,6 @@ void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 {
 	if (!DestroyedStructure || !DestroyedStructure->IsValid()) { return; }
 
-
-}
-
-void AITAC_LinkDeployedItemToAction(AvHAIPlayer* CommanderBot, const AvHAIDroppedItem* NewItem)
-{
 
 }
 
@@ -2385,7 +2524,7 @@ void AvHAIHive::Update()
 {
 	if (!IsValid()) { return; }
 
-	TechStatus = UTIL_GetHiveTechStatusFromMessageID(HiveEntity->GetTechnology());
+	TechStatus = AITAC_GetHiveTechStatusFromMessageID(HiveEntity->GetTechnology());
 	bIsUnderAttack = GetGameRules()->GetIsEntityUnderAttack(ENTINDEX(Edict));
 
 	OwningTeam = HiveEntity->GetTeamNumber();

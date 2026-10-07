@@ -575,7 +575,7 @@ void AvHSUPlayRandomConstructionEffect(AvHPlayer* inPlayer, CBaseEntity* inConst
 	{
 		gSoundListManager.PlaySoundInList(kMarineConstructionSoundList, inConstructee, CHAN_BODY, theVolume);
 
-		AISND_RegisterNewSound(inPlayer->entindex(), inPlayer->pev->origin, AI_SOUND_OTHER, theVolume);
+		AISND_RegisterNewSound(inPlayer->entindex(), inPlayer->pev->origin, EAISoundType::AI_SOUND_OTHER, theVolume);
 
 		// Play sparks every other time
 		if(RANDOM_LONG(0, 1) == 1)

@@ -5,7 +5,7 @@
 // Charles G. Cleveland, or in accordance with the terms and conditions stipulated in
 // the agreement/contract under which the contents have been supplied.
 //
-// Purpose: 
+// Purpose:
 //
 // $Workfile: AvHBasePlayerWeapon.cpp$
 // $Date: 2002/11/22 21:28:15 $
@@ -96,7 +96,7 @@ extern int				gWelderConstEventID;
 
 #include "AvHPlayerUpgrade.h"
 #include "AvHSharedUtil.h"
-#include "../types.h"						
+#include "../types.h"
 #include "../common/vector_util.h"
 #include "../util/MathUtil.h"
 
@@ -125,9 +125,9 @@ Vector UTIL_GetRandomSpreadDir(unsigned int inSeed, int inShotNumber, const Vect
 	}
 
 	float z = x * x + y * y;
-	
+
 	Vector theRandomDir = inBaseDirection + x * inSpread.x * inRight + y * inSpread.y * inUp;
-	
+
 	return theRandomDir;
 }
 
@@ -155,9 +155,9 @@ Vector UTIL_GetRandomSpreadDirFrom(unsigned int inSeed, int inShotNumber, const 
 	float z = x * x + y * y;
 	float xdir = x / fabs(x);
 	float ydir = y / fabs(y);
-	
+
 	Vector theRandomDir = inBaseDirection + inFromSpread.x * inRight * xdir + x * inSpread.x * inRight + inFromSpread.y * inUp * ydir + y * inSpread.y * inUp;
-	
+
 	return theRandomDir;
 }
 
@@ -194,7 +194,7 @@ int	AvHBasePlayerWeapon::AddToPlayer( CBasePlayer *pPlayer )
 {
 	// Can we predict weapon pick-ups?  I bet we can.
 	int theAddedToPlayer = 0;
-	
+
 #ifdef AVH_SERVER
 	AvHPlayer* inPlayer = dynamic_cast<AvHPlayer*>(pPlayer);
 	ASSERT(inPlayer != NULL);
@@ -209,7 +209,7 @@ int	AvHBasePlayerWeapon::AddToPlayer( CBasePlayer *pPlayer )
 			{
 				// Create a new weapon and give it to the player
 				pPlayer->GiveNamedItem(STRING(this->pev->classname));
-				
+
 				this->DestroyItem();
 			}
 			else
@@ -224,7 +224,7 @@ int	AvHBasePlayerWeapon::AddToPlayer( CBasePlayer *pPlayer )
 		}
 	}
 #endif
-	
+
 	return theAddedToPlayer;
 }
 
@@ -259,7 +259,7 @@ BOOL AvHBasePlayerWeapon::DefaultDeploy( char *szViewModel, char *szWeaponModel,
 {
 	if (!CanDeploy( ))
 		return FALSE;
-	
+
 	m_pPlayer->TabulateAmmo();
 
     // This was causing a crash from hl_weapons.cpp only when connected to a dedicated server and switching weapons
@@ -271,25 +271,25 @@ BOOL AvHBasePlayerWeapon::DefaultDeploy( char *szViewModel, char *szWeaponModel,
     m_pPlayer->pev->viewmodel = MAKE_STRING(szViewModel);
     m_pPlayer->pev->weaponmodel = MAKE_STRING(szWeaponModel);
 #else
-    gEngfuncs.CL_LoadModel( szViewModel, &m_pPlayer->pev->viewmodel );    
-    gEngfuncs.CL_LoadModel( szWeaponModel, &m_pPlayer->pev->weaponmodel );    
+    gEngfuncs.CL_LoadModel( szViewModel, &m_pPlayer->pev->viewmodel );
+    gEngfuncs.CL_LoadModel( szWeaponModel, &m_pPlayer->pev->weaponmodel );
 #endif
 
 	strcpy( m_pPlayer->m_szAnimExtention, szAnimExt );
 	//SendWeaponAnim( iAnim, skiplocal, body );
 	this->SendWeaponAnim(iAnim);
-	
+
 	// Set the player animation as well
 	//this->m_pPlayer->SetAnimation(PLAYER_ANIM(iAnim));
-	
+
 	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + this->GetDeployTime();
 
-	// 2024 - Fix some +movement animation issues on aliens and also make alien idle trigger faster so they look more organic. 
+	// 2024 - Fix some +movement animation issues on aliens and also make alien idle trigger faster so they look more organic.
 	if (m_pPlayer->pev->iuser3 > 2 && m_pPlayer->pev->iuser3 < 9)
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + this->GetDeployTime() + 2.0f;
 	else
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + this->GetDeployTime() + kDeployIdleInterval;
-	
+
 	return TRUE;
 }
 
@@ -309,13 +309,13 @@ BOOL AvHBasePlayerWeapon::DefaultReload( int iClipSize, int iAnim, float fDelay,
 //		return FALSE;
 //	}
 
-	int j = min(iClipSize - m_iClip, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]);	
-	
+	int j = min(iClipSize - m_iClip, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]);
+
 	if (j == 0)
 		return FALSE;
-	
+
 	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + fDelay;
-	
+
 	//!!UNDONE -- reload sound goes here !!!
 	// 2021 Ammo networking. Uncommented to not send animations to the client that initiated the reload. This is HL SDK code.
 	SendWeaponAnim( iAnim, UseDecrement() ? 1 : 0 );
@@ -330,12 +330,12 @@ BOOL AvHBasePlayerWeapon::DefaultReload( int iClipSize, int iAnim, float fDelay,
 	//ALERT(at_console, "defaultreload nextattack:%g\n", m_pPlayer->m_flNextAttack);
 	// Player model reload animation
 	this->m_pPlayer->SetAnimation(PLAYER_RELOAD);
-	
+
 	m_fInReload = TRUE;
 	m_bAttackQueued = false;
-	
+
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + kDeployIdleInterval;
-	
+
 	return TRUE;
 }
 
@@ -357,13 +357,13 @@ char* AvHBasePlayerWeapon::GetActiveViewModel() const
 //		this->m_pPlayer->pev->weaponmodel = MAKE_STRING(szWeaponModel);
 //		strcpy( m_pPlayer->m_szAnimExtention, szAnimExt );
 //		SendWeaponAnim( iAnim, skiplocal );
-//		
+//
 //		this->m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + inNextAttackTime;
 //		this->m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0;
 //
 //		theSuccess = TRUE;
 //	}
-//	
+//
 //	return theSuccess;
 //}
 
@@ -390,7 +390,7 @@ char* AvHBasePlayerWeapon::GetAnimationExtension() const
 		case AVH_WEAPON_STOMP:
 		theAnimExt = "ability2";
 		break;
-		
+
 		case AVH_ABILITY_LEAP:
 		case AVH_WEAPON_BILEBOMB:
 		case AVH_WEAPON_UMBRA:
@@ -406,7 +406,7 @@ char* AvHBasePlayerWeapon::GetAnimationExtension() const
 		case AVH_ABILITY_CHARGE:
 		theAnimExt = "ability4";
 		break;
-		
+
 		case AVH_WEAPON_KNIFE:
 			theAnimExt = "knife";
 			break;
@@ -527,10 +527,10 @@ int	AvHBasePlayerWeapon::GetIdleAnimation() const
 
 	switch(theRandomNum)
 	{
-	case 0:	
-		iAnim = kIdleAnimationOne;	
+	case 0:
+		iAnim = kIdleAnimationOne;
 		break;
-		
+
 	default:
 	case 1:
         iAnim = kIdleAnimationTwo;
@@ -587,7 +587,7 @@ bool AvHBasePlayerWeapon::GetIsPlayerMoving() const
 //	#ifdef AVH_SERVER
 //	theCurrentVelocity = this->m_pPlayer->pev->velocity.Length();
 //	#endif
-//	
+//
 //	#ifdef AVH_CLIENT
 //	cl_entity_t* theLocalPlayer = gEngfuncs.GetLocalPlayer();
 //	if(theLocalPlayer)
@@ -607,7 +607,7 @@ bool AvHBasePlayerWeapon::GetIsPlayerMoving() const
 int	AvHBasePlayerWeapon::GetMaxClipsCouldReceive()
 {
 	int theMaxClips = 0;
-	
+
 	ItemInfo theItemInfo;
 	this->GetItemInfo(&theItemInfo);
 	int theClipSize = theItemInfo.iMaxClip;
@@ -697,7 +697,7 @@ float AvHBasePlayerWeapon::GetTimePassedThisTick() const
 void AvHBasePlayerWeapon::ItemPostFrame( void )
 {
 	CBasePlayerWeapon::ItemPostFrame();
-	
+
 	float theClientTimePassedThisTick = this->GetTimePassedThisTick();
 
 	this->m_flNextPrimaryAttack -= theClientTimePassedThisTick;
@@ -707,7 +707,7 @@ void AvHBasePlayerWeapon::ItemPostFrame( void )
 }
 
 void AvHBasePlayerWeapon::Precache(void)
-{                  
+{
 	CBasePlayerWeapon::Precache();
 
 	char* theDeploySound = this->GetDeploySound();
@@ -742,12 +742,12 @@ void AvHBasePlayerWeapon::Precache(void)
 bool AvHBasePlayerWeapon::ProcessValidAttack(void)
 {
     bool theAttackIsValid = false;
-	
+
 //#ifdef AVH_CLIENT
 //	char sz[ 128 ];
 //	sprintf(sz, "during check valid, clip is %d\n", this->m_iClip);
 //	gEngfuncs.pfnCenterPrint( sz );
-//	
+//
 //	//gEngfuncs.Con_Printf("during idle, clip is %d\n", sz);
 //#endif
 
@@ -777,7 +777,7 @@ bool AvHBasePlayerWeapon::ProcessValidAttack(void)
 		if((this->m_pPlayer->pev->waterlevel == 3) && !this->GetFiresUnderwater())
 		{
 			this->PlayEmptySound();
-			
+
 			//this->m_flNextPrimaryAttack = gpGlobals->time + this->mROF;
 			this->m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + this->ComputeAttackInterval();
 		}
@@ -799,9 +799,9 @@ bool AvHBasePlayerWeapon::ProcessValidAttack(void)
 			{
 				// Definitely not firing this pull of the trigger
 				theAttackIsValid = false;
-				
+
 				BOOL theHasAmmo = 0;
-				
+
 				//// 2021 Ammo networking - Client can't check pszAmmo, removing check since every gun in NS uses pszAmmo1 and it was causing theHasAmmo to fail on client when the player had ammo.
 				//if ( pszAmmo1() )
 				//{
@@ -815,7 +815,7 @@ bool AvHBasePlayerWeapon::ProcessValidAttack(void)
 				{
 					theHasAmmo |= 1;
 				}
-				
+
 				if(theHasAmmo)
 				{
 					// Trigger reload
@@ -978,8 +978,8 @@ int AvHBasePlayerWeapon::GetPrimeAnimation() const
 }
 
 float AvHBasePlayerWeapon::GetWeaponPrimeTime() const
-{ 
-    return -1.0f; 
+{
+    return -1.0f;
 }
 
 void AvHBasePlayerWeapon::PrimeWeapon()
@@ -1005,12 +1005,12 @@ void AvHBasePlayerWeapon::PrimeWeapon()
 }
 
 BOOL AvHBasePlayerWeapon::GetIsWeaponPrimed() const
-{ 
+{
     return ((this->GetWeaponPrimeTime() > 0.0f) && this->mWeaponPrimeStarted && (UTIL_WeaponTimeBase() > this->mTimeOfLastPrime));
 }
 
 BOOL AvHBasePlayerWeapon::GetIsWeaponPriming() const
-{ 
+{
     return ((this->GetWeaponPrimeTime() > 0.0f) && this->mWeaponPrimeStarted && (UTIL_WeaponTimeBase() < this->mTimeOfLastPrime));
 }
 
@@ -1029,7 +1029,7 @@ void AvHBasePlayerWeapon::SetNextAttack(void)
 	{
 		this->m_flNextPrimaryAttack = theRateOfFire;
 	}
-	
+
 	this->SetNextIdle();
 }
 
@@ -1045,12 +1045,12 @@ void AvHBasePlayerWeapon::PrimaryAttack(void)
             //this->mAttackButtonDownLastFrame = true;
 			this->m_fInAttack = TRUE;
         }
-    	
+
         this->PlaybackEvent(this->mEvent, this->GetShootAnimation());
         this->SetAnimationAndSound();
 
-		
-	
+
+
         // If player is too close to a wall, don't actually fire the projectile
         if(this->GetIsGunPositionValid())
         {
@@ -1072,7 +1072,7 @@ void AvHBasePlayerWeapon::PrimaryAttack(void)
 				SoundVolume = (float)BALANCE_VAR(kSilenceLevel3Volume);
 				break;
 			}
-			AISND_RegisterNewSound(this->m_pPlayer->entindex(), this->m_pPlayer->pev->origin, AI_SOUND_SHOOT, SoundVolume);
+			AISND_RegisterNewSound(this->m_pPlayer->entindex(), this->m_pPlayer->pev->origin, EAISoundType::AI_SOUND_SHOOT, SoundVolume);
 #endif
         }
         else
@@ -1107,22 +1107,22 @@ void AvHBasePlayerWeapon::Reload(void)
 bool AvHBasePlayerWeapon::GetCanBeResupplied() const
 {
     bool theCanBeResupplied = false;
-    
+
     if(this->UsesAmmo())
     {
         ItemInfo theItemInfo;
         this->GetItemInfo(&theItemInfo);
-        
+
         int theCurrentPrimary = this->m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType];
         int theMaxPrimary = theItemInfo.iMaxAmmo1;
-        
+
         // Add some to primary store
         if(theCurrentPrimary < theMaxPrimary)
         {
             theCanBeResupplied = true;
         }
     }
-    
+
     return theCanBeResupplied;
 }
 
@@ -1137,7 +1137,7 @@ bool AvHBasePlayerWeapon::Resupply()
 
         // Get amount to add
         int theMaxClip = theItemInfo.iMaxClip;
-        
+
         // Add half the clip each time, rounding up (roughly 3 seconds per clip ()
         int theAmountToAdd = max((theMaxClip+1)/2, 1);
 
@@ -1193,7 +1193,7 @@ void AvHBasePlayerWeapon::Spawn()
 	this->pev->movetype = MOVETYPE_TOSS;
 	UTIL_SetOrigin(this->pev, this->pev->origin);
 	UTIL_SetSize(this->pev, kMarineItemMinSize, kMarineItemMaxSize);
-	
+
 	this->pev->iuser3 = AVH_USER3_MARINEITEM;
 
 	#ifdef AVH_SERVER
@@ -1208,7 +1208,7 @@ bool AvHBasePlayerWeapon::GetEnabledState() const
 {
 	bool result=false;
 #ifdef AVH_SERVER
-	result= (this->m_iEnabled == 1);		
+	result= (this->m_iEnabled == 1);
 #else
 	// : 497 client now uses the enabled state in the appropriate WEAPON
 	ItemInfo theItemInfo;
@@ -1225,7 +1225,7 @@ bool AvHBasePlayerWeapon::GetEnabledState() const
 void AvHBasePlayerWeapon::VirtualMaterialize(void)
 {
 	int theLifetime = this->GetGroundLifetime();
-	
+
 	if(theLifetime >= 0)
 	{
 		SetThink(&AvHBasePlayerWeapon::DestroyItem);
@@ -1272,7 +1272,7 @@ void AvHBasePlayerWeapon::ResetEntity()
 	this->pev->effects = 0;
 	this->pev->solid = SOLID_BBOX;
 	this->pev->movetype = MOVETYPE_TOSS;
-	
+
 	this->pev->takedamage = DAMAGE_YES;
 
 	this->VirtualMaterialize();
@@ -1288,14 +1288,14 @@ void AvHBasePlayerWeapon::UpdateInventoryEnabledState(int inNumActiveHives)
 	// Process here
 	int theEnabledState = 1;
 	bool theGameStarted = GetGameRules()->GetGameStarted();
-				
+
 	ItemInfo theItemInfo;
 	if(this->GetItemInfo(&theItemInfo) != 0)
 	{
 		int theWeaponFlags = theItemInfo.iFlags;
 		AvHPlayer* thePlayer = dynamic_cast<AvHPlayer*>(this->m_pPlayer);
 		ASSERT(thePlayer);
-	
+
 		// Pregame alien abilities
 		if (!theGameStarted)
 		{
@@ -1313,7 +1313,7 @@ void AvHBasePlayerWeapon::UpdateInventoryEnabledState(int inNumActiveHives)
 		}
 		// If we don't have the hives required, or we're ensnared
 		else if (/*thePlayer->GetIsTemporarilyInvulnerable() ||*/
-			!thePlayer->GetIsAbleToAct() || 
+			!thePlayer->GetIsAbleToAct() ||
 			((inNumActiveHives < 1) && (theWeaponFlags & ONE_HIVE_REQUIRED)) ||
 			((inNumActiveHives < 2) && (theWeaponFlags & TWO_HIVES_REQUIRED)) ||
 			((inNumActiveHives < 3) && (theWeaponFlags & THREE_HIVES_REQUIRED)) ||
@@ -1331,7 +1331,7 @@ void AvHBasePlayerWeapon::KeyValue(KeyValueData* pkvd)
 {
 	// Any entity placed by the mapper is persistent
 	this->SetPersistent();
-	
+
 	if(FStrEq(pkvd->szKeyName, "teamchoice"))
 	{
 		this->pev->team = (AvHTeamNumber)(atoi(pkvd->szValue));
@@ -1357,12 +1357,12 @@ void AvHBasePlayerWeapon::KeyValue(KeyValueData* pkvd)
 int AvHBasePlayerWeapon::GetLifetime() const
 {
 	int theLifetime = this->mLifetime;
-	
+
 	if(theLifetime < 0)
 	{
 		theLifetime = AvHSUGetWeaponStayTime();
 	}
-	
+
 	return theLifetime;
 }
 
@@ -1382,7 +1382,7 @@ void AvHBasePlayerWeapon::SetNextIdle(void)
 	float theRandomIdle = UTIL_SharedRandomFloat(this->m_pPlayer->random_seed, 10, 15);
 
 	this->m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + theRandomIdle;
-	
+
 	// Just added these next two lines 8/8/01 (trying to fix prediction wackiness)
 	if(this->m_flTimeWeaponIdle < 0)
 	{
@@ -1391,7 +1391,7 @@ void AvHBasePlayerWeapon::SetNextIdle(void)
 }
 
 BOOL AvHBasePlayerWeapon::UseDecrement( void )
-{ 
+{
 	// If we're predicting, return true
 	return TRUE;
 }
@@ -1403,7 +1403,7 @@ void AvHBasePlayerWeapon::WeaponIdle(void)
 //	char sz[ 128 ];
 //	sprintf(sz, "during idle, clip is %d\n", this->m_iClip);
 //	gEngfuncs.pfnCenterPrint( sz );
-//	
+//
 //	//gEngfuncs.Con_Printf("during idle, clip is %d\n", sz);
 //#endif
 
@@ -1414,7 +1414,7 @@ void AvHBasePlayerWeapon::WeaponIdle(void)
 		//this->mAttackButtonDownLastFrame = false;
 		this->m_fInAttack = FALSE;
 	}
-	
+
 	ResetEmptySound();
 
 	this->m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
@@ -1428,7 +1428,7 @@ void AvHBasePlayerWeapon::WeaponIdle(void)
 		this->SendWeaponAnim(this->GetIdleAnimation());
 
 		this->m_pPlayer->SetAnimation(PLAYER_IDLE);
-			
+
 		this->SetNextIdle();
 	}
 }

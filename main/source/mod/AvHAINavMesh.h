@@ -60,9 +60,9 @@ struct NavHitResult
 struct NavMesh
 {
 	EAINavMeshIndex MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
-	class dtTileCache* dtTileCache = nullptr;
-	class dtNavMeshQuery* dtNavQuery = nullptr;
-	class dtNavMesh* dtNavMesh = nullptr;
+	class dtNavMesh* NavMeshRef = nullptr;
+	class dtTileCache* TileCacheRef = nullptr;
+	class dtNavMeshQuery* NavQueryRef = nullptr;
 	OffMeshConnectionList MeshConnections;
 	NavHintList MeshHints;
 	NavTempObstacleList TempObstacles;
@@ -71,9 +71,9 @@ struct NavMesh
 	void Clear()
 	{
 		MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
-		dtFreeNavMesh(dtNavMesh);
-		dtFreeNavMeshQuery(dtNavQuery);
-		dtFreeTileCache(dtTileCache);
+		dtFreeNavMesh(NavMeshRef);
+		dtFreeNavMeshQuery(NavQueryRef);
+		dtFreeTileCache(TileCacheRef);
 
 		MeshConnections.clear();
 		MeshHints.clear();
@@ -83,9 +83,9 @@ struct NavMesh
 	bool IsValid()
 	{
 		return MeshIndex < EAINavMeshIndex::NAV_MESH_INVALID
-			&& dtTileCache != nullptr
-			&& dtNavQuery != nullptr
-			&& dtNavMesh != nullptr;
+			&& NavMeshRef != nullptr
+			&& TileCacheRef != nullptr
+			&& NavQueryRef != nullptr;
 	}
 
 	bool IsUpToDate() { return bIsMeshUpToDate; }

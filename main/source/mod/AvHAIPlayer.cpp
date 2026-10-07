@@ -149,7 +149,7 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 
 EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
 {
-
+	return EAINavMoveResult::NAV_MOVE_SUCCESS;
 }
 
 void AvHAIPlayer::InterruptReload()
@@ -505,7 +505,7 @@ bool AvHAIPlayer::UseObject(edict_t* Object, bool bUseContinuously)
 
 	Vector AimPoint = ClosestPoint;
 
-	const bool bIsUsingStructure = IsEdictStructure(Object);
+	const bool bIsUsingStructure = AITAC_IsEdictStructure(Object);
 
 	if (bIsUsingStructure)
 	{
@@ -704,6 +704,11 @@ void AvHAIPlayer::OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex)
 	}
 }
 
+void AvHAIPlayer::TakeDamage(float DamageAmount, const edict_t* Inflictor)
+{
+
+}
+
 void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles, float MaxSpeed)
 {
 	ClearMovementOutputs();
@@ -786,15 +791,6 @@ void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles
 		Button |= IN_MOVELEFT;
 	}
 }
-
-
-
-
-
-
-
-
-
 
 Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer)
 {
