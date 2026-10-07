@@ -19,7 +19,6 @@
 // Forward declare AvHAI types used only as pointers in this header to avoid circular includes.
 struct AvHAIPlayer;
 struct AvHAIPathNode;
-struct NavAgentProfile;
 
 // Dynamic map object type
 enum class EAIDynamicMapObjectType

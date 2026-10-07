@@ -240,9 +240,6 @@ struct NavTempObstacle
 };
 typedef std::vector<NavTempObstacle> NavTempObstacleList;
 
-// List of base agent profiles
-std::vector<NavAgentProfile> BaseAgentProfiles;
-
 // Retrieve appropriate flag for area (See process() in the MeshProcess struct)
 inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)
 {
@@ -561,6 +558,9 @@ inline void GetAreaName(EAINavArea Area, char* outName)
 			break;
 	}
 }
+
+// List of base agent profiles
+extern std::vector<NavAgentProfile> BaseAgentProfiles;
 
 // Populate the base nav profiles. Should be called once after loading the navigation data
 inline void PopulateBaseAgentProfiles()

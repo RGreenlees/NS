@@ -704,7 +704,7 @@ void AIMGR_UpdateAIPlayers()
 		}
 	}
 
-	RecentlyModifiedNavMeshes.empty();
+	RecentlyModifiedNavMeshes.clear();
 	PrevTime = CurrTime;
 }
 

@@ -32,10 +32,12 @@
 #include "DetourTileCache.h"
 #include "DetourTileCacheBuilder.h"
 #include "DetourNavMeshBuilder.h"
-#include "fastlz/fastlz.c"
+#include "fastlz/fastlz.h"
 #include "DetourAlloc.h"
 
 #include <cfloat>
+
+std::vector<NavAgentProfile> BaseAgentProfiles;
 
 bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance)
 {
@@ -656,9 +658,9 @@ float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, 
 	return StartTrace.z;
 }
 
-Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, edict_t* Rider, DynamicMapObject* LiftReference)
+Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const edict_t* LiftReference)
 {
-	if (!NavProfile || !LiftReference || FNullEnt(Rider)) { return ZERO_VECTOR; }
+	if (!NavProfile || !UTIL_IsEdictActive(LiftReference) || !UTIL_IsEdictActive(Rider)) { return ZERO_VECTOR; }
 
 	const NavOffMeshConnection* NearestConnection = nullptr;
 	float MinDist = 0.0f;
@@ -675,10 +677,10 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 
 		if (!EnumHasAnyFlags(ThisConnection->ConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
 
-		if (ThisConnection->LinkedObject == LiftReference->Edict)
+		if (ThisConnection->LinkedObject == LiftReference)
 		{
-			float ThisDist = fminf(vDist3DSq(ThisConnection->FromLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference->Edict)),
-				vDist3DSq(ThisConnection->ToLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference->Edict)));
+			float ThisDist = fminf(vDist3DSq(ThisConnection->FromLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference)),
+				vDist3DSq(ThisConnection->ToLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference)));
 
 			if (ThisDist < sqrf(100.0f) && (!NearestConnection || ThisDist < MinDist))
 			{
@@ -690,10 +692,10 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 
 	if (NearestConnection)
 	{
-		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference->Edict);
+		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference);
 		NearestPointFromLocation.z = Rider->v.origin.z;
 
-		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference->Edict);
+		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference);
 		NearestPointToLocation.z = Rider->v.origin.z;
 
 		float DistFromLocation = vDist3DSq(NearestConnection->FromLocation, NearestPointFromLocation);
@@ -702,49 +704,47 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 	}
 
 	Vector NearestProjectedPoint = ZERO_VECTOR;
-	Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference->Edict);
-	float DisembarkHeight = (!FNullEnt(Rider)) ? GetPlayerBottomOfCollisionHull(Rider).z : LiftReference->Edict->v.absmax.z;
+	Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference);
+	float DisembarkHeight = (!FNullEnt(Rider)) ? GetPlayerBottomOfCollisionHull(Rider).z : LiftReference->v.absmax.z;
 
-	Vector FrontLocation = Vector(LiftReference->Edict->v.absmax.x, LiftCentre.y, DisembarkHeight);
-	Vector RearLocation = Vector(LiftReference->Edict->v.absmin.x, LiftCentre.y, DisembarkHeight);
-	Vector LeftLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmin.y, DisembarkHeight);
-	Vector RightLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmax.y, DisembarkHeight);
+	Vector FrontLocation = Vector(LiftReference->v.absmax.x, LiftCentre.y, DisembarkHeight);
+	Vector RearLocation = Vector(LiftReference->v.absmin.x, LiftCentre.y, DisembarkHeight);
+	Vector LeftLocation = Vector(LiftCentre.x, LiftReference->v.absmin.y, DisembarkHeight);
+	Vector RightLocation = Vector(LiftCentre.x, LiftReference->v.absmax.y, DisembarkHeight);
 
-	float ProjectWidth = fmaxf((LiftReference->Edict->v.absmax.x - LiftReference->Edict->v.absmin.x) * 0.5f, (LiftReference->Edict->v.absmax.y - LiftReference->Edict->v.absmin.y) * 0.5f);
+	float ProjectWidth = fmaxf((LiftReference->v.absmax.x - LiftReference->v.absmin.x) * 0.5f, (LiftReference->v.absmax.y - LiftReference->v.absmin.y) * 0.5f);
 	ProjectWidth += 100.0f;
 
 	Vector ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, FrontLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
 
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
 	{
 		return ProjectedLoc;
 	}
 
 	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RearLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
 
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
 	{
 		return ProjectedLoc;
 	}
 
 	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, LeftLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
 
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
 	{
 		return ProjectedLoc;
 	}
 
 	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RightLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
 
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
+	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
 	{
 		return ProjectedLoc;
 	}
 
 	return ZERO_VECTOR;
 }
-
-
 
 bool AINAV_IsOffPathNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode)
 {
@@ -893,7 +893,7 @@ bool AINAV_IsOffPhaseGateNode(const NavAgentProfile* NavProfile, const edict_t* 
 	return (AITAC_FindSingleMatchingStructure(PathNode->ToLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST) != nullptr);
 }
 
-bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, AvHAIPath* Path, AvHAIMoveTask& NewMoveTask)
+bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPath* Path, AvHAIMoveTask& NewMoveTask)
 {
 	if (!NavProfile || !NavProfile->IsValid() || !Path->IsValidPath()) { return false; }
 
@@ -912,76 +912,85 @@ bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, A
 		{
 			const DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->MovementObject);
 
-			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject, NewMoveTask);
+			if (!PlatformObject || !PlatformObject->IsValid()) { return false; }
+
+			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject->Edict, NewMoveTask);
 		}
 
 		const DynamicMapObject* BlockingObject = AIMAP_FindObjectBlockingPathPoint(FutureNode, nullptr);
 
-		if (BlockingObject)
-		{
-			return AINAV_CheckMapObjectForMovementTasks(NavProfile, FutureNode, BlockingObject, NewMoveTask);
-		}
+		if (!BlockingObject || !BlockingObject->IsValid()) { continue; }
+
+		return AINAV_CheckMapObjectForMovementTasks(NavProfile, FutureNode, BlockingObject->Edict, NewMoveTask);
 	}
 
 	return false;
 }
 
-bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const DynamicMapObject* ImpactingObject, AvHAIMoveTask& NewMoveTask)
+bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* ImpactingObject, AvHAIMoveTask& NewMoveTask)
 {
 	if (!NavProfile || !NavProfile->IsValid()) { return false; }
 	if (!ImpactedPathNode || !ImpactedPathNode->IsValidMove()) { return false; }
-	if (!ImpactingObject || !ImpactingObject->IsValid()) { return false; }
+	if (!UTIL_IsEdictActive(ImpactingObject)) { return false; }
 
-	switch (ImpactingObject->Type)
+	const DynamicMapObject* ImpactingObjectRef = AIMAP_GetDynamicObjectByEdict(ImpactingObject);
+
+	if (!ImpactingObjectRef || !ImpactingObjectRef->IsValid()) { return false; }
+
+	switch (ImpactingObjectRef->Type)
 	{
 		case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
 		case EAIDynamicMapObjectType::MAPOBJECT_TRAIN:
 			return AINAV_CheckPlatformForMovementTasks(NavProfile, ImpactedPathNode, ImpactingObject, NewMoveTask);
 		case EAIDynamicMapObjectType::TRIGGER_BREAK:
 		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
-			return AINAV_AddBreakMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject->Edict, ImpactingObject, NewMoveTask);
+			return AINAV_AddBreakMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject, ImpactingObject, NewMoveTask);
 		case EAIDynamicMapObjectType::TRIGGER_WELD:
-			return AINAV_AddWeldMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject->Edict, ImpactingObject, NewMoveTask);
+			return AINAV_AddWeldMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject, ImpactingObject, NewMoveTask);
 		default:
 			break;
 	}
 
-	if (ImpactingObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return false; }
+	if (ImpactingObjectRef->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return false; }
 
-	const DynamicMapObject* Trigger = AIMAP_GetBestTriggerForObject(NavProfile, ImpactingObject, ImpactedPathNode->FromLocation);
+	const DynamicMapObject* Trigger = AIMAP_GetBestTriggerForObject(NavProfile, ImpactingObjectRef, ImpactedPathNode->FromLocation);
 
-	if (!Trigger) { return false; }
+	if (!Trigger || !Trigger->IsValid()) { return false; }
 
-	return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger, ImpactingObject, NewMoveTask);
+	return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, ImpactingObject, NewMoveTask);
 }
 
-bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const DynamicMapObject* Platform, AvHAIMoveTask& NewMoveTask)
+bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* Platform, AvHAIMoveTask& NewMoveTask)
 {
-	if (!NavProfile || !ImpactedPathNode || !Platform) { return false; }
+	if (!NavProfile || !ImpactedPathNode || !UTIL_IsEdictActive(Platform)) { return false; }
 
-	if (!AIMAP_PlatformNeedsActivating(NavProfile, Platform, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation)) { return false; }
+	const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Platform);
+
+	if (!PlatformRef || !PlatformRef->IsValid()) { return false; }
+
+	if (!AIMAP_PlatformNeedsActivating(NavProfile, PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation)) { return false; }
 
 	const DynamicMapObjectStop* DesiredEmbarkStop = nullptr;
 	const DynamicMapObjectStop* DesiredDisembarkStop = nullptr;
 
-	AIMAP_GetDesiredPlatformStops(Platform, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
+	AIMAP_GetDesiredPlatformStops(PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
 
 	const DynamicMapObject* Trigger = nullptr;
 
-	if (vEquals(UTIL_GetCentreOfEntity(Platform->Edict), DesiredEmbarkStop->StopLocation, 5.0f))
+	if (vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop->StopLocation, 5.0f))
 	{
-		Trigger = AIMAP_GetTriggerReachableFromPlatform(Platform, ImpactedPathNode->FromLocation.z + 32.0f);
+		Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformRef, ImpactedPathNode->FromLocation.z + 32.0f);
 	}
 
 	if (!Trigger)
 	{
-		Trigger = AIMAP_GetBestTriggerForObject(NavProfile, Platform, ImpactedPathNode->FromLocation);
+		Trigger = AIMAP_GetBestTriggerForObject(NavProfile, PlatformRef, ImpactedPathNode->FromLocation);
 
 		if (Trigger)
 		{
-			if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+			if (PlatformRef->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 			{
-				return AINAV_AddUseMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, Trigger, NewMoveTask);
+				return AINAV_AddUseMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, Trigger->Edict, NewMoveTask);
 			}
 			else
 			{
@@ -993,45 +1002,49 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 	return false;
 }
 
-bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const DynamicMapObject* Trigger, const DynamicMapObject* TriggerTarget, AvHAIMoveTask& NewTask)
+bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 
 	if (!NavProfile || !NavProfile->IsValid()) { return false; }
-	if (!Trigger || !Trigger->IsValid()) { return false; }
-	if (!TriggerTarget || !TriggerTarget->IsValid()) { return false; }
+	if (!UTIL_IsEdictActive(Trigger)) { return false; }
+	if (!UTIL_IsEdictActive(TriggerTarget)) { return false; }
 
-	switch (Trigger->Type)
+	const DynamicMapObject* TriggerRef = AIMAP_GetDynamicObjectByEdict(Trigger);
+
+	if (!TriggerRef || !TriggerRef->IsValid()) { return false; }
+
+	switch (TriggerRef->Type)
 	{
-	case EAIDynamicMapObjectType::TRIGGER_SHOOT:
-	case EAIDynamicMapObjectType::TRIGGER_BREAK:
-		return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-		break;
-	case EAIDynamicMapObjectType::TRIGGER_TOUCH:
-		return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-		break;
-	case EAIDynamicMapObjectType::TRIGGER_USE:
-		return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-		break;
-	default:
-		return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger->Edict, TriggerTarget, NewTask);
-		break;
+		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
+		case EAIDynamicMapObjectType::TRIGGER_BREAK:
+			return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			break;
+		case EAIDynamicMapObjectType::TRIGGER_TOUCH:
+			return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			break;
+		case EAIDynamicMapObjectType::TRIGGER_USE:
+			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			break;
+		default:
+			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			break;
 	}
 }
 
-bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_PICKUP;
 	NewTask.TaskTarget = ThingToPickup;
-	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
 	NewTask.TaskLocation = ThingToPickup->v.origin;
 
 	return true;
 }
 
-bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 
@@ -1042,49 +1055,49 @@ bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector&
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_TOUCH;
 	NewTask.TaskTarget = EntityToTouch;
-	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
 	NewTask.TaskLocation = TestPath.GetFinalDestination();
 
 	return true;
 }
 
-bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
 	NewTask.TaskTarget = EntityToBreak;
-	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
 	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToBreak);
 
 	return true;
 }
 
-bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
 	NewTask.TaskTarget = EntityToWeld;
-	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
 	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToWeld);
 
 	return true;
 }
 
-bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_USE;
 	NewTask.TaskTarget = EntityToUse;
-	NewTask.TriggerToActivate = (TriggerToActivate) ? TriggerToActivate->Edict : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
 	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToUse);
 
 	return true;
 }
 
-bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const DynamicMapObject* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
 {
 	NewTask.Clear();
 

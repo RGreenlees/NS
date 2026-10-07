@@ -11,6 +11,7 @@
 #define AVH_AI_COMMANDER_H
 
 #include "AvHAITactical.h"
+#include "AvHAIPlayer.h"
 
 static const float MIN_COMMANDER_REMIND_TIME = 20.0f; // How frequently the commander can nag a player to do something, if they don't think they're doing it
 

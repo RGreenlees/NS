@@ -18,8 +18,6 @@
 
 class AvHHive;
 class AvHFuncResource;
-// Forward declare AvHAIPlayer to avoid header cycles. Tactical APIs accept AvHAIPlayer* in some places.
-struct AvHAIPlayer;
 
 // How frequently to update the global list of built structures (in seconds). 0 = every frame
 static const float structure_inventory_refresh_rate = 0.2f;

@@ -5,7 +5,6 @@
 #include "AvHAIPlayerUtil.h"
 #include "AvHAIWeaponHelper.h"
 #include "AvHAINavigation.h"
-#include "AvHAITask.h"
 #include "AvHAIHelper.h"
 #include "AvHAIPlayerManager.h"
 #include "AvHAIConfig.h"
