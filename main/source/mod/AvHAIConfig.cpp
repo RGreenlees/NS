@@ -578,19 +578,19 @@ void CONFIG_ParseConfigFile()
 
                 if (!stricmp(FirstTechChar, "defense"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_DEFENSE_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_DEFENSE);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[0], ChamberSequence[Index]);
                 }
                 else if (!stricmp(FirstTechChar, "movement"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_MOVEMENT_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_MOVEMENT);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[0], ChamberSequence[Index]);
                 }
                 else if (!stricmp(FirstTechChar, "sensory"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_SENSORY_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_SENSORY);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[0], ChamberSequence[Index]);
                 }
@@ -598,38 +598,38 @@ void CONFIG_ParseConfigFile()
 
                 if (!stricmp(SecondTechChar, "defense"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_DEFENSE_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_DEFENSE);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[1], ChamberSequence[Index]);
                 }
                 else if (!stricmp(SecondTechChar, "movement"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_MOVEMENT_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_MOVEMENT);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[1], ChamberSequence[Index]);
                 }
                 else if (!stricmp(SecondTechChar, "sensory"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_SENSORY_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_SENSORY);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[1], ChamberSequence[Index]);
                 }
 
                 if (!stricmp(ThirdTechChar, "defense"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_DEFENSE_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_DEFENSE);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[2], ChamberSequence[Index]);
                 }
                 else if (!stricmp(ThirdTechChar, "movement"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_MOVEMENT_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_MOVEMENT);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[2], ChamberSequence[Index]);
                 }
                 else if (!stricmp(ThirdTechChar, "sensory"))
                 {
-                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), ALIEN_BUILD_SENSORY_CHAMBER);
+                    auto Element = std::find(ChamberSequence.begin(), ChamberSequence.end(), EAIHiveTechStatus::HIVE_TECH_SENSORY);
                     int Index = Element - ChamberSequence.begin();
                     std::swap(ChamberSequence[2], ChamberSequence[Index]);
                 }
