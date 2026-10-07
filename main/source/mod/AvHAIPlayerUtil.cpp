@@ -71,6 +71,12 @@ bool IsPlayerClimbingWall(const edict_t* Player)
 	return (IsPlayerSkulk(Player) && (Player->v.iuser4 & MASK_WALLSTICKING));
 }
 
+bool IsPlayerOnGround(const edict_t* Player)
+{
+	if (FNullEnt(Player)) { return false; }
+	return (Player->v.flags & FL_ONGROUND);
+}
+
 bool IsPlayerInReadyRoom(const edict_t* Player)
 {
 	if (FNullEnt(Player)) { return false; }

@@ -45,6 +45,8 @@ bool IsPlayerAlien(const edict_t* Player);
 bool IsPlayerCommander(const edict_t* Player);
 // Is the player currently climbing a wall?
 bool IsPlayerClimbingWall(const edict_t* Player);
+// Is the player currently climbing a wall?
+bool IsPlayerOnGround(const edict_t* Player);
 // Is the player in the ready room (i.e. not in the map proper)?
 bool IsPlayerInReadyRoom(const edict_t* Player);
 // Returns true if the player is not in the ready room, is on a team, is alive, is not being digested, and is not commander

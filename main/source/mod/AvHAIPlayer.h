@@ -172,62 +172,7 @@ struct AvHAIStuckTracker
 	}
 };
 
-// Contains the bot's current navigation info, such as current path
-struct AvHAINavStatus
-{
-	Vector LastNavMeshCheckPosition = g_vecZero;
-	Vector LastNavMeshPosition = g_vecZero; // Tracks the last place the bot was on the nav mesh. Useful if accidentally straying off it
-	Vector LastOpenLocation = g_vecZero; // Tracks the last place the bot had enough room to move around people. Useful if in a vent and need to back up somewhere to let another player past.
 
-	int CurrentMoveType = MOVETYPE_NONE; // Tracks the edict's current movement type
-
-	unsigned int CurrentPoly = 0; // Which nav mesh poly the bot is currently on
-
-	float LastStuckCheckTime = 0.0f; // Last time the bot checked if it had successfully moved
-	float TotalStuckTime = 0.0f; // Total time the bot has spent stuck
-	float LastDistanceFromDestination = 0.0f; // How far from its destination was it last stuck check
-
-	Vector StuckCheckMoveLocation = g_vecZero; // Where is the bot trying to go that we're checking if they're stuck?
-	Vector UnstuckMoveLocation = g_vecZero; // If the bot is unable to find a path, blindly move here to try and fix the problem
-
-	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
-	float AirStartedTime = 0.0f; // When the bot left the ground if in the air
-	float LeapAttemptedTime = 0.0f; // When the bot last attempted to leap/blink. Avoid spam that sends it flying around too fast
-	bool IsOnGround = true; // Is the bot currently on the ground, or on a ladder?
-	bool bHasAttemptedJump = false; // Last frame, the bot tried a jump. If the bot is still on the ground, it probably tried to jump in a vent or something
-	float LastFlapTime = 0.0f; // When the bot last flapped its wings (if Lerk). Prevents per-frame spam draining adrenaline
-
-	bool bShouldWalk = false; // Should the bot walk at this point?
-
-	EAIMoveStyle PreviousMoveStyle = EAIMoveStyle::MOVESTYLE_NORMAL; // Previous desired move style (e.g. normal, ambush, hide). Will trigger new path calculations if this changes
-	EAIMoveStyle MoveStyle = EAIMoveStyle::MOVESTYLE_NORMAL; // Current desired move style (e.g. normal, ambush, hide). Will trigger new path calculations if this changes
-	float LastPathCalcTime = 0.0f; // When the bot last calculated a path, to limit how frequently it can recalculate
-
-	float NextForceRecalc = 0.0f; // If set, then the bot will force-recalc its current path
-
-	NavAgentProfile NavProfile;
-	bool bNavProfileChanged = false;
-
-	AvHAIStuckTracker StuckInfo;
-
-	EAINavMovementFlag SpecialMovementFlags = EAINavMovementFlag::NAV_FLAG_NONE; // Any special movement flags required for the current path (e.g. needs to pick up an item)
-
-	AIMoveTaskList MovementTasks;
-	AvHAIMoveTask UnstuckTask;
-
-	void Reset()
-	{
-		StuckInfo.Clear();
-		MovementTasks.clear();
-		UnstuckTask.Clear();
-	}
-
-	void ClearPath()
-	{
-		MovementTasks.clear();
-		UnstuckTask.Clear();
-	}
-};
 
 struct AvHAIPlayer
 {
@@ -336,7 +281,7 @@ struct AvHAIPlayer
 	Vector GetLocation() const { return Edict->v.origin; }
 	Vector GetVelocity() const { return Edict->v.velocity; }
 	Vector GetEyePosition() const;
-	void Jump(AvHAIMovementInput& Outputs, bool bDuckJump) const;
+	void Jump(bool bDuckJump);
 	void Suicide();
 	bool IsDead() const;
 	float GetDesiredMovementSpeed(bool bShouldWalk) const;
@@ -370,6 +315,22 @@ struct AvHAIPlayer
 	void HearEnemy(const edict_t* EmittingEdict, float Volume);
 	void OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex);
 	void TakeDamage(float DamageAmount, const edict_t* Inflictor);
+
+	EAINavMoveResult FollowPath(AvHAIPath* Path);
+	bool NextMove(AvHAIPath* Path);
+	bool NextSwimMove(AvHAIPath* Path);
+
+	bool NewGroundMove(AvHAIPath* Path);
+	bool NewFallMove(AvHAIPath* Path);
+	bool NewJumpMove(AvHAIPath* Path);
+	bool NewLadderMove(AvHAIPath* Path);
+	bool NewPlatformMove(AvHAIPath* Path);
+	bool NewPhaseGateMove(AvHAIPath* Path);
+	bool NewMountLadderMove(AvHAIPath* Path);
+
+	void HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
+
+	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
 };
 
 

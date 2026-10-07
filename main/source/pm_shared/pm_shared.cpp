@@ -1,7 +1,7 @@
 //Copyright (c) 1999, Valve LLC. All rights reserved.
-//  
-//  This product contains software technology licensed from Id 
-//  Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc. 
+//
+//  This product contains software technology licensed from Id
+//  Software, Inc. ("Id Technology").  Id Technology (c) 1996 Id Software, Inc.
 //  All Rights Reserved.
 //
 //  Use, distribution, and modification of this source code and/or resulting
@@ -187,7 +187,7 @@ float   gTopDownViewAngles[3];
 static int pm_shared_initialized = 0;
 
 //void InterpolateAngles( float *start, float *end, float *output, float frac );
-    
+
 #pragma warning( disable : 4305 )
 
 
@@ -206,14 +206,14 @@ float gOverwatchTargetRange;
 
 ///////////////////////////////
 // Begin Max's Code
-///////////////////////////////     
+///////////////////////////////
 
 const float kSkulkRotationRate      = (float)(2.5 * M_PI);  // Radians per second.
 const float kSkulkRotationLookAhead = 75;
 
 // Distance around the skulk to look each in direction for wallsticking.
 const vec3_t kWallstickingDistanceCheck = { 5, 5, 5 };
-// : 0000972 
+// : 0000972
 vec3_t gSurfaceNormal = { 0, 0, 0 };
 bool canWallJump = false;
 // :
@@ -232,7 +232,7 @@ extern vec3_t gWorldViewAngles;
 
 ///////////////////////////////
 // End Max's Code
-///////////////////////////////     
+///////////////////////////////
 
 // Ducking time
 #define TIME_TO_DUCK    (0.4 * 1000)
@@ -293,7 +293,7 @@ const float kAlienEnergyFlap = .025f;
 // left / right
 #define YAW     1
 // fall over
-#define ROLL    2 
+#define ROLL    2
 
 #define MAX_CLIENTS 32
 
@@ -311,7 +311,7 @@ static int rgStuckLast[MAX_CLIENTS][2];
 
 // Texture names
 static int gcTextures = 0;
-static char grgszTextureName[CTEXTURESMAX][CBTEXTURENAMEMAX];   
+static char grgszTextureName[CTEXTURESMAX][CBTEXTURENAMEMAX];
 static char grgchTextureType[CTEXTURESMAX];
 
 int     g_onladder[MAX_CLIENTS];
@@ -328,7 +328,7 @@ static  mplane_t    box_planes[6];
 // : 243
 // Players should never play sounds when digesting
 void PM_NSPlaySound( int channel, const char *sample, float volume, float attenuation, int fFlags, int pitch ) {
-	if ( AvHGetIsAlien(pmove->iuser3) || !GetHasUpgrade(pmove->iuser4, MASK_DIGESTING) ) 
+	if ( AvHGetIsAlien(pmove->iuser3) || !GetHasUpgrade(pmove->iuser4, MASK_DIGESTING) )
 	{pmove->PM_PlaySound(channel,sample,volume,attenuation,fFlags,pitch);}
 }
 
@@ -389,9 +389,9 @@ void PM_InitBoxHull (void)
     for (i=0 ; i<6 ; i++)
     {
         box_clipnodes[i].planenum = i;
-        
+
         side = i&1;
-        
+
         box_clipnodes[i].children[side] = CONTENTS_EMPTY;
         if (i != 5)
             box_clipnodes[i].children[side^1] = i + 1;
@@ -399,7 +399,7 @@ void PM_InitBoxHull (void)
             box_clipnodes[i].children[side^1] = CONTENTS_SOLID;
 
     }
-    
+
 }
 
 
@@ -416,14 +416,14 @@ hull_t* PM_HullForBox (vec3_t mins, vec3_t maxs)
 
     for (int i=0 ; i<6 ; i++)
     {
-        
+
         box_planes[i].type = i>>1;
-        
+
         box_planes[i].normal[0] = 0;
         box_planes[i].normal[1] = 0;
         box_planes[i].normal[2] = 0;
         box_planes[i].normal[i>>1] = 1;
-    
+
     }
 
     box_planes[0].dist = maxs[0];
@@ -524,27 +524,27 @@ hull_t* NS_HullForBox(vec3_t inEntityMins, vec3_t inEntityMaxs,
 
     // Players "feel" too large so artificially shrink them relative to the
     // structures.
-    thePlayerRadius *= 0.8; 
-    
+    thePlayerRadius *= 0.8;
+
     vec3_t axis[3];
     AngleVectors(inEntityAngles, axis[0], axis[1], axis[2]);
 
     // For some reason the y-axis is negated so flip it.
-    
+
     axis[1][0] = -axis[1][0];
     axis[1][1] = -axis[1][1];
     axis[1][2] = -axis[1][2];
 
     for (int i = 0; i < 3; ++i)
     {
-        
+
         int p1 = i * 2;
         int p2 = p1 + 1;
-        
+
         vec3_t p;
 
         // Compute the offset the planes to account for the size of the player.
- 
+
         /*
         float offset = fabs(inPlayerExtents[0] * axis[i][0]) +
                        fabs(inPlayerExtents[1] * axis[i][1]) +
@@ -582,7 +582,7 @@ bool NS_GetCollisionSizeForUser3(AvHUser3 inUser3, vec3_t outMinSize, vec3_t out
 
     switch (inUser3)
     {
-    
+
     case AVH_USER3_COMMANDER_STATION:
         outMinSize[0] = -45;
         outMinSize[1] = -16;
@@ -600,7 +600,7 @@ bool NS_GetCollisionSizeForUser3(AvHUser3 inUser3, vec3_t outMinSize, vec3_t out
         outMaxSize[1] =  25;
         outMaxSize[2] =  5;
         return true;
-	
+
     case AVH_USER3_PHASEGATE:
         outMinSize[0] = -55;
         outMinSize[1] = -40;
@@ -676,7 +676,7 @@ bool NS_GetCollisionSizeForUser3(AvHUser3 inUser3, vec3_t outMinSize, vec3_t out
         outMaxSize[1] =  16;
         outMaxSize[2] =  42;
 		return true;
-	
+
     case AVH_USER3_SIEGETURRET:
 	    outMinSize[0] = -16;
         outMinSize[1] = -16;
@@ -719,7 +719,7 @@ bool NS_GetCollisionSizeForUser3(AvHUser3 inUser3, vec3_t outMinSize, vec3_t out
     */
 
     }
-    
+
     return false;
 
 }
@@ -732,7 +732,7 @@ void NS_GetClosestPlaneNormal(vec3_t inDirection, mplane_t inPlanes[], int inNum
 
     for (int i = 0; i < inNumPlanes; ++i)
     {
-    
+
         float d = fabs(DotProduct(inDirection, inPlanes[i].normal));
 
         if (d >= best)
@@ -740,7 +740,7 @@ void NS_GetClosestPlaneNormal(vec3_t inDirection, mplane_t inPlanes[], int inNum
             VectorCopy(inPlanes[i].normal, outNormal);
             best = d;
         }
-    
+
     }
 
 }
@@ -749,10 +749,10 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
 {
 
     memset(&result, 0, sizeof(trace_t));
-    
+
     result.fraction = 1;
     result.ent      = NULL;
-    
+
     VectorCopy(end, result.endpos);
 
     int hullNumber = NS_GetValveHull(hull);
@@ -764,7 +764,7 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
 
             hull_t* hull = NULL;
             bool    ignoreRotation = false;
-            
+
             if (pmove->physents[i].model != NULL)
             {
                 hull = &pmove->physents[i].model->hulls[hullNumber];
@@ -801,8 +801,8 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
                                          thePlayerExtents);
 
                     // We've already taken the rotation of the entity into account.
-                    ignoreRotation = true;                    
-                
+                    ignoreRotation = true;
+
                 }
                 else
                 {
@@ -814,14 +814,14 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
                     VectorAdd(pmove->physents[i].maxs, pmove->player_maxs[hullNumber], max);
 
                     hull = PM_HullForBox(min, max);
-                
+
                 }
 
             }
 
             if (hull != NULL)
             {
-                
+
                 vec3_t localStart;
                 vec3_t localEnd;
 
@@ -865,7 +865,7 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
                     localEnd[0] =  DotProduct(temp, forward);
                     localEnd[1] = -DotProduct(temp, right);
                     localEnd[2] =  DotProduct(temp, up);
-                
+
                 }
 
                 trace_t trace;
@@ -877,7 +877,7 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
 
                     if (rotated)
                     {
-                        
+
                         vec3_t invAngles;
 
                         VectorScale(pmove->physents[i].angles, -1, invAngles);
@@ -893,7 +893,7 @@ void NS_TraceLine(float* start, float* end, int hull, int traceFlags, int ignore
                         // TODO result.plane.dst needs to be updated.
 
                     }
-                    
+
                 }
 
             }
@@ -915,15 +915,15 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
     //return pmove->PM_PlayerTrace(start, end, traceFlags, ignore_pe);
 
     pmtrace_t result = { 0 };
-    
+
     result.fraction = 1;
     result.ent      = -1;
-    
+
     VectorCopy(end, result.endpos);
 
     int hullNumber = NS_GetValveHull(pmove->usehull);
 
-	
+
     for (int i = 0; i < pmove->numphysent; ++i)  //wtf is this again? elven.
     {
         if (i != ignore_pe && pmove->physents[i].solid != SOLID_NOT)
@@ -933,7 +933,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
             bool    ignoreRotation = false;
 
             vec3_t awayDirection;
-        
+
             if (pmove->physents[i].model != NULL)
             {
                 hull = &pmove->physents[i].model->hulls[hullNumber];
@@ -941,7 +941,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
             else if (!(traceFlags & PM_WORLD_ONLY))
             {
 
-                
+
                 /*
                 OBBox theBox[50];
                 int theNumBoxes;
@@ -951,7 +951,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
                 {
                     NS_DrawBoundingBox(theBox[z]);
                 }
-                */    
+                */
 
                 vec3_t min;
                 vec3_t max;
@@ -971,10 +971,10 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
 
                 vec3_t direction;
                 VectorSubtract(end, start, direction);
-                
+
                 VectorSubtract(start, center, awayDirection);
                 VectorNormalize(awayDirection);
-                
+
                 vec3_t theEntityMins;
                 vec3_t theEntityMaxs;
 
@@ -997,11 +997,11 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
                                        pmove->physents[i].origin,
                                        pmove->physents[i].angles);
                     */
-                    
+
 
                     // We've already taken the rotation of the entity into account.
-                    ignoreRotation = true;                    
-                
+                    ignoreRotation = true;
+
                 }
                 else
                 {
@@ -1013,7 +1013,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
                     VectorAdd(pmove->physents[i].maxs, pmove->player_maxs[pmove->usehull], max);
 
                     hull = PM_HullForBox(min, max);
-                
+
                 }
 
                 vec3_t localStart;
@@ -1032,7 +1032,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
 
             if (hull != NULL)
             {
-                
+
                 vec3_t localStart;
                 vec3_t localEnd;
 
@@ -1083,7 +1083,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
                     localEnd[0] =  DotProduct(temp, forward);
                     localEnd[1] = -DotProduct(temp, right);
                     localEnd[2] =  DotProduct(temp, up);
-                
+
                 }
 
                 trace_t trace;
@@ -1108,11 +1108,11 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
 
                         NS_GetClosestPlaneNormal(awayDirection, box_planes, 6, result.plane.normal);
                         result.plane.dist = 0;
-                        
+
                         //VectorCopy(awayDirection, result.plane.normal);
 
                         result.allsolid = false;
-                    
+
                     }
                     else
                     {
@@ -1122,7 +1122,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
 
                     if (rotated)
                     {
-                        
+
                         vec3_t invAngles;
 
                         VectorScale(pmove->physents[i].angles, -1, invAngles);
@@ -1138,7 +1138,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
                         // TODO result.plane.dst needs to be updated.
 
                     }
-                    
+
                 }
 
             }
@@ -1163,7 +1163,7 @@ pmtrace_t NS_PlayerTrace(playermove_t* pmove, float* start, float* end, int trac
         VectorScale(result.plane.normal, s, antiVelocity);
 
         VectorSubtract(pmove->velocity, antiVelocity, result.deltavelocity);
-    
+
     }
 
     return result;
@@ -1175,15 +1175,15 @@ int NS_TestPlayerPosition(playermove_t* pmove, float* origin, pmtrace_t* trace)
 
     //return pmove->PM_TestPlayerPosition(origin, trace);
 
-    pmtrace_t tempTrace = NS_PlayerTrace(pmove, origin, origin, PM_WORLD_ONLY, -1); 
-    
+    pmtrace_t tempTrace = NS_PlayerTrace(pmove, origin, origin, PM_WORLD_ONLY, -1);
+
     if (trace != NULL)
     {
         memcpy(trace, &tempTrace, sizeof(pmtrace_t));
     }
 
     return tempTrace.ent;
-    
+
 }
 
 
@@ -1194,10 +1194,10 @@ void PM_DebugLocations(int theRandomNumber)
 #ifdef AVH_CLIENT
  //   gTriDebugLocations.clear();
 #endif
-    
+
     //int theNumEnts = pmove->numphysent;
     int theNumEnts = pmove->numvisent;
-    
+
     //if(pmove->server)
     //{
     //  pmove->Con_Printf("DEBUGLOCATIONS (server, %d ents):\n", theNumEnts);
@@ -1206,7 +1206,7 @@ void PM_DebugLocations(int theRandomNumber)
     //{
     //  pmove->Con_Printf("DEBUGLOCATIONS (client, %d ents):\n", theNumEnts);
     //}
-    
+
     physent_t* theEntity = NULL;
     for (int i = 0; i < theNumEnts; i++)
     {
@@ -1216,13 +1216,13 @@ void PM_DebugLocations(int theRandomNumber)
         {
             vec3_t theEntityOrigin;
             VectorCopy(theEntity->origin, theEntityOrigin);
-            
+
             //if(pmove->iuser3 == AVH_USER3_FUNC_RESOURCE)
             //{
             //  pmove->Con_Printf("  - entnumber(%d)  iuser3 (%d)  %d origin(%f, %f, %f)  mins(%f, %f, %f)  maxs(%f %f %f)\n", theEntity->info, pmove->iuser3, theEntityOrigin[0], theEntityOrigin[1], theEntityOrigin[2], theEntity->mins[0], theEntity->mins[1], theEntity->mins[2], theEntity->maxs[0], theEntity->maxs[1], theEntity->maxs[2]);
             //}
             //pmove->Con_Printf("mins(%f, %f, %f)  maxs(%f %f %f)\n", i, theEntityOrigin[0], theEntityOrigin[1], theEntityOrigin[2]);
-            
+
 #ifdef AVH_CLIENT/*
             DebugPoint thePoint;
             thePoint.x = theEntityOrigin[0];
@@ -1242,7 +1242,7 @@ void PM_DebugLocations(int theRandomNumber)
         }
     }
     pmove->Con_Printf("\n");
-    
+
     //  if(theRandomNumber < 10)
     //  {
     //      pmove->Con_Printf("Using hull: %d\n", pmove->usehull);
@@ -1259,7 +1259,7 @@ void PM_GetWishVelocity(vec3_t& outWishVelocity)
     float fmove = pmove->cmd.forwardmove;
     float smove = pmove->cmd.sidemove;
     float umove = pmove->cmd.upmove;
-    
+
     for(int i=0 ; i<3 ; i++)
     {
         outWishVelocity[i] = pmove->forward[i]*fmove + pmove->right[i]*smove + pmove->up[i]*umove;
@@ -1271,7 +1271,7 @@ bool NS_CheckOffsetFromOrigin(float inX, float inY, float inZ, vec3_t& outNormal
 
     ///////////////////////////////
     // Begin Max's Code
-    ///////////////////////////////     
+    ///////////////////////////////
 
     bool thePointIsSolid = false;
 
@@ -1293,7 +1293,7 @@ bool NS_CheckOffsetFromOrigin(float inX, float inY, float inZ, vec3_t& outNormal
         // : Don't weight it if surface normal is too plane
 		if (trace.plane.normal[2] > 0.7)
 			return true;
-        
+
         // Weight the normal based on how close the intersection is.
 
         vec3_t normal;
@@ -1304,21 +1304,21 @@ bool NS_CheckOffsetFromOrigin(float inX, float inY, float inZ, vec3_t& outNormal
 
         #ifdef AVH_SERVER
         //PM_ParticleLine(pmove->origin, thePoint, 63, 0.1, 5.0);
-        #endif      
+        #endif
 
     }
     else
     {
         #ifdef AVH_SERVER
         //PM_ParticleLine(pmove->origin, thePoint, 0, 0.1, 5.0);
-        #endif      
+        #endif
     }
 
     // If there was no intersection with the world, trace the entities.
-    
+
     // We prioritize world tracing over entity tracing so that small entities (like
     // IPs, resource nozzles and switches) don't cause changes in the skulk's orientation.
-    
+
     if (!thePointIsSolid)
     {
 
@@ -1326,21 +1326,21 @@ bool NS_CheckOffsetFromOrigin(float inX, float inY, float inZ, vec3_t& outNormal
 
         trace_t trace;
         NS_TraceLine(pmove->origin, thePoint, pointSizeHull, 0, -1, true, trace);
-        
+
         /*
         struct pmtrace_s* theTrace = pmove->PM_TraceLine(pmove->origin, thePoint,
             PM_TRACELINE_ANYVISIBLE, pointSizeHull, pmove->player_index);
             */
-    
+
         //if (theTrace && (theTrace->fraction < 1) && !GetIsEntityAPlayer(theTrace->ent))
         if (trace.fraction < 1)
         {
-        
+
             // Add the normal so that we compute an average normal over all tests.
             // Weight the normal based on how close the intersection is.
 
             vec3_t normal;
-        
+
             //VectorScale(theTrace->plane.normal, 1.0f / (theTrace->fraction + 0.1f), normal);
             VectorScale(trace.plane.normal, 1.0f / (trace.fraction + 0.1f), normal);
             VectorAdd(normal, outNormal, outNormal);
@@ -1350,16 +1350,16 @@ bool NS_CheckOffsetFromOrigin(float inX, float inY, float inZ, vec3_t& outNormal
             #ifdef AVH_SERVER
             //PM_ParticleLine(pmove->origin, thePoint, 79, 0.1, 5.0);
             #endif
-        
+
         }
-    
+
     }
 
     return thePointIsSolid;
 
     ///////////////////////////////
     // End Max's Code
-    ///////////////////////////////     
+    ///////////////////////////////
 
 }
 
@@ -1394,7 +1394,7 @@ void NS_FixWallstickingAngles(vec3_t angles)
         !(angles[1] > minValue && angles[1] < maxValue) ||
         !(angles[2] > minValue && angles[2] < maxValue))
     {
-        
+
         // The angles have become invalid, so reset them.
 
         angles[0] = 0;
@@ -1440,28 +1440,28 @@ void NS_UpdateWallsticking()
 
     if (pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1)
     {
-		// : 0000972 
+		// : 0000972
 		pmove->waterjumptime -= pmove->cmd.msec;
 		if (pmove->waterjumptime < 0)
 			pmove->waterjumptime = 0;
-		
-		if(!(pmove->cmd.buttons & IN_DUCK) && !(pmove->oldbuttons & IN_JUMP) && (pmove->waterlevel < 2)) 
+
+		if(!(pmove->cmd.buttons & IN_DUCK) && !(pmove->oldbuttons & IN_JUMP) && (pmove->waterlevel < 2))
 //		if(!(pmove->cmd.buttons & IN_DUCK)) //&& ((pmove->onground != -1) || (pmove->numtouch > 0)))
 		// :
         {
-            
+
             vec3_t theMinPoint;
             vec3_t theMaxPoint;
-            
+
 			// TODO: SCALE BY FPS DEPENDANCY
             VectorScale(kWallstickingDistanceCheck, -1, theMinPoint);
             VectorCopy(kWallstickingDistanceCheck, theMaxPoint);
-            
+
             // Trace corners of hull to see if any are touching a solid and
             // compute an average surface normal.
-            
+
             vec3_t theSurfaceNormal = { 0, 0, 0 };
-            
+
             bool wallsticking = false;
 
 			// : fix to allow skulks to climb walls oriented 45 degrees in the x-y plane
@@ -1484,7 +1484,7 @@ void NS_UpdateWallsticking()
             VectorNormalize(theSurfaceNormal);
             if (wallsticking)
             {
-				// : 0000972 
+				// : 0000972
 				if (pmove->waterjumptime == 0)
 				{
 					//float dotNormalView = DotProduct(pmove->forward, theSurfaceNormal);
@@ -1495,14 +1495,14 @@ void NS_UpdateWallsticking()
 					{
 						VectorCopy(theSurfaceNormal, gSurfaceNormal);
 
-						if (pmove->cmd.buttons & IN_WALK) 
+						if (pmove->cmd.buttons & IN_WALK)
 						{
 							vec3_t theDispVect;
 							VectorScale(theSurfaceNormal, theMinPoint[0], theDispVect);
 							VectorAdd(pmove->origin, theDispVect, theDispVect);
 
 							pmtrace_t wallclimbTrace = NS_PlayerTrace(pmove, pmove->origin, theDispVect, PM_NORMAL, -1);
-							
+
 							if (wallclimbTrace.fraction < 1)
 							{
 								VectorCopy(wallclimbTrace.endpos, pmove->origin);
@@ -1520,17 +1520,17 @@ void NS_UpdateWallsticking()
 				// :
 
                 vec3_t angles;
-                         
+
                 #ifdef AVH_SERVER
 
                 vec3_t worldViewAngles;
-                
+
                 Mat3 objectMatrix(pmove->vuser1);
                 Mat3 viewMatrix(pmove->angles);
 
-                (objectMatrix * viewMatrix).GetEulerAngles(worldViewAngles);                
+                (objectMatrix * viewMatrix).GetEulerAngles(worldViewAngles);
 
-                NS_GetWallstickingAngles(theSurfaceNormal, pmove->angles, angles);   
+                NS_GetWallstickingAngles(theSurfaceNormal, pmove->angles, angles);
                 VectorCopy(angles, pmove->vuser2);
 
                 #endif
@@ -1543,10 +1543,10 @@ void NS_UpdateWallsticking()
             }
             else
             {
-                
+
                 // This seems like a good idea, but it doesn't work too well in
                 // practice (maybe the constant just need to be tweaked).
-            
+
                 /*
                 // If the Skulk is not wallsticking, then rotate to align with the
                 // surface he's moving towards (if there's one nearby).
@@ -1566,7 +1566,7 @@ void NS_UpdateWallsticking()
                 {
 
                     vec3_t angles;
-                    
+
                     #ifdef AVH_SERVER
                     NS_GetWallstickingAngles(trace.plane.normal, pmove->vuser1, angles);
                     VectorCopy(angles, pmove->vuser2);
@@ -1575,7 +1575,7 @@ void NS_UpdateWallsticking()
                     #ifdef AVH_CLIENT
                     NS_GetWallstickingAngles(trace.plane.normal, gWorldViewAngles, angles);
                     VectorCopy(angles, gTargetPlayerAngles);
-                    #endif                    
+                    #endif
                 }
                 */
 
@@ -1588,7 +1588,7 @@ void NS_UpdateWallsticking()
 
                 #ifdef AVH_CLIENT
                 VectorCopy(pmove->angles, gTargetPlayerAngles);
-                #endif                      
+                #endif
 
             }
 
@@ -1597,12 +1597,12 @@ void NS_UpdateWallsticking()
 
             // The changed ones still down are "pressed"
             //int theButtonPressed =  theButtonsChanged & pmove->cmd.buttons;
-            
+
             // If we're now wallsticking and we JUST pressed our duck button, slow our velocity
             if(GetHasUpgrade(pmove->iuser4, MASK_WALLSTICKING) && (theButtonsChanged & IN_DUCK))
             {
                 //pmove->Con_Printf("Setting vel to 0\n");
-                VectorScale(pmove->velocity, .999f, pmove->velocity);               
+                VectorScale(pmove->velocity, .999f, pmove->velocity);
                 //pmove->velocity[0] = pmove->velocity[1] = pmove->velocity[2] = 0.0f;
 
                 // Trigger footstep immediately
@@ -1613,7 +1613,7 @@ void NS_UpdateWallsticking()
         {
             #ifdef AVH_SERVER
             //VectorCopy(pmove->angles, pmove->vuser2);
-            
+
             vec3_t up = { 0, 0, 1 };
             NS_GetWallstickingAngles(up, pmove->angles, pmove->vuser2);
             #endif
@@ -1646,7 +1646,7 @@ int NS_GetStepsize(int iuser3)
     //{
     //  theStepSize = 1.3f*kDefaultStepsize;
     //}
-    
+
     return theStepSize;
 }
 
@@ -1658,7 +1658,7 @@ void PM_SwapTextures( int i, int j )
 
     strcpy( szTemp, grgszTextureName[ i ] );
     chTemp = grgchTextureType[ i ];
-    
+
     strcpy( grgszTextureName[ i ], grgszTextureName[ j ] );
     grgchTextureType[ i ] = grgchTextureType[ j ];
 
@@ -1716,7 +1716,7 @@ void PM_InitTextureTypes()
         i = 0;
         while(buffer[i] && isspace(buffer[i]))
             i++;
-        
+
         if (!buffer[i])
             continue;
 
@@ -1730,7 +1730,7 @@ void PM_InitTextureTypes()
         // skip whitespace
         while(buffer[i] && isspace(buffer[i]))
             i++;
-        
+
         if (!buffer[i])
             continue;
 
@@ -1784,7 +1784,7 @@ char PM_FindTextureType( char *name )
             right = pivot - 1;
         }
     }
-    
+
     return CHAR_TEX_CONCRETE;
 }
 
@@ -1805,19 +1805,19 @@ float PM_GetDesiredTopDownCameraHeight(qboolean& outFoundEntity)
 //
 //  VectorCopy(pmove->origin, theTraceEnd);
 //  theTraceEnd[2] = -500;
-//  
+//
 //  //AngleVectors(pmove->angles, theForward, NULL, NULL);
 //  //VectorNormalize(theForward);
 //  theForward[0] = theForward[1] = 0;
 //  theForward[2] = -1;
-//  
+//
 //  //VectorMA(pmove->origin, theHeight, theForward, theTraceEnd);
 //
 //  do
 //  {
 //      //struct pmtrace_s *(*PM_TraceLine)( float *start, float *end, int flags, int usehull, int ignore_pe );
 //      theTrace = pmove->PM_TraceLine(theTraceStart, theTraceEnd, PM_TRACELINE_ANYVISIBLE, 2,  theEntityHit);
-//      
+//
 //      // Find out if there are any view height entities at our x,y
 //      theEntityHit = theTrace->ent;
 //      if(theEntityHit > 0)
@@ -1858,7 +1858,7 @@ float PM_GetDesiredTopDownCameraHeight(qboolean& outFoundEntity)
 //  // While the end point is not a view entity and not below
 //  //while(theTrace->fraction > kFloatTolerance && !theDone);
 //  while((theTrace->fraction != 1.0f) && !theDone /*&& (!theTrace->startsolid || theTrace->fraction != 0)*/);
-//  
+//
 //  // Return the result
 //  return theHeight;
     return 640;
@@ -1874,7 +1874,7 @@ bool NS_GetIsPlayerAlien(string& outExtension, float* outVolume = NULL)
     bool theIsAlien3 = (theUser3 == AVH_USER3_ALIEN_PLAYER3);
     bool theIsAlien4 = (theUser3 == AVH_USER3_ALIEN_PLAYER4);
     bool theIsAlien5 = (theUser3 == AVH_USER3_ALIEN_PLAYER5);
-    
+
     if(theIsAlien1)
     {
         outExtension = kAlien1FootstepExtension;
@@ -1923,31 +1923,31 @@ void NS_PlayStepSound(int inMaterialType, int inSoundNumber, float inVolume)
     case STEP_METAL:
         theBaseName = kMetalBaseName;
         break;
-        
+
     case STEP_DIRT:
         theBaseName = kDirtBaseName;
         break;
-        
+
     case STEP_VENT:
         theBaseName = kDuctBaseName;
         break;
-        
+
     case STEP_GRATE:
         theBaseName = kGrateBaseName;
         break;
-        
+
     case STEP_TILE:
         theBaseName = kTileBaseName;
         break;
-        
+
     case STEP_SLOSH:
         theBaseName = kSloshBaseName;
         break;
-        
+
     case STEP_WADE:
         theBaseName = kWadeBaseName;
         break;
-        
+
     case STEP_LADDER:
         theBaseName = kLadderBaseName;
         break;
@@ -1988,7 +1988,7 @@ void NS_PlayStepSound(int inMaterialType, int inSoundNumber, float inVolume)
         // Construct full name using base name and sound number
         char theFinalName[128];
         sprintf(theFinalName, "%s%s%d", kFootstepDirectory, theBaseName.c_str(), theFinalNumber);
-        
+
         //if(theIsAlien && (inMaterialType != STEP_WADE))
         float theNorm = ATTN_NORM;
         if((theExtension != "") && (inMaterialType == STEP_CONCRETE))
@@ -1997,7 +1997,7 @@ void NS_PlayStepSound(int inMaterialType, int inSoundNumber, float inVolume)
             strcat(theFinalName, theExtension.c_str());
         }
         strcat(theFinalName, ".wav");
-        
+
         // If alien has silencio upgrade, mute footstep volume
         float theSilenceUpgradeFactor = 0.0f;
 
@@ -2006,13 +2006,13 @@ void NS_PlayStepSound(int inMaterialType, int inSoundNumber, float inVolume)
             int theSilenceUpgradeLevel = AvHGetAlienUpgradeLevel(pmove->iuser4, MASK_UPGRADE_6);
             theSilenceUpgradeFactor = theSilenceUpgradeLevel/3.0f;
         }
-        
+
         inVolume = inVolume - inVolume*theSilenceUpgradeFactor;
-        
+
         // Play it at the specified volume
         PM_NSPlaySound(CHAN_BODY, theFinalName, inVolume, theNorm, 0, PITCH_NORM);
 #ifdef AVH_SERVER
-        AISND_RegisterNewSound(pmove->player_index + 1, pmove->origin, AI_SOUND_FOOTSTEP, inVolume);
+        AISND_RegisterNewSound(pmove->player_index + 1, pmove->origin, EAISoundType::AI_SOUND_FOOTSTEP, inVolume);
 #endif
     }
     else
@@ -2036,7 +2036,7 @@ void PM_PlayStepSound( int step, float fvol )
     {
         return;
     }
-    
+
     irand = pmove->RandomLong(0,1) + ( pmove->iStepLeft * 2 );
 
     // Don't play footsteps when ducked
@@ -2046,7 +2046,7 @@ void PM_PlayStepSound( int step, float fvol )
         return;
     }
 
-	// Don't play footsteps if gliding 
+	// Don't play footsteps if gliding
 	if (pmove->iuser3 == AVH_USER3_ALIEN_PLAYER3 && pmove->cmd.buttons & IN_JUMP && pmove->oldbuttons & IN_JUMP)
 	{
 		return;
@@ -2200,7 +2200,7 @@ void PM_PlayStepSound( int step, float fvol )
 //      }
 //      break;
 //  }
-}   
+}
 
 int PM_MapTextureTypeStepType(char chTextureType)
 {
@@ -2218,7 +2218,7 @@ int PM_MapTextureTypeStepType(char chTextureType)
             break;
 
         case CHAR_TEX_DIRT:
-            theTextureType = STEP_DIRT; 
+            theTextureType = STEP_DIRT;
             break;
 
         case CHAR_TEX_VENT:
@@ -2237,7 +2237,7 @@ int PM_MapTextureTypeStepType(char chTextureType)
             theTextureType = STEP_SLOSH;
             break;
     }
-    
+
     return theTextureType;
 }
 
@@ -2274,12 +2274,12 @@ void PM_CatagorizeTextureType( void )
     if (*pTextureName == '{' || *pTextureName == '!' || *pTextureName == '~' || *pTextureName == ' ')
         pTextureName++;
     // '}}'
-    
+
     strcpy( pmove->sztexturename, pTextureName);
     pmove->sztexturename[ CBTEXTURENAMEMAX - 1 ] = 0;
-        
+
     // get texture type
-    pmove->chtexturetype = PM_FindTextureType( pmove->sztexturename );  
+    pmove->chtexturetype = PM_FindTextureType( pmove->sztexturename );
 }
 
 void PM_GetSpeeds(float& outVelWalk, float& outVelRun)
@@ -2361,7 +2361,7 @@ void PM_SetHulls( void )
     pmove->player_mins[1][0] = HULL1_MINX;
     pmove->player_mins[1][1] = HULL1_MINY;
     pmove->player_mins[1][2] = HULL1_MINZ;
-    
+
     pmove->player_maxs[1][0] = HULL1_MAXX;
     pmove->player_maxs[1][1] = HULL1_MAXY;
     pmove->player_maxs[1][2] = HULL1_MAXZ;
@@ -2369,7 +2369,7 @@ void PM_SetHulls( void )
     pmove->player_mins[2][0] = HULL2_MINX;
     pmove->player_mins[2][1] = HULL2_MINY;
     pmove->player_mins[2][2] = HULL2_MINZ;
-    
+
     pmove->player_maxs[2][0] = HULL2_MAXX;
     pmove->player_maxs[2][1] = HULL2_MAXY;
     pmove->player_maxs[2][2] = HULL2_MAXZ;
@@ -2377,14 +2377,14 @@ void PM_SetHulls( void )
     pmove->player_mins[3][0] = HULL3_MINX;
     pmove->player_mins[3][1] = HULL3_MINY;
     pmove->player_mins[3][2] = HULL3_MINZ;
-    
+
     pmove->player_maxs[3][0] = HULL3_MAXX;
     pmove->player_maxs[3][1] = HULL3_MAXY;
     pmove->player_maxs[3][2] = HULL3_MAXZ;
 
 
     // Work around for a problem in the engine where it always uses the default HL
-    // hull sizes for the clip_mins and clip_maxs. 
+    // hull sizes for the clip_mins and clip_maxs.
 
     for (int i = 0; i < pmove->numphysent; ++i)
     {
@@ -2400,16 +2400,16 @@ void PM_SetHulls( void )
         {
             pmove->physents[i].player = 0;
         }
-        
+
         model_s* model = pmove->physents[i].model;
-        
+
         if (model)
         {
-            
+
             model->hulls[0].clip_mins[0] = HULL2_MINX;
             model->hulls[0].clip_mins[1] = HULL2_MINY;
             model->hulls[0].clip_mins[2] = HULL2_MINZ;
-            
+
             model->hulls[0].clip_maxs[0] = HULL2_MAXX;
             model->hulls[0].clip_maxs[1] = HULL2_MAXY;
             model->hulls[0].clip_maxs[2] = HULL2_MAXZ;
@@ -2417,29 +2417,29 @@ void PM_SetHulls( void )
             model->hulls[1].clip_mins[0] = HULL0_MINX;
             model->hulls[1].clip_mins[1] = HULL0_MINY;
             model->hulls[1].clip_mins[2] = HULL0_MINZ;
-            
+
             model->hulls[1].clip_maxs[0] = HULL0_MAXX;
             model->hulls[1].clip_maxs[1] = HULL0_MAXY;
             model->hulls[1].clip_maxs[2] = HULL0_MAXZ;
-        
+
             model->hulls[2].clip_mins[0] = HULL3_MINX;
             model->hulls[2].clip_mins[1] = HULL3_MINY;
             model->hulls[2].clip_mins[2] = HULL3_MINZ;
-            
+
             model->hulls[2].clip_maxs[0] = HULL3_MAXX;
             model->hulls[2].clip_maxs[1] = HULL3_MAXY;
             model->hulls[2].clip_maxs[2] = HULL3_MAXZ;
-            
+
             model->hulls[3].clip_mins[0] = HULL1_MINX;
             model->hulls[3].clip_mins[1] = HULL1_MINY;
             model->hulls[3].clip_mins[2] = HULL1_MINZ;
-            
+
             model->hulls[3].clip_maxs[0] = HULL1_MAXX;
             model->hulls[3].clip_maxs[1] = HULL1_MAXY;
             model->hulls[3].clip_maxs[2] = HULL1_MAXZ;
-        
+
         }
-    
+
     }
 
 }
@@ -2460,21 +2460,21 @@ void PM_UpdateStepSound( void )
 //      float flduck;
         int fLadder;
         int step;
-        
+
         if ( pmove->flTimeStepSound > 0 )
             return;
-        
+
         if ( pmove->flags & FL_FROZEN )
             return;
-        
+
         PM_CatagorizeTextureType();
-        
+
         speed = Length( pmove->velocity );
-        
+
         // determine if we are on a ladder
         fLadder = ( pmove->movetype == MOVETYPE_FLY );// IsOnLadder();
-        
-        // UNDONE: need defined numbers for run, walk, crouch, crouch run velocities!!!!    
+
+        // UNDONE: need defined numbers for run, walk, crouch, crouch run velocities!!!!
         if ( !GetHasUpgrade(pmove->iuser4, MASK_WALLSTICKING) && (( pmove->flags & FL_DUCKING) || fLadder) )
         {
             velwalk = 60;       // These constants should be based on cl_movespeedkey * cl_forwardspeed somehow
@@ -2487,23 +2487,23 @@ void PM_UpdateStepSound( void )
             velrun = 210;
 //          flduck = 0;
         }
-        
+
         // If we're on a ladder or on the ground, and we're moving fast enough,
         //  play step sound.  Also, if pmove->flTimeStepSound is zero, get the new
         //  sound right away - we just started moving in new level.
         if ( (fLadder || GetHasUpgrade(pmove->iuser4, MASK_WALLSTICKING) || ( pmove->onground != -1 ) ) && ( Length( pmove->velocity ) > 0.0 ))
         {
-            fWalking = speed < velrun;      
-            
+            fWalking = speed < velrun;
+
             VectorCopy( pmove->origin, center );
             VectorCopy( pmove->origin, knee );
             VectorCopy( pmove->origin, feet );
-            
+
             height = pmove->player_maxs[ pmove->usehull ][ 2 ] - pmove->player_mins[ pmove->usehull ][ 2 ];
-            
+
             knee[2] = pmove->origin[2] - 0.3 * height;
             feet[2] = pmove->origin[2] - 0.5 * height;
-            
+
             // find out what we're stepping in or on...
             if (fLadder)
             {
@@ -2521,35 +2521,35 @@ void PM_UpdateStepSound( void )
             {
                 step = STEP_SLOSH;
                 fvol = fWalking ? 0.2 : 0.5;
-                pmove->flTimeStepSound = fWalking ? 400 : 300;      
+                pmove->flTimeStepSound = fWalking ? 400 : 300;
             }
             else
             {
-                // find texture under player, if different from current texture, 
+                // find texture under player, if different from current texture,
                 // get material type
                 step = PM_MapTextureTypeStepType( pmove->chtexturetype );
                 float theFraction = PM_SetStepInterval();
-                
+
                 switch ( pmove->chtexturetype )
                 {
                 default:
-                case CHAR_TEX_CONCRETE:                     
-                case CHAR_TEX_METAL:    
+                case CHAR_TEX_CONCRETE:
+                case CHAR_TEX_METAL:
                 case CHAR_TEX_GRATE:
-                case CHAR_TEX_TILE: 
+                case CHAR_TEX_TILE:
                 case CHAR_TEX_SLOSH:
                     //fvol = .2f + .3f*theFraction;
                     fvol = .7f*theFraction;
                     break;
-                    
-                case CHAR_TEX_DIRT: 
+
+                case CHAR_TEX_DIRT:
                     fvol = .75f*theFraction;
                     //fvol = .25f + .3f*theFraction;
                     //fvol = fWalking ? 0.25 : 0.55;
                     //pmove->flTimeStepSound = fWalking ? 400 : 300;
                     break;
-                    
-                case CHAR_TEX_VENT: 
+
+                case CHAR_TEX_VENT:
                     fvol = .3f + .5f*theFraction;
                     //fvol = .5f + .3f*theFraction;
                     //fvol = fWalking ? 0.4 : 0.7;
@@ -2557,16 +2557,16 @@ void PM_UpdateStepSound( void )
                     break;
                 }
             }
-            
+
 //          pmove->flTimeStepSound += flduck; // slower step time if ducking
-            
+
             // play the sound
             // 35% volume if ducking
             if (!GetHasUpgrade(pmove->iuser4, MASK_WALLSTICKING) && (pmove->flags & FL_DUCKING))
             {
                 fvol *= 0.35;
             }
-            
+
             PM_PlayStepSound( step, fvol );
         }
     }
@@ -2629,7 +2629,7 @@ void PM_CheckVelocity ()
         }
 
         // Bound it.
-        if (pmove->velocity[i] > pmove->movevars->maxvelocity) 
+        if (pmove->velocity[i] > pmove->movevars->maxvelocity)
         {
             pmove->Con_DPrintf ("PM  Got a velocity too high on %i\n", i);
             pmove->velocity[i] = pmove->movevars->maxvelocity;
@@ -2665,9 +2665,9 @@ int PM_ClipVelocity (vec3_t in, vec3_t normal, vec3_t out, float overbounce)
 
     blocked = 0x00;            // Assume unblocked.
     if (angle > 0)      // If the plane that is blocking us has a positive z component, then assume it's a floor.
-        blocked |= 0x01;        // 
+        blocked |= 0x01;        //
     if (!angle)         // If the plane has no Z, it is vertical (wall/step)
-        blocked |= 0x02;        // 
+        blocked |= 0x02;        //
 
     // Determine how far along plane to slide based on incoming direction.
     // Scale by overbounce factor.
@@ -2732,7 +2732,7 @@ void PM_AddCorrectGravity()
 
         if (pmove->cmd.buttons & IN_JUMP)
         {
-        
+
             float theSpeed = PM_GetHorizontalSpeed();
             float theLift  = (theSpeed / 300) * (pmove->forward[2] + 0.5) / 1.5;
 
@@ -2740,9 +2740,9 @@ void PM_AddCorrectGravity()
             {
                 theLift = 0;
             }
-            
+
             theGravity = theMinGravity + (1 - theLift) * (theMaxGravity - theMinGravity);
-            
+
         }
 
         pmove->gravity = max(min(theGravity, theMaxGravity), theMinGravity);
@@ -2772,7 +2772,7 @@ void PM_AddCorrectGravity()
 //      }
 //  }
 
-    // : 0000972 
+    // : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
         return;
@@ -2788,7 +2788,7 @@ void PM_AddCorrectGravity()
     }
 
     // Add gravity so they'll be in the correct position during movement
-    // yes, this 0.5 looks wrong, but it's not.  
+    // yes, this 0.5 looks wrong, but it's not.
     pmove->velocity[2] -= (ent_gravity * pmove->movevars->gravity * 0.5 * pmove->frametime );
     pmove->velocity[2] += pmove->basevelocity[2] * pmove->frametime;
     pmove->basevelocity[2] = 0;
@@ -2801,7 +2801,7 @@ void PM_FixupGravityVelocity ()
 {
     float   ent_gravity;
 
-	// : 0000972 
+	// : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
         return;
@@ -2816,7 +2816,7 @@ void PM_FixupGravityVelocity ()
         pmove->gravity = ent_gravity = 0.0f;
     }
 
-    // Get the correct velocity for the end of the dt 
+    // Get the correct velocity for the end of the dt
     pmove->velocity[2] -= (ent_gravity * pmove->movevars->gravity * pmove->frametime * 0.5 );
 
     PM_CheckVelocity();
@@ -2843,14 +2843,14 @@ int PM_FlyMove (void)
     vec3_t      end;
     float       time_left, allFraction;
     int         blocked;
-        
+
     numbumps  = 4;           // Bump up to four times
-    
+
     blocked   = 0;           // Assume not blocked
     numplanes = 0;           //  and not sliding along any planes
     VectorCopy (pmove->velocity, original_velocity);  // Store original velocity
     VectorCopy (pmove->velocity, primal_velocity);
-    
+
     allFraction = 0;
     time_left = pmove->frametime;   // Total time for this movement operation.
 
@@ -2890,7 +2890,7 @@ int PM_FlyMove (void)
         }
 
         // If we moved some portion of the total distance, then
-        //  copy the end position into the pmove->origin and 
+        //  copy the end position into the pmove->origin and
         //  zero the plane counter.
         if (trace.fraction > 0 || theIsInTopDown)
         {   // actually covered some distance
@@ -2918,7 +2918,7 @@ int PM_FlyMove (void)
         {
             blocked |= 1;       // floor
         }
-        // If the plane has a zero z component in the normal, then it's a 
+        // If the plane has a zero z component in the normal, then it's a
         //  step or wall
         if (!trace.plane.normal[2])
         {
@@ -2929,7 +2929,7 @@ int PM_FlyMove (void)
         // Reduce amount of pmove->frametime left by total time left * fraction
         //  that we covered.
         time_left -= time_left * trace.fraction;
-        
+
         // Did we run out of planes to clip against?
         if (numplanes >= MAX_CLIP_PLANES)
         {   // this shouldn't really happen
@@ -2957,7 +2957,7 @@ int PM_FlyMove (void)
                     PM_ClipVelocity( original_velocity, planes[i], new_velocity, 1 );
                     VectorCopy( new_velocity, original_velocity );
                 }
-                else                                                            
+                else
                     PM_ClipVelocity( original_velocity, planes[i], new_velocity, 1.0 + pmove->movevars->bounce * (1-pmove->friction) );
             }
 
@@ -2983,12 +2983,12 @@ int PM_FlyMove (void)
                 if (j == numplanes)  // Didn't have to clip, so we're ok
                     break;
             }
-            
+
             // Did we go all the way through plane set
             if (i != numplanes)
             {   // go along this plane
                 // pmove->velocity is set in clipping call, no need to set again.
-                ;  
+                ;
             }
             else
             {   // go along the crease
@@ -3045,7 +3045,7 @@ void PM_Accelerate (vec3_t wishdir, float wishspeed, float accel)
         return;
 
     // If waterjumping, don't accelerate
-	// : 0000972 
+	// : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
         return;
@@ -3062,15 +3062,15 @@ void PM_Accelerate (vec3_t wishdir, float wishspeed, float accel)
 
     // Determine amount of accleration.
     accelspeed = accel * pmove->frametime * wishspeed * pmove->friction;
-    
+
     // Cap at addspeed
     if (accelspeed > addspeed)
         accelspeed = addspeed;
-    
+
     // Adjust velocity.
     for (i=0 ; i<3 ; i++)
     {
-        pmove->velocity[i] += accelspeed * wishdir[i];  
+        pmove->velocity[i] += accelspeed * wishdir[i];
     }
 }
 
@@ -3099,7 +3099,7 @@ void PM_WalkMove ()
     float downdist, updist;
 
     pmtrace_t trace;
-    
+
     // Copy movement amounts
     fmove = pmove->cmd.forwardmove;
     smove = pmove->cmd.sidemove;
@@ -3130,24 +3130,24 @@ void PM_WalkMove ()
 
         VectorNormalize(theForwardView);
         VectorNormalize(theUpView);
-        
+
         CrossProduct(theForwardView, theUpView, theRightView);
-        
+
         // Changed by mmcguire. Added up movement.
         for (i=0 ; i<3 ; i++)
         {
             wishvel[i] = theForwardView[i]*fmove + theRightView[i]*smove + theUpView[i]*umove;
         }
-    
+
     }
     else
     {
         // Zero out z components of movement vectors
         pmove->forward[2] = 0;
         pmove->right[2]   = 0;
-        
+
         VectorNormalize (pmove->forward);  // Normalize remainder of vectors.
-        VectorNormalize (pmove->right);    // 
+        VectorNormalize (pmove->right);    //
 
         //pmove->Con_Printf("PM_WalkMove()->fmove: %f\n", fmove);
 
@@ -3158,13 +3158,13 @@ void PM_WalkMove ()
             // Modify fmove?
             fmove = 500;
         }
-        
+
         for (i=0 ; i<2 ; i++)       // Determine x and y parts of velocity
             wishvel[i] = pmove->forward[i]*fmove + pmove->right[i]*smove;
 
         wishvel[2] = 0;             // Zero out z part of velocity
     }
-    
+
     VectorCopy (wishvel, wishdir);   // Determine maginitude of speed of move
     wishspeed = VectorNormalize(wishdir);
 
@@ -3203,9 +3203,9 @@ void PM_WalkMove ()
 
     oldonground = pmove->onground;
 
-// first try just moving to the destination 
+// first try just moving to the destination
     dest[0] = pmove->origin[0] + pmove->velocity[0]*pmove->frametime;
-    dest[1] = pmove->origin[1] + pmove->velocity[1]*pmove->frametime;   
+    dest[1] = pmove->origin[1] + pmove->velocity[1]*pmove->frametime;
 
     // Wall-sticking change
     //dest[2] = pmove->origin[2];
@@ -3214,9 +3214,9 @@ void PM_WalkMove ()
     // first try moving directly to the next spot
     VectorCopy (dest, start);
 
-        trace = NS_PlayerTrace (pmove, pmove->origin, dest, PM_NORMAL, -1 );    
+        trace = NS_PlayerTrace (pmove, pmove->origin, dest, PM_NORMAL, -1 );
 
-    
+
     // If we made it all the way, then copy trace end
     //  as new player position.
     if (trace.fraction == 1)
@@ -3231,8 +3231,8 @@ void PM_WalkMove ()
             pmove->waterlevel  == 0)
             return;
     }
-    
-    // : 0000972 
+
+    // : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
 		// If we are jumping out of water, don't do anything more.
@@ -3259,8 +3259,8 @@ void PM_WalkMove ()
     VectorCopy (pmove->origin, dest);
     //dest[2] += pmove->movevars->stepsize;
     dest[2] += NS_GetStepsize(pmove->iuser3);
-    
-    trace = NS_PlayerTrace (pmove, pmove->origin, dest, PM_NORMAL, -1 );    
+
+    trace = NS_PlayerTrace (pmove, pmove->origin, dest, PM_NORMAL, -1 );
 
     // If we started okay and made it part of the way at least,
     //  copy the results to the movement start position and then
@@ -3278,7 +3278,7 @@ void PM_WalkMove ()
     VectorCopy (pmove->origin, dest);
     //dest[2] -= pmove->movevars->stepsize;
     dest[2] -= NS_GetStepsize(pmove->iuser3);
-    
+
     trace = NS_PlayerTrace (pmove, pmove->origin, dest, PM_NORMAL, -1 );
 
     // If we are not on the ground any more then
@@ -3323,9 +3323,9 @@ void PM_Friction (void)
     float   friction;
     float   drop;
     vec3_t newvel;
-    
+
     // If we are in water jump cycle, don't apply friction
-	// : 0000972 
+	// : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
         return;
@@ -3335,10 +3335,10 @@ void PM_Friction (void)
 
     // Get velocity
     vel = pmove->velocity;
-    
+
     // Calculate speed
     speed = sqrt(vel[0]*vel[0] +vel[1]*vel[1] + vel[2]*vel[2]);
-    
+
     // If too slow, return
     if (speed < 0.1f)
     {
@@ -3364,9 +3364,9 @@ void PM_Friction (void)
             friction = pmove->movevars->friction*pmove->movevars->edgefriction;
         else
             friction = pmove->movevars->friction;
-        
+
         // Grab friction value.
-        //friction = pmove->movevars->friction;      
+        //friction = pmove->movevars->friction;
 
         friction *= pmove->friction;  // player friction?
 
@@ -3402,10 +3402,10 @@ void PM_AirAccelerate (vec3_t wishdir, float wishspeed, float accel)
 {
     int         i;
     float       addspeed, accelspeed, currentspeed, wishspd = wishspeed;
-        
+
     if (pmove->dead)
         return;
-	// : 0000972 
+	// : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
         return;
@@ -3414,7 +3414,7 @@ void PM_AirAccelerate (vec3_t wishdir, float wishspeed, float accel)
 
     // Cap speed
     //wishspd = VectorNormalize (pmove->wishveloc);
-    
+
     if (wishspd > 30)
         wishspd = 30;
     // Determine veer amount
@@ -3430,11 +3430,11 @@ void PM_AirAccelerate (vec3_t wishdir, float wishspeed, float accel)
     // Cap it
     if (accelspeed > addspeed)
         accelspeed = addspeed;
-    
+
     // Adjust pmove vel.
     for (i=0 ; i<3 ; i++)
     {
-        pmove->velocity[i] += accelspeed*wishdir[i];    
+        pmove->velocity[i] += accelspeed*wishdir[i];
     }
 }
 
@@ -3526,13 +3526,13 @@ void PM_WaterMove (void)
     start[2] += NS_GetStepsize(pmove->iuser3) + 1;
 
     trace = NS_PlayerTrace (pmove, start, dest, PM_NORMAL, -1 );
-    
+
     if (!trace.startsolid && !trace.allsolid)   // FIXME: check steep slope?
     {   // walked up the step, so just keep result and exit
         VectorCopy (trace.endpos, pmove->origin);
         return;
     }
-    
+
     // Try moving straight along out normal path.
     PM_FlyMove ();
 }
@@ -3555,7 +3555,7 @@ void PM_AirMove (void)
     // Copy movement amounts
     fmove = pmove->cmd.forwardmove;
     smove = pmove->cmd.sidemove;
-    
+
     // Zero out z components of movement vectors
     pmove->forward[2] = 0;
     pmove->right[2]   = 0;
@@ -3564,15 +3564,15 @@ void PM_AirMove (void)
     VectorNormalize (pmove->right);
 
     // Determine x and y parts of velocity
-    for (i=0 ; i<2 ; i++)       
+    for (i=0 ; i<2 ; i++)
     {
         wishvel[i] = pmove->forward[i]*fmove + pmove->right[i]*smove;
     }
     // Zero out z part of velocity
-    wishvel[2] = 0;             
+    wishvel[2] = 0;
 
      // Determine maginitude of speed of move
-    VectorCopy (wishvel, wishdir);  
+    VectorCopy (wishvel, wishdir);
     wishspeed = VectorNormalize(wishdir);
 
     // Clamp to server defined max speed
@@ -3583,13 +3583,13 @@ void PM_AirMove (void)
     }
 
     PM_PreventMegaBunnyJumping(true);
-    
+
 	float theAirAccelerate = gIsJetpacking[pmove->player_index] ? pmove->movevars->airaccelerate*4 : pmove->movevars->airaccelerate;
     if(pmove->iuser3 == AVH_USER3_ALIEN_PLAYER3)
     {
         theAirAccelerate = pmove->movevars->airaccelerate/22.0f;
     }
-        
+
     PM_AirAccelerate (wishdir, wishspeed, theAirAccelerate);
 
     // Add in any base velocity to the current velocity.
@@ -3625,7 +3625,7 @@ qboolean PM_CheckWater ()
     point[0] = pmove->origin[0] + (pmove->player_mins[pmove->usehull][0] + pmove->player_maxs[pmove->usehull][0]) * 0.5;
     point[1] = pmove->origin[1] + (pmove->player_mins[pmove->usehull][1] + pmove->player_maxs[pmove->usehull][1]) * 0.5;
     point[2] = pmove->origin[2] + pmove->player_mins[pmove->usehull][2] + 1;
-    
+
     // Assume that we are not in water at all.
     pmove->waterlevel = 0;
     pmove->watertype = CONTENTS_EMPTY;
@@ -3641,13 +3641,13 @@ qboolean PM_CheckWater ()
         {
             // Set water type
             pmove->watertype = cont;
-        
+
             // We are at least at level one
             pmove->waterlevel = 1;
-        
+
             height = (pmove->player_mins[pmove->usehull][2] + pmove->player_maxs[pmove->usehull][2]);
             heightover2 = height * 0.5;
-        
+
             // Now check a point that is at the player hull midpoint.
             point[2] = pmove->origin[2] + heightover2;
             cont = pmove->PM_PointContents (point, NULL );
@@ -3656,15 +3656,15 @@ qboolean PM_CheckWater ()
             {
                 // Set a higher water level.
                 pmove->waterlevel = 2;
-        
+
                 // Now check the eye position.  (view_ofs is relative to the origin)
                 point[2] = pmove->origin[2] + pmove->view_ofs[2];
-        
+
                 cont = pmove->PM_PointContents (point, NULL );
-                if (cont <= CONTENTS_WATER && cont > CONTENTS_TRANSLUCENT ) 
+                if (cont <= CONTENTS_WATER && cont > CONTENTS_TRANSLUCENT )
                     pmove->waterlevel = 3;  // In over our eyes
             }
-        
+
             // Adjust velocity based on water current, if any.
             if ( ( truecont <= CONTENTS_CURRENT_0 ) &&
                  ( truecont >= CONTENTS_CURRENT_DOWN ) )
@@ -3675,7 +3675,7 @@ qboolean PM_CheckWater ()
                     {1, 0, 0}, {0, 1, 0}, {-1, 0, 0},
                     {0, -1, 0}, {0, 0, 1}, {0, 0, -1}
                 };
-        
+
                 VectorMA (pmove->basevelocity, 50.0*pmove->waterlevel, current_table[CONTENTS_CURRENT_0 - truecont], pmove->basevelocity);
             }
         }
@@ -3697,7 +3697,7 @@ void PM_CategorizePosition (void)
 // if the player hull point one unit down is solid, the player
 // is on ground
 
-// see if standing on something solid   
+// see if standing on something solid
 
     // Doing this before we move may introduce a potential latency in water detection, but
     // doing it after can get us stuck on the bottom in water if the amount we move up
@@ -3711,7 +3711,7 @@ void PM_CategorizePosition (void)
     point[2] = pmove->origin[2] - 2;
 	// : 1027
 	// Correctly detect that we are climbing
-    if (((pmove->velocity[2] > (MAX_CLIMB_SPEED-10)) && (g_onladder[pmove->player_index] > 0)) 
+    if (((pmove->velocity[2] > (MAX_CLIMB_SPEED-10)) && (g_onladder[pmove->player_index] > 0))
 		|| (pmove->velocity[2] > 180) )
 		// Shooting up really fast.  Definitely not on ground.
     {
@@ -3819,16 +3819,16 @@ int PM_CheckStuck (void)
 
 
 //  int theEntNumber = 1;
-//  
+//
 //  vec3_t theMins;
 //  VectorCopy(pmove->physents[theEntNumber].mins, theMins);
-//  
+//
 //  vec3_t theMaxs;
 //  VectorCopy(pmove->physents[theEntNumber].maxs, theMaxs);
-//  
+//
 //  //char* theName = pmove->physents[hitent].model
 //  //int theModType = pmove->PM_GetModelType( pmove->physents[hitent].model );
-//  
+//
 //  int theSolidity = pmove->physents[theEntNumber].solid;
 //
 //  vec3_t theAngles;
@@ -3836,7 +3836,7 @@ int PM_CheckStuck (void)
 //
 //  vec3_t theOrigin;
 //  VectorCopy(pmove->physents[theEntNumber].origin, theOrigin);
-//  
+//
 //  if(pmove->server)
 //  {
 //      pmove->Con_DPrintf("Server: ent: %d, solidity: %d  mins(%f, %f, %f), maxs(%f, %f, %f), origin(%f, %f, %f), angles(%f, %f, %f)\n", theEntNumber, theSolidity, theMins[0], theMins[1], theMins[2], theMaxs[0], theMaxs[1], theMaxs[2], theOrigin[0], theOrigin[1], theOrigin[2], theAngles[0], theAngles[1], theAngles[2]);
@@ -3845,7 +3845,7 @@ int PM_CheckStuck (void)
 //  {
 //      pmove->Con_DPrintf("Client: ent: %d, solidity: %d  mins(%f, %f, %f), maxs(%f, %f, %f), origin(%f, %f, %f), angles(%f, %f, %f)\n", theEntNumber, theSolidity, theMins[0], theMins[1], theMins[2], theMaxs[0], theMaxs[1], theMaxs[2], theOrigin[0], theOrigin[1], theOrigin[2], theAngles[0], theAngles[1], theAngles[2]);
 //  }
-    
+
 
 
 
@@ -3864,9 +3864,9 @@ int PM_CheckStuck (void)
 
     VectorCopy (pmove->origin, base);
 
-    // 
+    //
     // Deal with precision error in network.
-    // 
+    //
     if (!pmove->server)
     {
         // World or BSP model
@@ -3875,7 +3875,7 @@ int PM_CheckStuck (void)
         {
             int nReps = 0;
             PM_ResetStuckOffsets( pmove->player_index, pmove->server );
-            do 
+            do
             {
                 i = PM_GetRandomStuckOffsets(pmove->player_index, pmove->server, offset);
 
@@ -3884,7 +3884,7 @@ int PM_CheckStuck (void)
                 if (NS_TestPlayerPosition(pmove, test, &traceresult ) == -1)
                 {
                     PM_ResetStuckOffsets( pmove->player_index, pmove->server );
-        
+
                     VectorCopy ( test, pmove->origin );
                     return 0;
                 }
@@ -3902,7 +3902,7 @@ int PM_CheckStuck (void)
 
     fTime = pmove->Sys_FloatTime();
     // Too soon?
-    if (rgStuckCheckTime[pmove->player_index][idx] >= 
+    if (rgStuckCheckTime[pmove->player_index][idx] >=
         ( fTime - PM_CHECKSTUCK_MINTIME ) )
     {
         return 1;
@@ -3914,7 +3914,7 @@ int PM_CheckStuck (void)
     i = PM_GetRandomStuckOffsets(pmove->player_index, pmove->server, offset);
 
     VectorAdd(base, offset, test);
-    
+
     if ( ( hitent = NS_TestPlayerPosition (pmove, test, NULL ) ) == -1 )
     //if ( ( hitent = pmove->PM_TestPlayerPosition ( test, NULL ) ) == -1 )
     {
@@ -3937,7 +3937,7 @@ int PM_CheckStuck (void)
         float zstep = 18.0;
         float xyminmax = xystep;
         float zminmax = 4 * zstep;
-        
+
         for ( z = 0; z <= zminmax; z += zstep )
         {
             for ( x = -xyminmax; x <= xyminmax; x += xystep )
@@ -3984,7 +3984,7 @@ void PM_SpectatorMove (void)
     // there a two different main move types : track player or moce freely (OBS_ROAMING)
     // doesn't need excate track position, only to generate PVS, so just copy
     // targets position and real view position is calculated on client (saves server CPU)
-    
+
     if ( pmove->iuser1 == OBS_ROAMING)
     {
 
@@ -4026,7 +4026,7 @@ void PM_SpectatorMove (void)
         // accelerate
         fmove = pmove->cmd.forwardmove;
         smove = pmove->cmd.sidemove;
-        
+
         VectorNormalize (pmove->forward);
         VectorNormalize (pmove->right);
 
@@ -4038,7 +4038,7 @@ void PM_SpectatorMove (void)
 
         VectorCopy (wishvel, wishdir);
         wishspeed = VectorNormalize(wishdir);
-        
+
         //
         // clamp to server defined max speed
         //
@@ -4047,46 +4047,46 @@ void PM_SpectatorMove (void)
             VectorScale (wishvel, pmove->movevars->spectatormaxspeed/wishspeed, wishvel);
             wishspeed = pmove->movevars->spectatormaxspeed;
         }
-        
+
         currentspeed = DotProduct(pmove->velocity, wishdir);
         addspeed = wishspeed - currentspeed;
         if (addspeed <= 0)
             return;
-        
+
         accelspeed = pmove->movevars->accelerate*pmove->frametime*wishspeed;
         if (accelspeed > addspeed)
             accelspeed = addspeed;
-        
+
         for (i=0 ; i<3 ; i++)
-            pmove->velocity[i] += accelspeed*wishdir[i];    
-        
+            pmove->velocity[i] += accelspeed*wishdir[i];
+
         // move
         VectorMA (pmove->origin, pmove->frametime, pmove->velocity, pmove->origin);
     }
     else
     {
         // all other modes just track some kind of target, so spectator PVS = target PVS
-        
+
         int target;
-        
+
         // no valid target ?
         if ( pmove->iuser2 <= 0)
             return;
-        
+
         // Find the client this player's targeting
         for (target = 0; target < pmove->numphysent; target++)
         {
             if ( pmove->physents[target].info == pmove->iuser2 )
                 break;
         }
-        
+
         if (target == pmove->numphysent)
             return;
-        
+
         // use targets position as own origin for PVS
         VectorCopy( pmove->physents[target].angles, pmove->angles );
         VectorCopy( pmove->physents[target].origin, pmove->origin );
-        
+
         // no velocity
         VectorCopy( vec3_origin, pmove->velocity );
     }
@@ -4120,12 +4120,12 @@ void PM_FixPlayerCrouchStuck( int direction )
     hitent = pmove->PM_TestPlayerPosition ( pmove->origin, NULL );
     if (hitent == -1 )
         return;
-    
-    VectorCopy( pmove->origin, test );  
+
+    VectorCopy( pmove->origin, test );
     for ( i = 0; i < 36; i++ )
     {
         pmove->origin[2] += direction;
-        
+
         hitent = NS_TestPlayerPosition (pmove, pmove->origin, NULL );
         //hitent = pmove->PM_TestPlayerPosition ( pmove->origin, NULL );
         if (hitent == -1 )
@@ -4142,9 +4142,9 @@ void PM_UnDuck( void )
 
         pmtrace_t trace;
         vec3_t newOrigin;
-        
+
         VectorCopy( pmove->origin, newOrigin );
-        
+
 		// : remove the jump when pressing and releasing duck quickly
 		if ( pmove->onground != -1 && pmove->flags & FL_DUCKING && pmove->bInDuck == false)
         {
@@ -4154,15 +4154,15 @@ void PM_UnDuck( void )
             newOrigin[2] += ( pmove->player_mins[theCrouchingHull][2] - pmove->player_mins[theStandingHull][2] );
         }
 
-        trace = NS_PlayerTrace(pmove, newOrigin, newOrigin, PM_NORMAL, -1 );        
-        
+        trace = NS_PlayerTrace(pmove, newOrigin, newOrigin, PM_NORMAL, -1 );
+
         if ( !trace.startsolid )
         {
             //pmove->usehull = 0;
             pmove->usehull = AvHMUGetHull(false, pmove->iuser3);
-            
+
             // Oh, no, changing hulls stuck us into something, try unsticking downward first.
-            
+
             trace = NS_PlayerTrace(pmove, newOrigin, newOrigin, PM_NORMAL, -1  );
 
             if ( trace.startsolid )
@@ -4177,10 +4177,10 @@ void PM_UnDuck( void )
 
                 if ( trace.startsolid )
                 {
-                    
+
                     // See if we are stuck?  If so, stay ducked with the duck hull until we have a clear spot
                     //pmove->Con_Printf( "unstick got stuck\n" );
-                    
+
                     //pmove->usehull = 1;
                     pmove->usehull = AvHMUGetHull(true, pmove->iuser3);
                     //pmove->Con_Printf("Using hull: %d\n", pmove->usehull);
@@ -4188,16 +4188,16 @@ void PM_UnDuck( void )
                 }
             }
             //pmove->Con_Printf("Using hull: %d\n", pmove->usehull);
-            
+
             pmove->flags &= ~FL_DUCKING;
             pmove->bInDuck  = false;
             //pmove->view_ofs[2] = VEC_VIEW;
             float theViewHeight = kStandingViewHeightPercentage*pmove->player_maxs[pmove->usehull][2];
             pmove->view_ofs[2] = theViewHeight;
             pmove->flDuckTime = 0;
-            
+
             VectorCopy( newOrigin, pmove->origin );
-            
+
             // Recatagorize position since ducking can change origin
             PM_CategorizePosition();
         }
@@ -4208,13 +4208,13 @@ void PM_Duck( void )
 {
     if(AvHMUGetCanDuck(pmove->iuser3))
     {
-        
+
         int buttonsChanged  = ( pmove->oldbuttons ^ pmove->cmd.buttons );   // These buttons have changed this frame
         int nButtonPressed  =  buttonsChanged & pmove->cmd.buttons;     // The changed ones still down are "pressed"
-        
+
         int duckchange      = buttonsChanged & IN_DUCK ? 1 : 0;
         int duckpressed     = nButtonPressed & IN_DUCK ? 1 : 0;
-        
+
         if ( pmove->cmd.buttons & IN_DUCK )
         {
             pmove->oldbuttons |= IN_DUCK;
@@ -4223,7 +4223,7 @@ void PM_Duck( void )
         {
             pmove->oldbuttons &= ~IN_DUCK;
         }
-        
+
         // Prevent ducking if the iuser3 variable is set
         //if ( pmove->iuser3 || pmove->dead )
         //{
@@ -4234,14 +4234,14 @@ void PM_Duck( void )
         //  }
         //  return;
         //}
-        
+
         if((pmove->flags & FL_DUCKING) && (!GetHasUpgrade(pmove->iuser4, MASK_WALLSTICKING)))
         {
             pmove->cmd.forwardmove *= 0.333;
             pmove->cmd.sidemove    *= 0.333;
             pmove->cmd.upmove      *= 0.333;
         }
-        
+
         if ( ( pmove->cmd.buttons & IN_DUCK ) || ( pmove->bInDuck ) || ( pmove->flags & FL_DUCKING ) )
         {
             if ( pmove->cmd.buttons & IN_DUCK )
@@ -4252,15 +4252,15 @@ void PM_Duck( void )
                     pmove->flDuckTime = TIME_TO_DUCK;
                     pmove->bInDuck    = true;
                 }
-                
+
                 float duckFraction = 1 - ((float)pmove->flDuckTime / TIME_TO_DUCK);
-                
+
                 if ( pmove->bInDuck )
                 {
 
                     int theStandingHull = AvHMUGetHull(false, pmove->iuser3);
                     int theCrouchingHull = AvHMUGetHull(true, pmove->iuser3);
-                    
+
                     // Finish ducking immediately if duck time is over or not on ground
                     if ( (pmove->flDuckTime == 0) || (pmove->onground == -1 ) )
                     {
@@ -4270,14 +4270,14 @@ void PM_Duck( void )
 
                         pmove->flags |= FL_DUCKING;
                         pmove->bInDuck = false;
-                        
+
                         // HACKHACK - Fudge for collision bug - no time to fix this properly
                         if ( pmove->onground != -1 )
                         {
                             pmove->origin[2] -= ( pmove->player_mins[theCrouchingHull][2] - pmove->player_mins[theStandingHull][2] );
                             // See if we are stuck?
                             PM_FixPlayerCrouchStuck( STUCK_MOVEUP );
-                            
+
                             // Recatagorize position since ducking can change origin
                             PM_CategorizePosition();
                         }
@@ -4291,7 +4291,7 @@ void PM_Duck( void )
                         // Calc parametric time
                         float duckSplineFraction = PM_SplineFraction( duckFraction, 1);
                         pmove->view_ofs[2] = theStandingZ + duckSplineFraction * (theDuckingZ - theStandingZ);
-                        
+
                     }
                 }
             }
@@ -4377,14 +4377,14 @@ bool NS_PositionFreeForPlayer(vec3_t& inPosition)
 */
 
 // Fade blink
-bool PM_BlinkMove (void) 
+bool PM_BlinkMove (void)
 {
 	if (pmove->fuser4 != 0.0f)
 		return false;
 
     float theScalar = 225;
 	float theEnergyCost = 0;
-	
+
 	AvHMUGetEnergyCost(AVH_WEAPON_BLINK, theEnergyCost);
 
 	if(AvHMUHasEnoughAlienEnergy(pmove->fuser3, theEnergyCost))
@@ -4405,10 +4405,10 @@ bool PM_BlinkMove (void)
 
     vec3_t theAbilityVelocity;
     VectorScale(forward, theScalar, theAbilityVelocity);
-    
+
     vec3_t theFinalVelocity;
     VectorAdd(pmove->velocity, theAbilityVelocity, theFinalVelocity);
-    
+
     VectorCopy(theFinalVelocity, pmove->velocity);
 
 	return true;
@@ -4442,7 +4442,7 @@ bool PM_BlinkMove (void)
 		// Copy movement amounts
 		fmove = pmove->cmd.forwardmove;
 		smove = pmove->cmd.sidemove;
-		
+
 		VectorNormalize(pmove->forward);
 		VectorScale(pmove->forward, 800, wishvel);
 
@@ -4454,7 +4454,7 @@ bool PM_BlinkMove (void)
 		if (trace.fraction == 1)
 		{
 			VectorCopy(trace.endpos, pmove->origin);
-		} 
+		}
 		else
 		{
 			// if we can't move, adjust velocity to slite along the plane we collided with
@@ -4493,7 +4493,7 @@ bool PM_LeapMove()
 
     float theScalar = 500;
 	float theEnergyCost = 0;
-	
+
 	AvHMUGetEnergyCost(AVH_ABILITY_LEAP, theEnergyCost);
 
 	if(AvHMUHasEnoughAlienEnergy(pmove->fuser3, theEnergyCost))
@@ -4518,10 +4518,10 @@ bool PM_LeapMove()
 
     vec3_t theAbilityVelocity;
     VectorScale(forward, theScalar, theAbilityVelocity);
-    
+
     vec3_t theFinalVelocity;
     VectorAdd(pmove->velocity, theAbilityVelocity, theFinalVelocity);
-    
+
     VectorCopy(theFinalVelocity, pmove->velocity);
 
 	return true;
@@ -4542,14 +4542,14 @@ bool PM_FlapMove()
 //		pmove->fuser4 = 0.1f;
 
 		AvHMUDeductAlienEnergy(pmove->fuser3, kAlienEnergyFlap);
-        
+
         // Added by mmcguire.
         // Move the lerk in the direction has is facing.
         vec3_t theFlapVelocity;
-        
+
         float theThrust;
         float theLift;
-        
+
         if (pmove->cmd.forwardmove != 0)
         {
 
@@ -4558,7 +4558,7 @@ bool PM_FlapMove()
 
                 theThrust = pmove->cmd.forwardmove * kWingThrustForwardScalar;
                 theLift = 200 * (pmove->forward[2] + 0.5) / 1.5;
-            
+
                 if (theLift < 0)
                 {
                     theLift = 0;
@@ -4611,17 +4611,17 @@ bool PM_FlapMove()
                 theSoundToPlay = kWingFlapSound3;
                 break;
             }
-            
+
             // If alien has silencio upgrade, mute footstep volume
             int theSilenceUpgradeLevel = AvHGetAlienUpgradeLevel(pmove->iuser4, MASK_UPGRADE_6);
             const float theBaseVolume = .5f;
             float theVolumeScalar = theBaseVolume - (theSilenceUpgradeLevel/(float)3)*theBaseVolume;
             theVolumeScalar = min(max(theVolumeScalar, 0.0f), 1.0f);
-            
+
             PM_NSPlaySound(CHAN_BODY, theSoundToPlay, theVolumeScalar, ATTN_NORM, 0, PITCH_NORM);
 
 #ifdef AVH_SERVER
-            AISND_RegisterNewSound(pmove->player_index + 1, pmove->origin, AI_SOUND_FOOTSTEP, theVolumeScalar);
+            AISND_RegisterNewSound(pmove->player_index + 1, pmove->origin, EAISoundType::AI_SOUND_FOOTSTEP, theVolumeScalar);
 #endif
         }
 
@@ -4690,12 +4690,12 @@ bool PM_ChargeMove()
 		VectorScale(forward, -1 * DotProduct(forward, pmove->velocity), forward);
 		VectorAdd(pmove->velocity, forward, sideways);
 		//VectorScale(sideways, 1.5f, sideways);
-		
+
 		VectorCopy(pmove->forward, forward);
 		forward[2] = 0.0f;
 		VectorNormalize(forward);
 		VectorScale(forward, length, forward);
-		
+
 		VectorAdd(forward, sideways, pmove->velocity);
 		//VectorCopy(forward, pmove->velocity);
 
@@ -4775,7 +4775,7 @@ void PM_AlienAbilities()
 		pmove->fuser4 += theTimePassed;
 		pmove->fuser4 = min(pmove->fuser4, 0.0f);
 	}
-	
+
 	return;
 
     //#endif
@@ -4793,7 +4793,7 @@ void PM_AlienAbilities()
 		else
 		{
 			AvHMUGetEnergyCost(AVH_ABILITY_LEAP, theEnergyCost);
-			// : 0000972 
+			// : 0000972
 			// Add highjacked "watertime" to release leaping skulk from wall
 			// pmove->waterjumptime = 75;
 			// :
@@ -4817,15 +4817,15 @@ void PM_AlienAbilities()
         vec3_t theAbilityVelocity;
         //VectorScale(pmove->forward, theScalar, theAbilityVelocity);
         VectorScale(forward, theScalar, theAbilityVelocity);
-        
+
         vec3_t theFinalVelocity;
         VectorAdd(pmove->velocity, theAbilityVelocity, theFinalVelocity);
-        
+
         VectorCopy(theFinalVelocity, pmove->velocity);
 
             //pmove->oldbuttons |= IN_JUMP; // don't jump again until released
-            
-            
+
+
             //      if(pmove->runfuncs)
             //      {
             //          PM_NSPlaySound(CHAN_WEAPON, kLeapSound, 1.0f, ATTN_NORM, 0, 94 + pmove->RandomLong(0, 0xf));
@@ -4885,7 +4885,7 @@ void PM_LadderMove( physent_t *pLadder )
             //pmove->movetype = MOVETYPE_WALK;
             //VectorScale( trace.plane.normal, 270, pmove->velocity );
         //}
-        //else 
+        //else
 		if ( pmove->cmd.buttons & IN_JUMP )
         {
             pmove->movetype = MOVETYPE_WALK;
@@ -4905,7 +4905,7 @@ void PM_LadderMove( physent_t *pLadder )
                 VectorScale( vpn, forward, velocity );
                 VectorMA( velocity, right, v_right, velocity );
 
-                
+
                 // Perpendicular in the ladder plane
     //                  Vector perp = CrossProduct( Vector(0,0,1), trace.vecPlaneNormal );
     //                  perp = perp.Normalize();
@@ -4956,10 +4956,10 @@ physent_t *PM_Ladder( void )
     for ( i = 0; i < pmove->nummoveent; i++ )
     {
         pe = &pmove->moveents[i];
-        
+
         if ( pe->model && (modtype_t)pmove->PM_GetModelType( pe->model ) == mod_brush && pe->skin == CONTENTS_LADDER )
         {
-    
+
             hull = (hull_t *)pmove->PM_HullForBsp( pe, test );
             num = hull->firstclipnode;
 
@@ -4969,14 +4969,14 @@ physent_t *PM_Ladder( void )
                 hull->clip_mins[2] = -54.0f;
                 hull->clip_maxs[2] = 54.0f;
             }
-    
+
             // Offset the test point appropriately for this hull.
             VectorSubtract ( pmove->origin, test, test);
-    
+
             // Test the player's hull for intersection with this model
             if ( pmove->PM_HullPointContents (hull, num, test) == CONTENTS_EMPTY)
                 continue;
-            
+
             return pe;
         }
     }
@@ -4988,11 +4988,11 @@ physent_t *PM_Ladder( void )
 
 void PM_WaterJump (void)
 {
-	// : 0000972 
+	// : 0000972
 	if (pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1)
 		return;
 	// :
-	
+
 	if ( pmove->waterjumptime > 10000 )
     {
         pmove->waterjumptime = 10000;
@@ -5045,11 +5045,11 @@ pmtrace_t PM_PushEntity (vec3_t push)
 {
     pmtrace_t   trace;
     vec3_t  end;
-        
+
     VectorAdd (pmove->origin, push, end);
 
     trace = NS_PlayerTrace (pmove, pmove->origin, end, PM_NORMAL, -1 );
-    
+
     VectorCopy (trace.endpos, pmove->origin);
 
     // So we can run impact function afterwards.
@@ -5060,7 +5060,7 @@ pmtrace_t PM_PushEntity (vec3_t push)
     }
 
     return trace;
-}   
+}
 
 /*
 ============
@@ -5100,7 +5100,7 @@ void PM_Physics_Toss()
     // Base velocity is not properly accounted for since this entity will move again after the bounce without
     // taking it into account
     VectorAdd (pmove->velocity, pmove->basevelocity, pmove->velocity);
-    
+
     PM_CheckVelocity();
     VectorScale (pmove->velocity, pmove->frametime, move);
     VectorSubtract (pmove->velocity, pmove->basevelocity, pmove->velocity);
@@ -5110,13 +5110,13 @@ void PM_Physics_Toss()
     PM_CheckVelocity();
 
     if (trace.allsolid)
-    {   
+    {
         // entity is trapped in another solid
         pmove->onground = trace.ent;
         VectorCopy (vec3_origin, pmove->velocity);
         return;
     }
-    
+
     if (trace.fraction == 1)
     {
         PM_CheckWater();
@@ -5135,7 +5135,7 @@ void PM_Physics_Toss()
 
     // stop if on ground
     if (trace.plane.normal[2] > 0.7)
-    {       
+    {
         float vel;
         vec3_t base;
 
@@ -5163,7 +5163,7 @@ void PM_Physics_Toss()
         }
         VectorSubtract( pmove->velocity, base, pmove->velocity )
     }
-    
+
 // check for in water
     PM_CheckWater();
 }
@@ -5184,8 +5184,8 @@ void PM_NoClip()
     // Copy movement amounts
     fmove = pmove->cmd.forwardmove;
     smove = pmove->cmd.sidemove;
-    
-    VectorNormalize ( pmove->forward ); 
+
+    VectorNormalize ( pmove->forward );
     VectorNormalize ( pmove->right );
 
     for (i=0 ; i<3 ; i++)       // Determine x and y parts of velocity
@@ -5193,13 +5193,13 @@ void PM_NoClip()
         wishvel[i] = pmove->forward[i]*fmove + pmove->right[i]*smove;
     }
     wishvel[2] += pmove->cmd.upmove;
-    
+
     VectorMA (pmove->origin, pmove->frametime, wishvel, pmove->origin);
-    
+
     // Zero out the velocity so that we don't accumulate a huge downward velocity from
     //  gravity, etc.
     VectorClear( pmove->velocity );
-    
+
 }
 
 void PM_PlaybackEvent(int inEventID)
@@ -5209,16 +5209,16 @@ void PM_PlaybackEvent(int inEventID)
     //#if defined( AVH_SERVER )
     theFlags = FEV_NOTHOST;
     //#endif
-    
+
     vec3_t theZeroVector;
     theZeroVector[0] = theZeroVector[1] = theZeroVector[2] = 0.0f;
-    
+
     // Lame way to get the local player index that playback event full needs...there must be another way?
     //vec3_t theTraceEnd;
     //VectorMA(pmove->origin, 100, pmove->forward, theTraceEnd);
     //pmtrace_t theTrace = pmove->PM_PlayerTrace(pmove->origin, theTraceEnd, PM_TRACELINE_PHYSENTSONLY, -1);
     //theTrace = pmove->PM_TraceLine(pmove->origin, theTraceEnd, PM_TRACELINE_PHYSENTSONLY, 2,  -1);
-    
+
     int thisPredictedPlayer = pmove->player_index;/*theTrace.ent;*/
     pmove->PM_PlaybackEventFull(theFlags, thisPredictedPlayer, inEventID, 0, (float *)theZeroVector, (float *)theZeroVector, 0.0, 0.0, /*theWeaponIndex*/ 0, 0, 0, 0 );
 }
@@ -5267,19 +5267,19 @@ void PM_PreventMegaCrazyLerkPancakage() {
 	VectorNormalize(normalizedVelocity);
 	float dp=DotProduct(normalizedVelocity, vertical);
 
-	if ( dp > 0 ) 
+	if ( dp > 0 )
 		dp /= 10.0f;
 	else
 		dp /= 5.0f;
 
-//	if ( DotProduct(up, pmove->velocity) < 0.0f ) 
+//	if ( DotProduct(up, pmove->velocity) < 0.0f )
 //		dp *= -1.0f;
 
 	maxbasespeed *= 1.0f + dp;
 
 	if ( spd <= maxbasespeed )
 		return;
-	
+
 	// Returns the modifier for the velocity
 	fraction = maxbasespeed/spd;
 
@@ -5314,7 +5314,7 @@ void PM_PreventMegaBunnyJumping(bool inAir)
     float fraction;
     // Speed at which bunny jumping is limited
     float maxscaledspeed;
-    
+
     maxscaledspeed = BUNNYJUMP_MAX_SPEED_FACTOR * pmove->maxspeed;
     if(inAir)
     {
@@ -5326,7 +5326,7 @@ void PM_PreventMegaBunnyJumping(bool inAir)
         // Allow flyers, leapers, and JPers to go faster in the air, but still capped
         maxscaledspeed = BALANCE_VAR(kAirspeedMultiplier)*pmove->maxspeed;
     }
-    
+
     // Don't divide by zero
     if ( maxscaledspeed <= 0.0f )
         return;
@@ -5340,13 +5340,13 @@ void PM_PreventMegaBunnyJumping(bool inAir)
     }
 
     spd = Length( theVelVector );
-    
+
     if ( spd <= maxscaledspeed )
         return;
-    
+
     // Returns the modifier for the velocity
     fraction = maxscaledspeed/spd;
-    
+
     float theCurrentSpeed = Length(pmove->velocity);
 
 
@@ -5375,25 +5375,25 @@ void PM_Jump (void)
 	qboolean autojump = false;
 	qboolean queuedjump = false;
     qboolean cansuperjump = false;
-    
+
     if (pmove->dead || GetHasUpgrade(pmove->iuser4, MASK_ENSNARED))
     {
 		//pmove->oldbuttons |= IN_JUMP;  // don't jump again until released
 		pmove->flags |= FL_JUMPHELD;
         return;
     }
-    
+
     tfc = atoi( pmove->PM_Info_ValueForKey( pmove->physinfo, "tfc" ) ) == 1 ? true : false;
-    
+
     // Spy that's feigning death cannot jump
-    if ( tfc && 
+    if ( tfc &&
         ( pmove->deadflag == ( DEAD_DISCARDBODY + 1 ) ) )
     {
         return;
     }
-    
+
     // See if we are waterjumping.  If so, decrement count and return.
-	// : 0000972 
+	// : 0000972
 	if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 	// :
 //    if ( pmove->waterjumptime )
@@ -5405,30 +5405,30 @@ void PM_Jump (void)
         }
         return;
     }
-    
+
     // If we are in the water most of the way...
     if (pmove->waterlevel >= 2)
     {   // swimming, not jumping
         pmove->onground = -1;
-        
+
         if (pmove->watertype == CONTENTS_WATER)    // We move up a certain amount
             pmove->velocity[2] = 100;
         else if (pmove->watertype == CONTENTS_SLIME)
             pmove->velocity[2] = 80;
         else  // LAVA
             pmove->velocity[2] = 50;
-        
+
         // play swiming sound
         if ( pmove->flSwimTime <= 0 )
         {
             // If alien has silencio upgrade, mute footstep volume
             int theSilenceUpgradeLevel = AvHGetAlienUpgradeLevel(pmove->iuser4, MASK_UPGRADE_6);
             float theVolumeScalar = 1.0f - theSilenceUpgradeLevel/3.0f;
-            
+
             // Don't play sound again for 1 second
             pmove->flSwimTime = 1000;
             switch ( pmove->RandomLong( 0, 3 ) )
-            { 
+            {
             case 0:
                 PM_NSPlaySound( CHAN_BODY, "player/pl_wade1.wav", theVolumeScalar, ATTN_NORM, 0, PITCH_NORM );
                 break;
@@ -5443,12 +5443,12 @@ void PM_Jump (void)
                 break;
             }
         }
-        
+
         return;
     }
-    
+
     // For wall jumping, remove bit above and replace with this (from coding forums)
-    
+
 	// Lerk flight movement
 	PM_FlapMove();
 
@@ -5528,10 +5528,10 @@ void PM_Jump (void)
     {
         PM_PlayStepSound( PM_MapTextureTypeStepType( pmove->chtexturetype ), 1.0 );
     }
-    
+
     // See if user can super long jump?
     cansuperjump = atoi( pmove->PM_Info_ValueForKey( pmove->physinfo, "slj" ) ) == 1 ? true : false;
-    
+
     // Acclerate upward
     // If we are ducking...
     if ( ( pmove->bInDuck ) || ( pmove->flags & FL_DUCKING ) )
@@ -5544,12 +5544,12 @@ void PM_Jump (void)
             Length( pmove->velocity ) > 50 )
         {
             pmove->punchangle[0] = -5;
-            
+
             for (i =0; i < 2; i++)
             {
                 pmove->velocity[i] = pmove->forward[i] * PLAYER_LONGJUMP_SPEED * 1.6;
             }
-            
+
             pmove->velocity[2] = sqrt(2 * 800 * 56.0);
         }
         else
@@ -5561,10 +5561,10 @@ void PM_Jump (void)
     {
         pmove->velocity[2] = sqrt(2 * 800 * 45.0);
     }
-    
+
     // Decay it for simulation
     PM_FixupGravityVelocity();
-    
+
     // Flag that we jumped.
     //pmove->oldbuttons |= IN_JUMP;   // don't jump again until released
 	pmove->flags |= FL_JUMPHELD;
@@ -5600,7 +5600,7 @@ void PM_CheckWaterJump (void)
 
     // Must be moving
     curspeed = VectorNormalize( flatvelocity );
-    
+
     // see if near an edge
     flatforward[0] = pmove->forward[0];
     flatforward[1] = pmove->forward[1];
@@ -5615,7 +5615,7 @@ void PM_CheckWaterJump (void)
     vecStart[2] += WJ_HEIGHT;
 
     VectorMA ( vecStart, 24, flatforward, vecEnd );
-    
+
     // Trace, this trace should use the point sized collision hull
     savehull = pmove->usehull;
     pmove->usehull = 2;
@@ -5628,7 +5628,7 @@ void PM_CheckWaterJump (void)
         VectorMA( vecStart, 24, flatforward, vecEnd );
         VectorMA( vec3_origin, -50, tr.plane.normal, pmove->movedir );
 
-        tr = NS_PlayerTrace(pmove, vecStart, vecEnd, PM_NORMAL, -1 );       
+        tr = NS_PlayerTrace(pmove, vecStart, vecEnd, PM_NORMAL, -1 );
 
         if ( tr.fraction == 1.0 )
         {
@@ -5638,7 +5638,7 @@ void PM_CheckWaterJump (void)
             pmove->flags |= FL_WATERJUMP;
         }
     }
-    
+
     // Reset the collision hull
     pmove->usehull = savehull;
 }
@@ -5656,7 +5656,7 @@ void PM_CheckFalling( void )
                 if(pmove->iuser3 == AVH_USER3_MARINE_PLAYER)
                 {
                     VectorScale(pmove->velocity, .3f, pmove->velocity);
-                    
+
                     if(pmove->runfuncs)
                     {
                         //#ifdef AVH_CLIENT
@@ -5670,13 +5670,13 @@ void PM_CheckFalling( void )
             if(pmove->flFallVelocity >= PLAYER_FALL_PUNCH_THRESHHOLD)
             {
                 float fvol = 0.5;
-				char theFallPainSound[64];                
-                
+				char theFallPainSound[64];
+
                 int theSilenceUpgradeLevel = AvHGetAlienUpgradeLevel(pmove->iuser4, MASK_UPGRADE_6);
                 float theVolumeScalar = 1.0f - theSilenceUpgradeLevel/3.0f;
-                
+
                 float theFallPainVolume = 1.0f*theVolumeScalar;
-                
+
                 string theAlienExtension;
                 bool theIsAlien = NS_GetIsPlayerAlien(theAlienExtension);
 
@@ -5684,7 +5684,7 @@ void PM_CheckFalling( void )
                 {
 					sprintf(theFallPainSound, kFallPainSoundFormat, pmove->iuser3);
                 }
-				else 
+				else
 				{
 					if ( GetHasUpgrade(pmove->iuser4, MASK_UPGRADE_13) )
 					{
@@ -5695,13 +5695,13 @@ void PM_CheckFalling( void )
 						sprintf(theFallPainSound, kFallPainSoundFormat, 1);
 					}
 				}
-                
+
                 if ( pmove->waterlevel > 0 )
                 {
                 }
                 else if ( pmove->flFallVelocity > PLAYER_MAX_SAFE_FALL_SPEED )
                 {
-                    // NOTE:  In the original game dll , there were no breaks after these cases, causing the first one to 
+                    // NOTE:  In the original game dll , there were no breaks after these cases, causing the first one to
                     // cascade into the second
                     //switch ( RandomLong(0,1) )
                     //{
@@ -5711,7 +5711,7 @@ void PM_CheckFalling( void )
                     //case 1:
                     PM_NSPlaySound( CHAN_VOICE, theFallPainSound, theFallPainVolume, ATTN_NORM, 0, PITCH_NORM );
 #ifdef AVH_SERVER
-                    AISND_RegisterNewSound(pmove->player_index + 1, pmove->origin, AI_SOUND_LANDING, theFallPainVolume);
+                    AISND_RegisterNewSound(pmove->player_index + 1, pmove->origin, EAISoundType::AI_SOUND_LANDING, theFallPainVolume);
 #endif
                     //  break;
                     //}
@@ -5721,32 +5721,32 @@ void PM_CheckFalling( void )
                 {
                     qboolean tfc = false;
                     tfc = atoi( pmove->PM_Info_ValueForKey( pmove->physinfo, "tfc" ) ) == 1 ? true : false;
-                    
+
                     if ( tfc )
                     {
                         PM_NSPlaySound( CHAN_VOICE, theFallPainSound, theFallPainVolume, ATTN_NORM, 0, PITCH_NORM );
                     }
-                    
+
                     fvol = 0.85;
                 }
                 else if ( pmove->flFallVelocity < PLAYER_MIN_BOUNCE_SPEED )
                 {
                     fvol = 0;
                 }
-                
+
                 if ( fvol > 0.0 )
                 {
                     // Play landing step right away
                     pmove->flTimeStepSound = 0;
-                    
+
                     PM_UpdateStepSound();
-                    
+
                     // play step sound for current texture
                     PM_PlayStepSound( PM_MapTextureTypeStepType( pmove->chtexturetype ), fvol );
-                    
+
                     // Knock the screen around a little bit, temporary effect
                     pmove->punchangle[ 2 ] = pmove->flFallVelocity * 0.013; // punch z axis
-                    
+
                     if ( pmove->punchangle[ 0 ] > 8 )
                     {
                         pmove->punchangle[ 0 ] = 8;
@@ -5754,9 +5754,9 @@ void PM_CheckFalling( void )
                 }
             }
         }
-        
-        if ( pmove->onground != -1 ) 
-        {       
+
+        if ( pmove->onground != -1 )
+        {
             pmove->flFallVelocity = 0;
         }
     }
@@ -5807,17 +5807,17 @@ float PM_CalcRoll (vec3_t angles, vec3_t velocity, float rollangle, float rollsp
     float   side;
     float   value;
     vec3_t  forward, right, up;
-    
+
     AngleVectors (angles, forward, right, up);
-    
+
     side = DotProduct (velocity, right);
-    
+
     sign = side < 0 ? -1 : 1;
-    
+
     side = fabs(side);
-    
+
     value = rollangle;
-    
+
     if (side < rollspeed)
     {
         side = side * value / rollspeed;
@@ -5826,7 +5826,7 @@ float PM_CalcRoll (vec3_t angles, vec3_t velocity, float rollangle, float rollsp
     {
         side = value;
     }
-  
+
     return side * sign;
 }
 
@@ -5839,7 +5839,7 @@ PM_DropPunchAngle
 void PM_DropPunchAngle ( vec3_t punchangle )
 {
     float   len;
-    
+
     len = VectorNormalize ( punchangle );
     len -= (10.0 + len * 0.5) * pmove->frametime;
     len = max( len, 0.0 );
@@ -5881,7 +5881,7 @@ void PM_CheckParamters( void )
     bool theIsImmobilized = GetHasUpgrade(pmove->iuser4, MASK_PLAYER_STUNNED) || GetHasUpgrade(pmove->iuser4, MASK_ALIEN_EMBRYO);
 
     if ( pmove->flags & FL_FROZEN ||
-         pmove->flags & FL_ONTRAIN || 
+         pmove->flags & FL_ONTRAIN ||
          theIsImmobilized ||
          pmove->dead )
     {
@@ -5902,9 +5902,9 @@ void PM_CheckParamters( void )
     {
         if ( !pmove->dead)
         {
-            VectorCopy ( pmove->cmd.viewangles, v_angle );         
+            VectorCopy ( pmove->cmd.viewangles, v_angle );
             VectorAdd( v_angle, pmove->punchangle, v_angle );
-        
+
             // Set up view angles.
             pmove->angles[ROLL] =   PM_CalcRoll ( v_angle, pmove->velocity, pmove->movevars->rollangle, pmove->movevars->rollspeed )*4;
             pmove->angles[PITCH] =  v_angle[PITCH];
@@ -5919,7 +5919,7 @@ void PM_CheckParamters( void )
     {
         VectorCopy( pmove->oldangles, pmove->angles );
     }
-    
+
     // Set dead player view_offset
     if ( pmove->dead )
     {
@@ -5967,7 +5967,7 @@ void PM_ReduceTimers( void )
 qboolean PM_CanFlap()
 {
     qboolean theCanFlap = false;
-    
+
     if(pmove->iuser3 == AVH_USER3_ALIEN_PLAYER3)
     {
         if((pmove->onground == -1) && !(pmove->oldbuttons & IN_JUMP))
@@ -5984,7 +5984,7 @@ qboolean PM_CanFlap()
 
 qboolean PM_CanGlide()
 {
-    
+
     if(pmove->iuser3 == AVH_USER3_ALIEN_PLAYER3)
     {
         if((pmove->onground == -1))
@@ -5992,7 +5992,7 @@ qboolean PM_CanGlide()
             return true;
         }
     }
-            
+
     return false;
 
 }
@@ -6011,7 +6011,7 @@ qboolean PM_CanWalljump()
         front[2] = pmove->origin[2] + pmove->player_mins[pmove->usehull][2] + 1;
 
         trace = NS_PlayerTrace (pmove, pmove->origin, front, PM_WORLD_ONLY, -1 );
-        
+
         if ( (trace.fraction < 1 ))
         {
             theCanWalljump = true;
@@ -6038,7 +6038,7 @@ void PM_Overwatch()
 //
 //          //= &(pmove->physents[ thePhysIndex ]);
 //          //physent_t* theTarget = gEngfuncs.pEventAPI->EV_GetPhysent(thePhysIndex);
-//          
+//
 //          if(theTarget)
 //          {
 //              // TODO: Take gun offset into account with vecMid?
@@ -6046,38 +6046,38 @@ void PM_Overwatch()
 //              vec3_t vecMidEnemy;
 //              vec3_t vecDirToEnemy;
 //              vec3_t vec;
-//              
+//
 //              VectorAdd(pmove->origin, pmove->view_ofs, vecMid);
-//              
+//
 //              VectorCopy(theTarget->origin, vecMidEnemy);//theTarget->BodyTarget( vecMid );
-//              
+//
 //              // Right now just point at enemy
 //              //UTIL_MakeVectors()
 //              VectorSubtract(vecMidEnemy, vecMid, vecDirToEnemy);
 //              // = UTIL_VecToAngles(vecDirToEnemy);
 //              VectorAngles(vecDirToEnemy, vec);
-//              
+//
 //              //vec.x = -vec.x;
 //              vec[0] = -vec[0];
-//              
+//
 //              //  if (vec.y > 360)
 //              //      vec.y -= 360;
-//              //  
+//              //
 //              //  if (vec.y < 0)
 //              //      vec.y += 360;
-//              
+//
 //
 //              // Set new view angles, set iHasNewViewAngles so it isn't reset on us
 //              VectorCopy(vec, pmove->angles);
-//              
+//
 //              #ifdef AVH_CLIENT
 //              VectorCopy(pmove->angles, gTopDownViewAngles);
 //              iHasNewViewAngles = true;
 //              #endif
-//              
+//
 //              AngleVectors (pmove->angles, pmove->forward, pmove->right, pmove->up);
 //              //VectorCopy(vec, this->pev->v_angle);
-//              
+//
 //              // Save target range
 //              #ifdef AVH_CLIENT
 //              gOverwatchTargetRange = Length(vecDirToEnemy);
@@ -6099,7 +6099,7 @@ bool PM_TopDown()
 
         pmove->forward[0] = pmove->forward[1] = 0;
         pmove->forward[2] = -1;
-        
+
         pmove->right[0] = 1;
         pmove->right[1] = pmove->right[2] = 0;
 
@@ -6109,7 +6109,7 @@ bool PM_TopDown()
         theInTopDownMode = true;
 
         const AvHMapExtents& theMapExtents = GetMapExtents();
-            
+
         float theMinX = theMapExtents.GetMinMapX();
         float theMinY = theMapExtents.GetMinMapY();
         float theMaxX = theMapExtents.GetMaxMapX();
@@ -6132,13 +6132,13 @@ bool PM_TopDown()
         AvHSHUGetFirstNonSolidPoint((float*)theStartPos, (float*)theEndPos, (float*)theNewStartPos);
 
         //theMaxZ = min(theMaxZ, theNewStartPos[2]);
-        
+
 		//#ifdef AVH_CLIENT /*
 		//extern DebugPointListType gSquareDebugLocations;
 		//DebugPoint theDebugPoint(theNewStartPos[0], theNewStartPos[1], theMaxZ - theNewStartPos[2]);
 		//gSquareDebugLocations.push_back(theDebugPoint);*/
 		//#endif
-        
+
         float       speed, drop, friction, control, newspeed;
         float       currentspeed, addspeed, accelspeed;
         int         i;
@@ -6149,7 +6149,7 @@ bool PM_TopDown()
         float       umove = 0.0f;
         vec3_t      wishdir;
         float       wishspeed;
-        
+
         // Don't scroll when COMMANDER_MOUSECOORD set, it's indicating a world position, not a move
         //if(pmove->cmd.impulse != COMMANDER_MOUSECOORD)
         //{
@@ -6171,12 +6171,12 @@ bool PM_TopDown()
             else
             {
                 drop = 0;
-                
+
                 friction = pmove->movevars->friction*5.0;   // extra friction
                 //friction = pmove->movevars->friction*.9f;
                 control = speed < pmove->movevars->stopspeed ? pmove->movevars->stopspeed : speed;
                 drop += control*friction*pmove->frametime;
-                
+
                 // scale the velocity
                 newspeed = speed - drop;
                 if (newspeed < 0)
@@ -6185,11 +6185,11 @@ bool PM_TopDown()
 
                 VectorScale (pmove->velocity, newspeed, pmove->velocity);
             }
-            
+
             // If player moved mouse wheel, move camera up and down if we didn't just move over a view entity
             qboolean theFoundEntity = false;
             //float theDesiredHeight = PM_GetDesiredTopDownCameraHeight(theFoundEntity);
-            
+
 //          gHeightLevel += (pmove->cmd.forwardmove/300.0f);
 //          float theDesiredHeight = theMaxViewHeight + gHeightLevel;
 //
@@ -6197,16 +6197,16 @@ bool PM_TopDown()
 //          // fix the bouncing from the drop/control/friction code above.  That's where the problem is.
 //          // You'll also have to add an initial upwards velocity in AvHPlayer::StartTopDown()
 //          pmove->origin[2] = theDesiredHeight;
-//          
+//
 //          const float kSwoopingTolerance = 1.0f;
 //          float theDiff = theDesiredHeight - pmove->origin[2];
 //          float theFabsDiff = fabs(theDiff);
-//          
+//
 //          if(theFabsDiff > kSwoopingTolerance)
 //          {
 //              // When we get near, don't use sudden moves, move slowly
 //              float theAmount = min(theFabsDiff*10, 1000);
-//              
+//
 //              //fmove = theDiff;//pmove->cmd.forwardmove;
 //              if(theDiff > 0)
 //                  fmove = -theAmount;
@@ -6217,30 +6217,30 @@ bool PM_TopDown()
 //          {
 //              fmove = 0.0f;
 //          }
-            
+
             // accelerate
             fmove = pmove->cmd.forwardmove;
             smove = pmove->cmd.sidemove;
             umove = pmove->cmd.upmove;
-            
+
             float theMoveTotal = fabs(fmove) + fabs(smove) + fabs(umove);
             if(theMoveTotal > 5.0f)
             {
 //              VectorNormalize (pmove->forward);
 //              VectorNormalize (pmove->right);
 //              VectorNormalize (pmove->up);
-//              
+//
 //              for (i=0 ; i<3 ; i++)
 //              {
 //                  wishvel[i] = pmove->forward[i]*fmove + pmove->right[i]*smove + pmove->up[i]*umove;
 //              }
 //              //wishvel[2] += pmove->cmd.upmove;
-//              
+//
                 PM_GetWishVelocity(wishvel);
                 VectorCopy (wishvel, wishdir);
 
                 wishspeed = VectorNormalize(wishdir);
-                
+
                 //
                 // clamp to server defined max speed
                 //
@@ -6249,7 +6249,7 @@ bool PM_TopDown()
                     VectorScale (wishvel, pmove->movevars->maxspeed/wishspeed, wishvel);
                     wishspeed = pmove->movevars->maxspeed;
                 }
-                
+
                 currentspeed = DotProduct(pmove->velocity, wishdir);
                 addspeed = wishspeed - currentspeed;
                 if (addspeed > 0)
@@ -6257,10 +6257,10 @@ bool PM_TopDown()
                     accelspeed = pmove->movevars->accelerate*pmove->frametime*wishspeed;
                     if (accelspeed > addspeed)
                         accelspeed = addspeed;
-                    
+
                     for (i=0 ; i<3 ; i++)
-                        pmove->velocity[i] += accelspeed*wishdir[i];    
-                    
+                        pmove->velocity[i] += accelspeed*wishdir[i];
+
                     // move
                     VectorMA (pmove->origin, pmove->frametime, pmove->velocity, pmove->origin);
                 }
@@ -6272,26 +6272,26 @@ bool PM_TopDown()
                 pmove->velocity[2] = 0.0f;
             }
         //}
-    
+
         // Set view down
         theAngles[0] = kTopDownYaw;
         theAngles[1] = kTopDownPitch;
         theAngles[2] = kTopDownRoll;
-        
+
         // Set angles facing down so observer knows which way to point
-        VectorCopy(theAngles,pmove->angles);	
+        VectorCopy(theAngles,pmove->angles);
 
         // Set origin
         //pmove->origin[2] = 1080;
         //pmove->origin[2] = PM_GetDesiredTopDownCameraHeight();
-        
+
         #ifdef AVH_CLIENT
         if ( pmove->runfuncs )
         {
             VectorCopy(theAngles, gTopDownViewAngles);
             //iHasNewViewAngles = true;
 
-            // Set view origin to our real origin but at our highest map extents.  This is needed to the commander's origin is actually inside the world so 
+            // Set view origin to our real origin but at our highest map extents.  This is needed to the commander's origin is actually inside the world so
             // he receives nearby events, but so he looks like he's outside the world. Changing this?  Make sure AvHPlayer::GetVisualOrigin() is updated also.
             VectorCopy(pmove->origin, gTopDownViewOrigin);
             gTopDownViewOrigin[2] = theMaxCommanderHeight;
@@ -6299,9 +6299,9 @@ bool PM_TopDown()
             //iHasNewViewOrigin = true;
         }
         #endif
-    
+
         AngleVectors (pmove->angles, pmove->forward, pmove->right, pmove->up);
-        
+
         // Are we zooming to an area?
         if(pmove->cmd.impulse == COMMANDER_MOVETO)
         {
@@ -6309,7 +6309,7 @@ bool PM_TopDown()
             pmove->origin[1] = pmove->cmd.sidemove*kWorldPosNetworkConstant;
             VectorCopy(vec3_origin, pmove->velocity)
         }
-        
+
         // Clip position to map extents
         float theCurrentX = pmove->origin[0];
         float theCurrentY = pmove->origin[1];
@@ -6327,26 +6327,26 @@ bool PM_TopDown()
             // Changing this?  Make sure AvHPlayer::GetVisualOrigin() is updated also.
             //gTopDownHeight = theMaxCommanderHeight;
             #endif
-            
+
             pmove->view_ofs[2] = theMaxCommanderHeight - pmove->origin[2];
 
             //pmove->Con_Printf("PMTopDown(): up: %f, side: %f, forward: %f, impulse: %d, velocity: %f\n", pmove->cmd.upmove, pmove->cmd.sidemove, pmove->cmd.forwardmove, pmove->cmd.impulse, Length(pmove->velocity));
         }
     }
-    
+
     // Reset view
     //  else if(pmove->iuser3 == AVH_USER3_VIEW_SPECIAL_LEAVE_COMMANDER)
     //  {
     //      vec3_t      theAngles;
-    //      
+    //
     //      // Set view down
     //      theAngles[0] = 0;
     //      theAngles[1] = 0;
     //      theAngles[2] = 0;
-    //      
+    //
     //      // Set angles facing down so observer knows which way to point
     //      VectorCopy(theAngles, pmove->angles);
-    //      
+    //
     //      #ifdef AVH_CLIENT
     //      if ( pmove->runfuncs )
     //      {
@@ -6354,7 +6354,7 @@ bool PM_TopDown()
     //          iHasNewViewAngles = true;
     //      }
     //      #endif
-    //      
+    //
     //      AngleVectors (pmove->angles, pmove->forward, pmove->right, pmove->up);
     //
     //      #ifdef AVH_CLIENT
@@ -6381,7 +6381,7 @@ void PM_Jetpack()
     gIsJetpacking[pmove->player_index] = false;
 
 	bool fastJp = atoi(pmove->PM_Info_ValueForKey(pmove->physinfo, "jp2"));
-    
+
     if(!pmove->dead && theHasJetpackUpgrade && !theIsDevoured)
     {
         bool theJumpHeldDown = (pmove->cmd.buttons & IN_JUMP);
@@ -6392,10 +6392,10 @@ void PM_Jetpack()
         if(theJumpHeldDown && theHasEnoughEnergy && !GetHasUpgrade(pmove->iuser4, MASK_ENSNARED) && !GetHasUpgrade(pmove->iuser4, MASK_PLAYER_STUNNED) && !GetHasUpgrade(pmove->iuser4, MASK_DIGESTING))
         {
             gIsJetpacking[pmove->player_index] = true;
-            
+
             // Apply upwards force to player
             //pmove->velocity[2] += kJetpackForce;
-            
+
             vec3_t theWishVelocity;
             PM_GetWishVelocity(theWishVelocity);
 
@@ -6414,7 +6414,7 @@ void PM_Jetpack()
             }
 
             float theWeightScalar = kBaseScalar + (1.0f - kBaseScalar)*((pmove->clientmaxspeed - theMinMarineSpeed)/(theMaxMarineSpeed - theMinMarineSpeed));
-            
+
 			// Old lateral jetpack code - acceleration scales with framerate
 			//pmove->velocity[0] += (theWishVelocity[0]/pmove->clientmaxspeed)*kJetpackLateralScalar;
 			//pmove->velocity[1] += (theWishVelocity[1]/pmove->clientmaxspeed)*kJetpackLateralScalar;
@@ -6470,23 +6470,23 @@ void PM_PlayerMove ( qboolean server )
     physent_t *pLadder = NULL;
 
     // Are we running server code?
-    pmove->server = server;                
+    pmove->server = server;
 
     if (pmove->cmd.buttons & IN_JUMP)
     {
         int a =0;
     }
-    
+
     int theMaxSpeed = 0;
 
     // Adjust speeds etc.
     PM_CheckParamters();
 
     // Assume we don't touch anything
-    pmove->numtouch = 0;                    
+    pmove->numtouch = 0;
 
     // # of msec to apply movement
-    pmove->frametime = pmove->cmd.msec * 0.001;    
+    pmove->frametime = pmove->cmd.msec * 0.001;
 
 //  if(pmove->runfuncs)
 //  {
@@ -6512,7 +6512,7 @@ void PM_PlayerMove ( qboolean server )
 //          return;
 //      }
 //  }
-    
+
     bool theIsDucking = AvHMUGetCanDuck(pmove->iuser3) && (pmove->flags & FL_DUCKING);
     pmove->usehull = AvHMUGetHull(theIsDucking, pmove->iuser3);
 
@@ -6554,7 +6554,7 @@ void PM_PlayerMove ( qboolean server )
         PM_Physics_Toss();
         return;
     }
-    
+
     // Always try and unstick us unless we are in NOCLIP mode
     if ( pmove->movetype != MOVETYPE_NOCLIP && pmove->movetype != MOVETYPE_NONE )
     {
@@ -6604,7 +6604,7 @@ void PM_PlayerMove ( qboolean server )
 	}
 
     //pmove->Con_DPrintf("g_onladder: %d\n", g_onladder);
-    
+
     PM_UpdateStepSound();
 
     PM_Duck();
@@ -6659,7 +6659,7 @@ void PM_PlayerMove ( qboolean server )
         break;
 
     case MOVETYPE_FLY:
-    
+
         PM_CheckWater();
 
         // Was jump button pressed?
@@ -6676,7 +6676,7 @@ void PM_PlayerMove ( qboolean server )
         {
             pmove->oldbuttons &= ~IN_JUMP;
         }
-        
+
         // Perform the move accounting for any base velocity.
         VectorAdd (pmove->velocity, pmove->basevelocity, pmove->velocity);
         PM_FlyMove ();
@@ -6690,7 +6690,7 @@ void PM_PlayerMove ( qboolean server )
         }
 
         // If we are leaping out of the water, just update the counters.
-		// : 0000972 
+		// : 0000972
 		if (pmove->waterjumptime && !(pmove->waterlevel == 0 && pmove->iuser3 == AVH_USER3_ALIEN_PLAYER1))
 		// :
 //        if ( pmove->waterjumptime )
@@ -6705,7 +6705,7 @@ void PM_PlayerMove ( qboolean server )
 
         // If we are swimming in the water, see if we are nudging against a place we can jump up out
         //  of, and, if so, start out jump.  Otherwise, if we are not moving up, then reset jump timer to 0
-        if ( pmove->waterlevel >= 2 ) 
+        if ( pmove->waterlevel >= 2 )
         {
             if ( pmove->waterlevel == 2 )
             {
@@ -6730,7 +6730,7 @@ void PM_PlayerMove ( qboolean server )
 
             // Perform regular water movement
             PM_WaterMove();
-            
+
             VectorSubtract (pmove->velocity, pmove->basevelocity, pmove->velocity);
 
             // Get a final position
@@ -6757,7 +6757,7 @@ void PM_PlayerMove ( qboolean server )
 
 			bool isGlidingLerk = (pmove->iuser3 == AVH_USER3_ALIEN_PLAYER3 && pmove->cmd.buttons & IN_JUMP && pmove->oldbuttons & IN_JUMP);
 
-            // Fricion is handled before we add in any base velocity. That way, if we are on a conveyor, 
+            // Fricion is handled before we add in any base velocity. That way, if we are on a conveyor,
             //  we don't slow when standing still, relative to the conveyor.
             if ((pmove->onground != -1 && gIsJetpacking[pmove->player_index] == 0 && !isGlidingLerk) || GetHasUpgrade(pmove->iuser4, MASK_WALLSTICKING))
             {
@@ -6778,7 +6778,7 @@ void PM_PlayerMove ( qboolean server )
             {
                 PM_AirMove();  // Take into account movement when in air.
             }
-            
+
             // Set final flags.
             PM_CategorizePosition();
 
@@ -6789,7 +6789,7 @@ void PM_PlayerMove ( qboolean server )
             // Base velocity is set if you are on a moving object, like
             //  a conveyor (or maybe another monster?)
             VectorSubtract (pmove->velocity, pmove->basevelocity, pmove->velocity );
-                
+
             // Make sure velocity is valid.
             PM_CheckVelocity();
 
@@ -6809,7 +6809,7 @@ void PM_PlayerMove ( qboolean server )
             //  a landing sound.
             PM_CheckFalling();
         }
-            
+
 
         // Did we enter or leave the water?
         PM_PlayWaterSounds();
@@ -6911,7 +6911,7 @@ void PM_CreateStuckTable( void )
     for (i = 0 ; i < 3; i++)
     {
         z = zi[i];
-        
+
         for (x = -2.0f ; x <= 2.0f ; x += 2.0f)
         {
             for (y = -2.0f ; y <= 2.0f ; y += 2.0)
@@ -6929,7 +6929,7 @@ void PM_CreateStuckTable( void )
 
 
 /*
-This modume implements the shared player physics code between any particular game and 
+This modume implements the shared player physics code between any particular game and
 the engine.  The same PM_Move routine is built into the game .dll and the client .dll and is
 invoked by each side as appropriate.  There should be no distinction, internally, between server
 and client.  This will ensure that prediction behaves appropriately.
@@ -6961,7 +6961,7 @@ void PM_Move ( struct playermove_s *ppmove, int server )
     }
 
     //int theRandomNumber = pmove->RandomLong(0, 100);
-    //  
+    //
     //#ifdef AVH_CLIENT
     //if(pmove->runfuncs)
     //{
@@ -6978,7 +6978,7 @@ void PM_Move ( struct playermove_s *ppmove, int server )
 
     ///////////////////////////////
     // Begin Max's Code
-    ///////////////////////////////     
+    ///////////////////////////////
 
     // If the current orientation is different than the desired orientation,
     // interpolate between them.
@@ -6990,7 +6990,7 @@ void PM_Move ( struct playermove_s *ppmove, int server )
 
     NS_FixWallstickingAngles(pmove->vuser1);
     NS_FixWallstickingAngles(pmove->vuser2);
-    
+
     VectorCopy(pmove->vuser1, currentAngles);
     VectorCopy(pmove->vuser2, targetAngles);
 
@@ -7000,10 +7000,10 @@ void PM_Move ( struct playermove_s *ppmove, int server )
 
     NS_FixWallstickingAngles(gPlayerAngles);
     NS_FixWallstickingAngles(gTargetPlayerAngles);
-    
+
     VectorCopy(gPlayerAngles, currentAngles);
     VectorCopy(gTargetPlayerAngles, targetAngles);
-    
+
     #endif
 
     if (VectorCompare(currentAngles, targetAngles) == 0)
@@ -7011,7 +7011,7 @@ void PM_Move ( struct playermove_s *ppmove, int server )
 
         Quat src = Quat(currentAngles).Unit();
         Quat dst = Quat(targetAngles).Unit();
-    
+
         Quat rot = (dst * src.Conjugate()).Unit();
 
         // Compute the axis and angle we need to rotate about to go from src
@@ -7019,7 +7019,7 @@ void PM_Move ( struct playermove_s *ppmove, int server )
 
         float angle = acosf(rot.w) * 2;
         float sinAngle = sqrtf(1.0f - rot.w * rot.w);
-        
+
         if (fabs(sinAngle) < 0.0005f)
         {
             sinAngle = 1;
@@ -7059,7 +7059,7 @@ void PM_Move ( struct playermove_s *ppmove, int server )
             vec3_t xAxis;
             vec3_t yAxis;
             vec3_t zAxis;
-            
+
             final.GetVectors(xAxis, yAxis, zAxis);
 
             VectorsToAngles(yAxis, xAxis, zAxis, currentAngles);
@@ -7071,21 +7071,21 @@ void PM_Move ( struct playermove_s *ppmove, int server )
     #ifdef AVH_SERVER
     VectorCopy(currentAngles, pmove->vuser1);
     #endif
-    
+
     #ifdef AVH_CLIENT
     VectorCopy(currentAngles, gPlayerAngles);
     #endif
 
     ///////////////////////////////
     // End Max's Code
-    /////////////////////////////// 
+    ///////////////////////////////
 
 }
 
 //void PM_GetEntityList(PhysEntListType& outList)
 //{
 //  physent_t* theTarget = NULL;
-//  
+//
 //  for (i = 0; i < MAX_PHYSENTS; i++)
 //  {
 //      theTarget = pmove->physents[i];
@@ -7116,13 +7116,13 @@ int PM_GetPhysEntInfo( int ent )
 void PM_Init( struct playermove_s *ppmove )
 {
     assert( !pm_shared_initialized );
-    
+
     pmove = ppmove;
-    
+
     PM_CreateStuckTable();
     PM_InitTextureTypes();
     PM_InitBoxHull();
-    
+
     pm_shared_initialized = 1;
 }
 
@@ -7142,10 +7142,10 @@ bool PM_ViewTraceEntity(float inOriginX, float inOriginY, float inOriginZ, float
     theTraceStart[0] = inOriginX;
     theTraceStart[1]= inOriginY;
     theTraceStart[2] = inOriginZ;
-    
+
     pmtrace_t* theTrace = NULL;
     bool theDone = false;
-    
+
     do
     {
         theTrace = pmove->PM_TraceLine(theTraceStart, theTraceEnd, PM_TRACELINE_ANYVISIBLE, 2,  -1);
@@ -7210,12 +7210,12 @@ bool PM_ViewTracePlayer(float inOriginX, float inOriginY, float inOriginZ, float
     theTraceEnd[0] = inEndX;
     theTraceEnd[1] = inEndY;
     theTraceEnd[2] = inEndZ;
-    
+
     vec3_t theTraceStart;
     theTraceStart[0] = inOriginX;
     theTraceStart[1]= inOriginY;
     theTraceStart[2] = inOriginZ;
-    
+
     #ifdef AVH_CLIENT/*
     DebugPoint thePoint;
     thePoint.x = theTraceStart[0];
@@ -7227,11 +7227,11 @@ bool PM_ViewTracePlayer(float inOriginX, float inOriginY, float inOriginZ, float
     thePoint.y = theTraceEnd[1];
     thePoint.z = theTraceEnd[2];
     //gSquareDebugLocations.push_back(thePoint);*/
-    #endif  
-    
+    #endif
+
 //  pmtrace_t* theTrace = NULL;
 //  bool theDone = false;
-    
+
 //  do
 //  {
         pmtrace_t theTraceStruct;
@@ -7242,7 +7242,7 @@ bool PM_ViewTracePlayer(float inOriginX, float inOriginY, float inOriginZ, float
 //      //pmtrace_t     (*PM_PlayerTrace) (vec3_t start, vec3_t end, int traceFlags, int ignore_pe );
 //      //theTrace = pmove->PM_TraceLine(theTraceStart, theTraceEnd, PM_TRACELINE_ANYVISIBLE, 2,  -1);
 //      bool theEntityIsAPlayer = false;
-//      
+//
 //      if(!theTrace || theTrace->fraction < 0.0001f || (theEntityIsAPlayer = GetIsEntityAPlayer(theTrace->ent)))
 //      {
 //          theDone = true;
@@ -7264,9 +7264,9 @@ bool PM_ViewTracePlayer(float inOriginX, float inOriginY, float inOriginZ, float
             //gSquareDebugLocations.push_back(thePoint);*/
             #endif
         }
-        
+
 //  } while(!theDone);
-    
+
     if(theEntIndex > 0)
     //if(theTrace && (theTrace->ent > 0))
     {
