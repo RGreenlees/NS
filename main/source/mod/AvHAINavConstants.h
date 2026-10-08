@@ -29,14 +29,8 @@ constexpr float max_ai_jump_height = 62.0f;
 // Max nav mesh polys that can be traversed in a path. This should be sufficient for any sized map.
 constexpr auto MAX_PATH_POLY = 512;
 
-constexpr int NAVMESHSET_MAGIC = 'M' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'MSET', used to confirm the nav mesh we're loading is compatible;
-constexpr int NAVMESHSET_VERSION = 1;
-
-constexpr int TILECACHESET_MAGIC = 'T' << 24 | 'S' << 16 | 'E' << 8 | 'T'; //'TSET', used to confirm the tile cache we're loading is compatible;
-constexpr int TILECACHESET_VERSION = 4;
-
-constexpr int DT_AREA_NULL = 0; // Represents a null area on the nav mesh. Not traversable and considered not on the nav mesh
-constexpr int DT_AREA_BLOCKED = 3; // Area occupied by an obstruction (e.g. building). Not traversable, but considered to be on the nav mesh
+constexpr int TILECACHESET_MAGIC = 'N' << 24 | 'S' << 16 | 'T' << 8 | 'C';
+constexpr int TILECACHESET_VERSION = 1;
 
 constexpr float dtDefaultProjectionExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
 constexpr float dtDefaultReachableExtents[3] = { max_ai_use_reach, max_ai_use_reach, max_ai_use_reach }; // Extents (in GoldSrc units) to determine if something is on the nav mesh

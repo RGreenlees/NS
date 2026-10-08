@@ -501,22 +501,9 @@ void AIMGR_AddAIPlayerToTeam(int Team)
 	}
 	else
 	{
-		ALERT(at_console, "Failed to create AI player: invalid AvHPlayer instance\n");
+		ALERT(at_console, "Failed to create AI player: Invalid AvHPlayer instance\n");
 	}
 
-}
-
-byte BotThrottledMsec(AvHAIPlayer* inAIPlayer, float CurrentTime)
-{
-	// Thanks to The Storm (ePODBot) for this one, finally fixed the bot running speed!
-	int newmsec = (int)roundf((CurrentTime - inAIPlayer->LastServerUpdateTime) * 1000.0f);
-
-	if (newmsec > 255)
-	{
-		newmsec = 255;
-	}
-
-	return (byte)newmsec;
 }
 
 #ifdef BOTDEBUG
@@ -963,6 +950,7 @@ void AIMGR_NewMap()
 	AIMAP_ClearCachedMapData();
 	AITAC_ClearMapAIData();
 
+	PopulateBaseAgentProfiles();
 	AIMESH_LoadNavMesh(STRING(gpGlobals->mapname));
 	AIMAP_BuildMapData();
 

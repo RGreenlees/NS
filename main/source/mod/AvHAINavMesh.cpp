@@ -302,6 +302,8 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 		}
 
+		NewNavMesh.MeshIndex = static_cast<EAINavMeshIndex>(i);
+
 		TileCacheSetHeader tcHeader;
 
 		size_t headerReadReturnCode = fread(&tcHeader, sizeof(TileCacheSetHeader), 1, OpenedNavFile);

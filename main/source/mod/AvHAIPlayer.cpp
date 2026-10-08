@@ -141,6 +141,7 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 
 	if (AINAV_AddMoveMovementTask(GetNavProfile(), GetBottomOfHitbox(), DesiredLocation, nullptr, NewDestinationTask))
 	{
+		BotNavInfo.MovementTasks.push_back(NewDestinationTask);
 		return EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
@@ -237,8 +238,12 @@ Vector AvHAIPlayer::GetTopOfHitbox() const
 
 void AvHAIPlayer::Think(float DeltaTime)
 {
+	NextFrameMovementInput.Clear();
+
 	if (ShouldThink())
 	{
+		UpdateNavProfile();
+
 		if (!vIsZero(DebugDestination))
 		{
 			MoveTo(DebugDestination);
@@ -275,8 +280,6 @@ void AvHAIPlayer::CheckAndSendMessages()
 
 void AvHAIPlayer::StartThink(float DeltaTime)
 {
-	NextFrameMovementInput.Clear();
-
 	CheckAndSendMessages();
 }
 
@@ -300,8 +303,10 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 		SwitchToWeapon(NewSwitchWeapon);
 	}
 
+	UpdateView(DeltaTime);
+
 	// Thanks to The Storm (ePODBot) for this one, finally fixed the bot running speed!
-	int AdjustedTimeMS = (int)roundf((gpGlobals->time - LastServerUpdateTime) * 1000.0f);
+	int AdjustedTimeMS = (int)roundf((DeltaTime) * 1000.0f);
 
 	if (AdjustedTimeMS > 255)
 	{
@@ -709,6 +714,14 @@ void AvHAIPlayer::TakeDamage(float DamageAmount, const edict_t* Inflictor)
 
 }
 
+void AvHAIPlayer::UpdateNavProfile()
+{
+	if (IsPlayerMarine(Player))
+	{
+		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+	}
+}
+
 EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
@@ -814,6 +827,8 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 			FurthestView = FurthestView + (LookNormal * 1000.0f);
 		}
+
+		NextFrameMovementInput.DesiredLookLocation = FurthestView;
 	}
 
 	return EAINavMoveResult::NAV_MOVE_SUCCESS;
@@ -828,7 +843,7 @@ EAINavMoveResult AvHAIPlayer::ProgressMoveTask(AvHAIMoveTask* MoveTask)
 {
 	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
 
-	if (!MoveTask->HasPath())
+	if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != GetNavProfile()->MeshIndex)
 	{
 		const bool bSuccess = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), MoveTask->TaskLocation, &MoveTask->TaskPath, GetPlayerRadius());
 

@@ -285,6 +285,8 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 				StartPoint.MovementFlag = EAINavMovementFlag::NAV_FLAG_WALK;
 
 				ResultPath->PathNodes.push_back(StartPoint);
+				ResultPath->DesiredDestination = ToLocation;
+				ResultPath->UsedNavMesh = NavProfile->MeshIndex;
 
 				return true;
 			}
@@ -341,7 +343,7 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 	UTIL_VecGoldSrcToDetour(FromFloorLocation, dtStartPos);
 
 	float dtEndPos[3];
-	UTIL_VecGoldSrcToDetour(ToFloorLocation, dtStartPos);
+	UTIL_VecGoldSrcToDetour(ToFloorLocation, dtEndPos);
 
 	dtStatus status;
 	dtPolyRef dtStartPoly;
@@ -551,6 +553,9 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		ResultPath->PathNodes.push_back(FinalSwimBit);
 	}
+
+	ResultPath->DesiredDestination = ToLocation;
+	ResultPath->UsedNavMesh = NavProfile->MeshIndex;
 
 	return true;
 }
@@ -1108,7 +1113,6 @@ bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& 
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
 	NewTask.TaskLocation = MoveLocation;
-	NewTask.TaskLocation = TestPath.GetFinalDestination();
 
 	return true;
 }

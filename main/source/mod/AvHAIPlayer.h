@@ -315,6 +315,7 @@ struct AvHAIPlayer
 	void HearEnemy(const edict_t* EmittingEdict, float Volume);
 	void OnNavMeshModified(EAINavMeshIndex ModifiedMeshIndex);
 	void TakeDamage(float DamageAmount, const edict_t* Inflictor);
+	void UpdateNavProfile();
 
 	EAINavMoveResult FollowPath(AvHAIPath* Path);
 	bool NextMove(AvHAIPath* Path);
