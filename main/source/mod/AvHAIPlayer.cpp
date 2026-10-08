@@ -333,6 +333,8 @@ void AvHAIPlayer::BotUpdateDesiredViewRotation()
 
 	if (vIsZero(NewDesiredTargetView)) { return; }
 
+	ViewInfo.ViewInterpStartedTime = gpGlobals->time;
+
 	const Vector DesiredViewForwardVector = UTIL_GetVectorNormal(NewDesiredTargetView - GetEyePosition());
 
 	ViewInfo.InterpolatingViewTarget = UTIL_VecToAngles(DesiredViewForwardVector);
@@ -347,17 +349,14 @@ void AvHAIPlayer::BotUpdateDesiredViewRotation()
 	if (ViewInfo.bSnapView)
 	{
 		ViewInfo.ViewInterpolationSpeed = 1000.0f;
-		ViewInfo.ViewInterpStartedTime = gpGlobals->time;
-
 		return;
 	}
 
-	Vector ViewInterpolationDelta = ViewInfo.InterpolatingViewTarget - Edict->v.v_angle;
+	Vector ViewDelta = ViewInfo.InterpolatingViewTarget - ViewInfo.CurrentInterpolatedView;
 
-	// Now figure out how far we have to turn to reach our desired target
-	vClampViewAngles(ViewInterpolationDelta);
+	vClampViewAngles(ViewDelta);
 
-	const float MaxViewDelta = fmaxf(fabsf(ViewInterpolationDelta.y), fabsf(ViewInterpolationDelta.x));
+	float MaxViewDelta = fmaxf(fabsf(ViewDelta.y), fabsf(ViewDelta.x));
 
 	float motion_tracking_skill = (IsPlayerMarine(Edict)) ? BotSkillSettings.marine_bot_motion_tracking_skill : BotSkillSettings.alien_bot_motion_tracking_skill;
 	float bot_view_speed = (IsPlayerMarine(Edict)) ? BotSkillSettings.marine_bot_view_speed : BotSkillSettings.alien_bot_view_speed;
@@ -370,54 +369,46 @@ void AvHAIPlayer::BotUpdateDesiredViewRotation()
 
 	ViewInfo.ViewInterpolationSpeed *= bot_view_speed;
 
+	// If this is not a look direction needed for movement, we can add some random offsets to make the bot's aim less perfect and more human-like
+	// We don't do this for movement-required look directions because it could cause the bot to miss jumps, wall-climbs, ladder climbs etc.
 	if (!bIsRequiredView)
 	{
 		const float AimOffset = (MaxViewDelta >= 45.0f)
 			? frandrange(10.0f, 20.0f)
 			: (MaxViewDelta >= 25.0f)
 				? frandrange(5.0f, 10.0f)
-				: (MaxViewDelta >= 5.0f)
-					? frandrange(2.0f, 5.0f)
-					: 0.0f;
+				: (MaxViewDelta >= 5.0f) ? frandrange(2.0f, 5.0f) : 0.0f;
 
 		const float xOffset = AimOffset * (randbool()) ? -1.0f : 1.0f;
 		const float yOffset = AimOffset * (randbool()) ? -1.0f : 1.0f;
 
 		ViewInfo.InterpolatingViewTarget.x += xOffset;
 		ViewInfo.InterpolatingViewTarget.y += yOffset;
-
-		vClampViewAngles(ViewInfo.InterpolatingViewTarget);
 	}
 
-	ViewInfo.ViewInterpStartedTime = gpGlobals->time;
+	// We once again clamp everything to valid values in case the offsets we applied above took us above that
+
+	vClampViewAngles(ViewInfo.InterpolatingViewTarget);
 }
 
 void AvHAIPlayer::InterpolateView(float DeltaTime)
 {
-	if (vIsZero(ViewInfo.InterpolatingViewTarget)) { return; }
+	Vector ViewDelta = ViewInfo.InterpolatingViewTarget - ViewInfo.CurrentInterpolatedView;
 
-	const Vector CurrentViewAngle = Edict->v.v_angle;
-	Vector InterpDelta = ViewInfo.InterpolatingViewTarget - CurrentViewAngle;
+	vClampViewAngles(ViewDelta);
 
-	vClampViewAngles(InterpDelta);
+	ViewInfo.CurrentInterpolatedView.x = fInterpConstantTo(ViewInfo.CurrentInterpolatedView.x, ViewInfo.InterpolatingViewTarget.x, DeltaTime, ViewInfo.ViewInterpolationSpeed);
+	ViewInfo.CurrentInterpolatedView.y += fInterpConstantTo(0.0f, ViewDelta.y, DeltaTime, ViewInfo.ViewInterpolationSpeed);
 
-	Vector InterpolatedFrameAngle = CurrentViewAngle;
+	vClampViewAngles(ViewInfo.CurrentInterpolatedView);
 
-	InterpolatedFrameAngle.x = fInterpConstantTo(CurrentViewAngle.x, ViewInfo.InterpolatingViewTarget.x, DeltaTime, ViewInfo.ViewInterpolationSpeed);
-
-	const float YawDeltaInterp = fInterpConstantTo(0.0f, InterpDelta.y, DeltaTime, ViewInfo.ViewInterpolationSpeed);
-
-	InterpolatedFrameAngle.y += YawDeltaInterp;
-
-	vClampViewAngles(InterpolatedFrameAngle);
-
-	if (vEquals2D(InterpolatedFrameAngle, ViewInfo.InterpolatingViewTarget) || (gpGlobals->time - ViewInfo.ViewInterpStartedTime > 2.0f))
+	if (vEquals2D(ViewInfo.CurrentInterpolatedView, ViewInfo.InterpolatingViewTarget) || gpGlobals->time - ViewInfo.ViewInterpStartedTime > 2.0f)
 	{
 		ViewInfo.InterpolatingViewTarget = ZERO_VECTOR;
 	}
 
-	Edict->v.v_angle.x = InterpolatedFrameAngle.x;
-	Edict->v.v_angle.y = InterpolatedFrameAngle.y;
+	Edict->v.v_angle.x = ViewInfo.CurrentInterpolatedView.x;
+	Edict->v.v_angle.y = ViewInfo.CurrentInterpolatedView.y;
 
 	// set the body angles to point the gun correctly
 	Edict->v.angles.x = Edict->v.v_angle.x / 3;

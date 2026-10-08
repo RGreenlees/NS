@@ -392,9 +392,9 @@ void vClampViewAngles(Vector& ViewAngles)
 		ViewAngles.x -= 360.0f;
 	}
 
-	while (ViewAngles.x < -180.0f)
+	while (ViewAngles.y < -180.0f)
 	{
-		ViewAngles.x += 360.0f;
+		ViewAngles.y += 360.0f;
 	}
 
 	while (ViewAngles.y > 180.0f)
