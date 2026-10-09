@@ -421,9 +421,11 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		return false; // couldn't find a path
 	}
 
+	unsigned int dtCurrPoly;
 	unsigned int dtCurrFlags;
 	unsigned char dtCurrArea;
 
+	dtCurrPoly = dtStartPoly;
 	FoundMesh->NavMeshRef->getPolyFlags(dtStraightPolyPath[0], &dtCurrFlags);
 	FoundMesh->NavMeshRef->getPolyArea(dtStraightPolyPath[0], &dtCurrArea);
 
@@ -530,11 +532,13 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		NextPathNode.MovementFlag = CurrFlags;
 		NextPathNode.MovementArea = CurrArea;
-		NextPathNode.MeshPoly = dtStraightPolyPath[nVert];
+		NextPathNode.FromMeshPoly = dtCurrPoly;
+		NextPathNode.ToMeshPoly = dtStraightPolyPath[nVert];
 
 		FoundMesh->NavMeshRef->getPolyFlags(dtStraightPolyPath[nVert], &dtCurrFlags);
 		FoundMesh->NavMeshRef->getPolyArea(dtStraightPolyPath[nVert], &dtCurrArea);
 
+		dtCurrPoly = NextPathNode.ToMeshPoly;
 		CurrFlags = static_cast<EAINavMovementFlag>(dtCurrFlags);
 		CurrArea = static_cast<EAINavArea>(dtCurrArea);
 
@@ -762,8 +766,10 @@ bool AINAV_IsOffPathNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 		case EAINavMovementFlag::NAV_FLAG_LADDER:
 			return AINAV_IsOffLadderNode(NavProfile, AIPlayer, PathNode);
 		case EAINavMovementFlag::NAV_FLAG_FALL:
+		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
 			return AINAV_IsOffFallNode(NavProfile, AIPlayer, PathNode);
 		case EAINavMovementFlag::NAV_FLAG_JUMP:
+		case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
 			return AINAV_IsOffJumpNode(NavProfile, AIPlayer, PathNode);
 		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 			return AINAV_IsOffPlatformNode(NavProfile, AIPlayer, PathNode);
@@ -982,7 +988,7 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 
 	const DynamicMapObject* Trigger = nullptr;
 
-	if (vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop->StopLocation, 5.0f))
+	if (DesiredEmbarkStop && vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop->StopLocation, 5.0f))
 	{
 		Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformRef, ImpactedPathNode->FromLocation.z + 32.0f);
 	}
@@ -1140,8 +1146,10 @@ bool AINAV_IsPathPointComplete(const NavAgentProfile* NavProfile, const edict_t*
 	case EAINavMovementFlag::NAV_FLAG_LADDER:
 		return AINAV_IsLadderMoveComplete(NavProfile, AIPlayer, CurrentPathNode, NextPathNode);
 	case EAINavMovementFlag::NAV_FLAG_FALL:
+	case EAINavMovementFlag::NAV_FLAG_FATALFALL:
 		return AINAV_IsFallMoveComplete(NavProfile, AIPlayer, CurrentPathNode, NextPathNode);
 	case EAINavMovementFlag::NAV_FLAG_JUMP:
+	case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
 		return AINAV_IsJumpMoveComplete(NavProfile, AIPlayer, CurrentPathNode, NextPathNode);
 	case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 		return AINAV_IsLiftMoveComplete(NavProfile, AIPlayer, CurrentPathNode, NextPathNode);
@@ -1329,10 +1337,10 @@ Vector AINAV_GetLadderMountPoint(const edict_t* MountLadder, const Vector StartP
 	{
 		Vector FirstSamplePoint = LadderCentre;
 		FirstSamplePoint.z = clampf(StartPoint.z, LadderBottom.z + 5.0f, LadderTop.z - 5.0f);
-		FirstSamplePoint.x = (StartPoint.x > LadderCentre.x) ? MountLadder->v.absmax.x + 17.0f : MountLadder->v.absmin.x - 17.0f;
+		FirstSamplePoint.x = (StartPoint.x > LadderCentre.x) ? MountLadder->v.absmax.x + 24.0f : MountLadder->v.absmin.x - 24.0f;
 
 		Vector SecondSamplePoint = LadderCentre;
-		SecondSamplePoint.x = (StartPoint.x > LadderCentre.x) ? MountLadder->v.absmin.x - 17.0f : MountLadder->v.absmax.x + 17.0f;
+		SecondSamplePoint.x = (StartPoint.x > LadderCentre.x) ? MountLadder->v.absmin.x - 24.0f : MountLadder->v.absmax.x + 24.0f;
 
 		float Modifier = (StartPoint.x > LadderCentre.x) ? 1.0f : -1.0f;
 
@@ -1349,10 +1357,10 @@ Vector AINAV_GetLadderMountPoint(const edict_t* MountLadder, const Vector StartP
 	{
 		Vector FirstSamplePoint = LadderCentre;
 		FirstSamplePoint.z = clampf(StartPoint.z, LadderBottom.z + 5.0f, LadderTop.z - 5.0f);
-		FirstSamplePoint.y = (StartPoint.y > LadderCentre.y) ? MountLadder->v.absmax.y + 17.0f : MountLadder->v.absmin.y - 17.0f;
+		FirstSamplePoint.y = (StartPoint.y > LadderCentre.y) ? MountLadder->v.absmax.y + 24.0f : MountLadder->v.absmin.y - 24.0f;
 
 		Vector SecondSamplePoint = LadderCentre;
-		SecondSamplePoint.y = (StartPoint.y > LadderCentre.y) ? MountLadder->v.absmin.y - 17.0f : MountLadder->v.absmax.y + 17.0f;
+		SecondSamplePoint.y = (StartPoint.y > LadderCentre.y) ? MountLadder->v.absmin.y - 24.0f : MountLadder->v.absmax.y + 24.0f;
 
 		if (UTIL_PointContents(FirstSamplePoint) != CONTENTS_SOLID)
 		{

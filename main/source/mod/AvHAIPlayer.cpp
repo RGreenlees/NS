@@ -46,7 +46,7 @@ bool AvHAIPlayer::CanCrouch() const
 	}
 }
 
-enum_hull AvHAIPlayer::GetPlayerHull() const
+enum_hull AvHAIPlayer::GetPlayerHull(bool bIsCrouching) const
 {
 	if (!IsValid()) { return point_hull; }
 
@@ -56,7 +56,7 @@ enum_hull AvHAIPlayer::GetPlayerHull() const
 	{
 		case AVH_USER3_MARINE_PLAYER: // Regular/heavy marine
 		case AVH_USER3_ALIEN_PLAYER4: // Fade
-			return (IsCrouching()) ? head_hull : human_hull;
+			return (bIsCrouching) ? head_hull : human_hull;
 		case AVH_USER3_COMMANDER_PLAYER:
 			return head_hull;
 		case AVH_USER3_ALIEN_EMBRYO: // Gestating
@@ -66,7 +66,7 @@ enum_hull AvHAIPlayer::GetPlayerHull() const
 		case AVH_USER3_ALIEN_PLAYER3:// Lerk
 			return head_hull;
 		case AVH_USER3_ALIEN_PLAYER5: // Onos
-			return (IsCrouching()) ? human_hull : large_hull;
+			return (bIsCrouching) ? human_hull : large_hull;
 		default:
 			return head_hull;
 	}
@@ -76,7 +76,7 @@ float AvHAIPlayer::GetPlayerRadius() const
 {
 	if (!IsValid()) { return 0.0f; }
 
-	enum_hull PlayerHull = GetPlayerHull();
+	enum_hull PlayerHull = GetPlayerHull(IsCrouching());
 
 	switch (PlayerHull)
 	{
@@ -94,7 +94,7 @@ float AvHAIPlayer::GetPlayerHeight() const
 {
 	if (!IsValid()) { return 0.0f; }
 
-	enum_hull PlayerHull = GetPlayerHull();
+	enum_hull PlayerHull = GetPlayerHull(IsCrouching());
 
 	switch (PlayerHull)
 	{
@@ -150,6 +150,96 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 
 EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
 {
+	const Vector CurrentFloorPosition = UTIL_GetFloorUnderEntity(Edict);
+
+	Vector CurrentPos = (IsOnGround()) ? GetLocation() : CurrentFloorPosition + GetPlayerOriginOffsetFromFloor(Edict, false);
+	CurrentPos.z += 18.0f;
+
+	const Vector vForward = UTIL_GetVectorNormal2D(DesiredLocation - CurrentPos);
+	// Same goes for the right vector, might not be the same as the bot's right
+	const Vector vRight = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(vForward, UP_VECTOR));
+
+	const float PlayerRadius = GetPlayerRadius();
+
+	Vector stTrcLft = CurrentPos - (vRight * PlayerRadius);
+	Vector stTrcRt = CurrentPos + (vRight * PlayerRadius);
+	Vector endTrcLft = stTrcLft + (vForward * (PlayerRadius * 1.5f));
+	Vector endTrcRt = stTrcRt + (vForward * (PlayerRadius * 1.5f));
+
+	TraceResult hit;
+
+	UTIL_TraceHull(stTrcLft, endTrcLft, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
+
+	const bool bumpLeft = (hit.flFraction < 1.0f || hit.fAllSolid > 0 || hit.fStartSolid > 0);
+
+	UTIL_TraceHull(stTrcRt, endTrcRt, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
+
+	const bool bumpRight = (hit.flFraction < 1.0f || hit.fAllSolid > 0 || hit.fStartSolid > 0);
+
+	NextFrameMovementInput.DesiredMoveDirection = vForward;
+
+	if (bumpRight && !bumpLeft)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
+	}
+	else if (bumpLeft && !bumpRight)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
+	}
+	else if (bumpLeft && bumpRight)
+	{
+		float MaxScaleHeight = GetPlayerMaxJumpHeight(Edict);
+
+		float JumpHeight = 0.0f;
+
+		bool bFoundJumpHeight = false;
+
+		Vector StartTrace = CurrentFloorPosition;
+		Vector EndTrace = StartTrace + (vForward * 50.0f);
+		EndTrace.z = StartTrace.z;
+
+		TraceResult JumpTestHit;
+
+		while (JumpHeight < MaxScaleHeight && !bFoundJumpHeight)
+		{
+			UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, head_hull, Edict->v.pContainingEntity, &JumpTestHit);
+
+			if (JumpTestHit.flFraction >= 1.0f && !JumpTestHit.fAllSolid)
+			{
+				bFoundJumpHeight = true;
+				break;
+			}
+
+			JumpHeight += 5.0f;
+
+			StartTrace.z += 5.0f;
+			EndTrace.z += 5.0f;
+		}
+
+		if (JumpHeight <= MaxScaleHeight)
+		{
+			Jump(true);
+		}
+		else
+		{
+			stTrcLft.z = Edict->v.origin.z;
+			stTrcRt.z = Edict->v.origin.z;
+			endTrcLft.z = Edict->v.origin.z;
+			endTrcRt.z = Edict->v.origin.z;
+
+			if (!UTIL_QuickTrace(Edict, stTrcLft, endTrcLft))
+			{
+				NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
+			}
+			else
+			{
+				NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
+			}
+		}
+	}
+
+	const float DistFromDestination = vDist2DSq(Edict->v.origin, DesiredLocation);
+
 	return EAINavMoveResult::NAV_MOVE_SUCCESS;
 }
 
@@ -317,6 +407,8 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 	RUN_AI_MOVE(Edict, Edict->v.v_angle, NextFrameMovementInput.ForwardMove,
 		NextFrameMovementInput.SideMove, NextFrameMovementInput.UpMove, NextFrameMovementInput.Button, NextFrameMovementInput.Impulse, (byte)AdjustedTimeMS);
 
+	NextFrameMovementInput.Button = 0;
+	NextFrameMovementInput.Impulse = 0;
 	LastServerUpdateTime = gpGlobals->time;
 }
 
@@ -868,9 +960,11 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 		return NewGroundMove(Path);
 		break;
 	case EAINavMovementFlag::NAV_FLAG_FALL:
+	case EAINavMovementFlag::NAV_FLAG_FATALFALL:
 		return NewFallMove(Path);
 		break;
 	case EAINavMovementFlag::NAV_FLAG_JUMP:
+	case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
 		return NewJumpMove(Path);
 		break;
 	case EAINavMovementFlag::NAV_FLAG_LADDER:
@@ -1098,7 +1192,6 @@ bool AvHAIPlayer::NewLadderMove(AvHAIPath* Path)
 
 	if (vIsZero(CurrentLadderNormal))
 	{
-
 		if (CurrentPathNode->ToLocation.z > CurrentPathNode->FromLocation.z)
 		{
 			CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentPathNode->FromLocation - CurrentPathNode->ToLocation);
@@ -1135,21 +1228,55 @@ bool AvHAIPlayer::NewLadderMove(AvHAIPath* Path)
 
 	if (bIsGoingUpLadder)
 	{
-		// We've reached the end of the ladder, try and make it to the disembark point if we can
-		if (LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z >= DesiredClimbHeight)
+		bool bReachingDisembarkPoint = CurrentPathNode->ToLocation.z - CollisionTopLocation.z < 8.0f;
+
+		if (!UTIL_QuickHullTrace(Edict, BotLocation, CollisionTopLocation, GetPlayerHull(false)))
 		{
-			MoveToWithoutNav(CurrentPathNode->ToLocation);
+			NextFrameMovementInput.bShouldCrouch = true;
+		}
+		else
+		{
+			const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
 
-			const Vector DesiredLookTarget = (BotEyePosition + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
-
-			NextFrameMovementInput.RequiredLookLocation = DesiredLookTarget;
-
-			if (DisembarkDot > 0.75f)
+			if (NextPathNode && NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
 			{
-				Jump(true);
+				if (bReachingDisembarkPoint)
+				{
+					NextFrameMovementInput.bShouldCrouch = true;
+				}
+			}
+		}
+
+		bool bAttemptDisembark = LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z > DesiredClimbHeight;
+
+		if (!bAttemptDisembark && DisembarkDot < 0.75f)
+		{
+			if (CurrentPathNode->ToLocation.z > CollisionBottomLocation.z && CurrentPathNode->ToLocation.z < CollisionTopLocation.z)
+			{
+				enum_hull PlayerHull = GetPlayerHull(IsCrouching());
+
+				Vector TraceEnd = CurrentPathNode->ToLocation;
+				TraceEnd.z = BotLocation.z;
+
+				bAttemptDisembark = UTIL_QuickHullTrace(Edict, BotLocation, TraceEnd, PlayerHull);
 			}
 
-			return true;
+			// We've reached the end of the ladder, try and make it to the disembark point if we can
+			if (bAttemptDisembark)
+			{
+				NextFrameMovementInput.DesiredMoveDirection = DisembarkDir;
+
+				const Vector DesiredLookTarget = (BotEyePosition + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
+
+				NextFrameMovementInput.RequiredLookLocation = DesiredLookTarget;
+
+				if (DisembarkDot > 0.75f)
+				{
+					Jump(true);
+				}
+
+				return true;
+			}
 		}
 	}
 	else
@@ -1250,7 +1377,7 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 
 	Vector LadderCentre = UTIL_GetCentreOfEntity(MountLadder);
 
-	Vector MountPoint = AINAV_GetLadderMountPoint(MountLadder, CurrentPathNode->ToLocation);
+	Vector MountPoint = AINAV_GetLadderMountPoint(MountLadder, CurrentPathNode->FromLocation);
 
 	bool bMountingFromTop = BotCurrentLocation.z > MountLadder->v.absmax.z;
 
@@ -1265,7 +1392,7 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 		}
 	}
 
-	if (bMountingFromTop)
+	if (bMountingFromTop && !IsCrouching())
 	{
 		NextFrameMovementInput.bShouldWalk = true;
 	}
@@ -1323,13 +1450,10 @@ void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles
 {
 	ClearMovementOutputs();
 
-	if (vIsZero(DesiredMoveDirection)) { return; }
-
-	UTIL_NormalizeVector2D(&DesiredMoveDirection);
-
-	float CurrentYaw = CurrentViewAngles.y;
-	float MoveDelta = UTIL_VecToAngles(DesiredMoveDirection).y;
-	float AngleDelta = CurrentYaw - MoveDelta;
+	if (bShouldCrouch)
+	{
+		Button |= IN_DUCK;
+	}
 
 	float BotSpeed = MaxSpeed;
 
@@ -1338,6 +1462,14 @@ void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles
 		BotSpeed *= 0.4f;
 		Button |= IN_WALK;
 	}
+
+	if (vIsZero(DesiredMoveDirection)) { return; }
+
+	UTIL_NormalizeVector2D(&DesiredMoveDirection);
+
+	float CurrentYaw = CurrentViewAngles.y;
+	float MoveDelta = UTIL_VecToAngles(DesiredMoveDirection).y;
+	float AngleDelta = CurrentYaw - MoveDelta;
 
 	if (AngleDelta < -180.0f)
 	{

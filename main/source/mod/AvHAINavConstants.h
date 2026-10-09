@@ -56,6 +56,8 @@ enum class EAINavMovementFlag : uint32
 	NAV_FLAG_PHASEGATE_TEAM1 = 1u << 12,		// Team 1 Phase Gate
 	NAV_FLAG_PHASEGATE_TEAM2 = 1u << 13,		// Team 2 Phase Gate
 	NAV_FLAG_FLY = 1u << 14,		// Fly
+	NAV_FLAG_FATALFALL = 1 << 15,		// Fatal Fall
+	NAV_FLAG_FATALJUMP = 1 << 16,		// Fatal Jump
 	NAV_FLAG_ALL = 0xFFFFFFFF		// All flags
 };
 
@@ -114,6 +116,8 @@ enum class EAINavArea : uint16
 	NAV_AREA_WELDABLE = 8,		// Weldable
 	NAV_AREA_WALLCLIMB = 9,		// Wall Climb
 	NAV_AREA_LADDER = 10,		// Ladder
+	NAV_AREA_DAMAGEFALL = 11,		// Damaging Fall
+	NAV_AREA_DAMAGEJUMP = 12		// Damaging Jump
 };
 
 // Area types. Defines the cost of movement through an area and which flag to use
@@ -261,6 +265,10 @@ inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)
 			return EAINavMovementFlag::NAV_FLAG_WALLCLIMB;
 		case EAINavArea::NAV_AREA_LADDER:
 			return EAINavMovementFlag::NAV_FLAG_LADDER;
+		case EAINavArea::NAV_AREA_DAMAGEFALL:
+			return EAINavMovementFlag::NAV_FLAG_FALL;
+		case EAINavArea::NAV_AREA_DAMAGEJUMP:
+			return EAINavMovementFlag::NAV_FLAG_JUMP;
 		default:
 			return EAINavMovementFlag::NAV_FLAG_DISABLED;
 	}
@@ -330,6 +338,16 @@ inline void GetDebugColorForArea(EAINavArea Area, unsigned char& R, unsigned cha
 			R = 0;
 			G = 0;
 			B = 159;
+			break;
+		case EAINavArea::NAV_AREA_DAMAGEFALL:
+			R = 137;
+			G = 0;
+			B = 0;
+			break;
+		case EAINavArea::NAV_AREA_DAMAGEJUMP:
+			R = 255;
+			G = 135;
+			B = 0;
 			break;
 		default:
 			R = 255;
@@ -424,6 +442,16 @@ inline void GetDebugColorForFlag(EAINavMovementFlag Flag, unsigned char& R, unsi
 			G = 156;
 			B = 255;
 			break;
+		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
+			R = 44;
+			G = 0;
+			B = 0;
+			break;
+		case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
+			R = 255;
+			G = 107;
+			B = 0;
+			break;
 		default:
 			R = 255;
 			G = 255;
@@ -487,6 +515,12 @@ inline void GetFlagName(EAINavMovementFlag Flag, char* outName)
 		case EAINavMovementFlag::NAV_FLAG_FLY:
 			sprintf(outName, "Fly");
 			break;
+		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
+			sprintf(outName, "Fatal Fall");
+			break;
+		case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
+			sprintf(outName, "Fatal Jump");
+			break;
 		default:
 			sprintf(outName, "Undefined");
 			break;
@@ -547,6 +581,12 @@ inline void GetAreaName(EAINavArea Area, char* outName)
 		case EAINavArea::NAV_AREA_LADDER:
 			sprintf(outName, "Ladder");
 			break;
+		case EAINavArea::NAV_AREA_DAMAGEFALL:
+			sprintf(outName, "Damaging Fall");
+			break;
+		case EAINavArea::NAV_AREA_DAMAGEJUMP:
+			sprintf(outName, "Damaging Jump");
+			break;
 		default:
 			sprintf(outName, "Undefined");
 			break;
@@ -563,7 +603,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile0;
 	NewProfile0.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile0.Filters.setIncludeFlags(127);
+	NewProfile0.Filters.setIncludeFlags(2175);
 	NewProfile0.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile0.Filters.setAreaCost(0, 0.0);
 	NewProfile0.Filters.setAreaCost(1, 1.0);
@@ -576,6 +616,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile0.Filters.setAreaCost(8, 2.0);
 	NewProfile0.Filters.setAreaCost(9, 1.0);
 	NewProfile0.Filters.setAreaCost(10, 1.0);
+	NewProfile0.Filters.setAreaCost(11, 5.0);
+	NewProfile0.Filters.setAreaCost(12, 5.0);
 	BaseAgentProfiles.push_back(NewProfile0);
 
 	NavAgentProfile NewProfile1;
@@ -593,6 +635,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile1.Filters.setAreaCost(8, 1.0);
 	NewProfile1.Filters.setAreaCost(9, 1.0);
 	NewProfile1.Filters.setAreaCost(10, 1.0);
+	NewProfile1.Filters.setAreaCost(11, 1.0);
+	NewProfile1.Filters.setAreaCost(12, 1.0);
 	BaseAgentProfiles.push_back(NewProfile1);
 
 	NavAgentProfile NewProfile2;
@@ -610,6 +654,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile2.Filters.setAreaCost(8, 1.0);
 	NewProfile2.Filters.setAreaCost(9, 1.0);
 	NewProfile2.Filters.setAreaCost(10, 1.0);
+	NewProfile2.Filters.setAreaCost(11, 5.0);
+	NewProfile2.Filters.setAreaCost(12, 5.0);
 	BaseAgentProfiles.push_back(NewProfile2);
 
 	NavAgentProfile NewProfile3;
@@ -627,6 +673,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile3.Filters.setAreaCost(8, 1.0);
 	NewProfile3.Filters.setAreaCost(9, 1.0);
 	NewProfile3.Filters.setAreaCost(10, 1.0);
+	NewProfile3.Filters.setAreaCost(11, 1.0);
+	NewProfile3.Filters.setAreaCost(12, 1.0);
 	BaseAgentProfiles.push_back(NewProfile3);
 
 	NavAgentProfile NewProfile4;
@@ -644,6 +692,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile4.Filters.setAreaCost(8, 1.0);
 	NewProfile4.Filters.setAreaCost(9, 1.0);
 	NewProfile4.Filters.setAreaCost(10, 1.0);
+	NewProfile4.Filters.setAreaCost(11, 1.0);
+	NewProfile4.Filters.setAreaCost(12, 1.0);
 	BaseAgentProfiles.push_back(NewProfile4);
 
 	NavAgentProfile NewProfile5;
@@ -661,6 +711,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile5.Filters.setAreaCost(8, 1.0);
 	NewProfile5.Filters.setAreaCost(9, 1.0);
 	NewProfile5.Filters.setAreaCost(10, 1.0);
+	NewProfile5.Filters.setAreaCost(11, 5.0);
+	NewProfile5.Filters.setAreaCost(12, 5.0);
 	BaseAgentProfiles.push_back(NewProfile5);
 
 	NavAgentProfile NewProfile6;
@@ -678,6 +730,8 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile6.Filters.setAreaCost(8, 1.0);
 	NewProfile6.Filters.setAreaCost(9, 1.0);
 	NewProfile6.Filters.setAreaCost(10, 1.0);
+	NewProfile6.Filters.setAreaCost(11, 1.0);
+	NewProfile6.Filters.setAreaCost(12, 1.0);
 	BaseAgentProfiles.push_back(NewProfile6);
 
 	NavAgentProfile DefaultProfile;
@@ -695,6 +749,8 @@ inline void PopulateBaseAgentProfiles()
 	DefaultProfile.Filters.setAreaCost(8, 1.0);
 	DefaultProfile.Filters.setAreaCost(9, 1.0);
 	DefaultProfile.Filters.setAreaCost(10, 1.0);
+	DefaultProfile.Filters.setAreaCost(11, 1.0);
+	DefaultProfile.Filters.setAreaCost(12, 1.0);
 	BaseAgentProfiles.push_back(DefaultProfile);
 }
 

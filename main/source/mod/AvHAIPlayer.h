@@ -271,7 +271,7 @@ struct AvHAIPlayer
 	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
 	bool CanCrouch() const;
 	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
-	enum_hull GetPlayerHull() const;
+	enum_hull GetPlayerHull(bool bIsCrouching) const;
 	float GetPlayerRadius() const;
 	float GetPlayerHeight() const;
 	void AddMovementTask(AvHAIMoveTask& NewTask);

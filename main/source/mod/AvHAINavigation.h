@@ -50,7 +50,8 @@ struct AvHAIPathNode
 	float RequiredClimbZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
 	EAINavMovementFlag MovementFlag = EAINavMovementFlag::NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
 	EAINavArea MovementArea = EAINavArea::NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
-	unsigned int MeshPoly = 0; // The nav mesh poly this point resides on
+	unsigned int FromMeshPoly = 0; // The nav mesh poly the start point resides on
+	unsigned int ToMeshPoly = 0; // The nav mesh poly the end point resides on
 	edict_t* MovementObject = nullptr;
 
 	bool IsValidMove() const
