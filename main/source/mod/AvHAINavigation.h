@@ -318,6 +318,8 @@ Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const V
 // From the given start point, determine how high up the bot needs to climb to get to climb end. Will allow the bot to climb over railings
 float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
 
+void AINAV_DrawPath(const AvHAIPath* Path, float DrawTime = 0.0f);
+
 
 #endif // BOT_NAVIGATION_H
 

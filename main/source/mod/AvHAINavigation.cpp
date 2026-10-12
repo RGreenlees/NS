@@ -1427,3 +1427,43 @@ Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const V
 
 	return ZERO_VECTOR;
 }
+
+void AINAV_DrawPath(const AvHAIPath* Path, float DrawTime)
+{
+	if (!Path || !Path->IsValidPath()) { return; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
+	if (CurrentPathNode && CurrentPathNode->IsValidMove())
+	{
+		Vector FromLoc = CurrentPathNode->FromLocation;
+		Vector ToLoc = CurrentPathNode->ToLocation;
+		unsigned char r, g, b;
+		GetDebugColorForFlag(CurrentPathNode->MovementFlag, r, g, b);
+		UTIL_DrawLine(INDEXENT(1), FromLoc, ToLoc, DrawTime, r, g, b);
+	}
+
+	AvHAIPathNodeList PathNodeList = Path->GetFuturePathNodeList();
+
+	int NumDrawCalls = 0;
+
+	for (auto it = PathNodeList.begin(); it != PathNodeList.end(); it++)
+	{
+		const AvHAIPathNode* ThisPathNode = (*it);
+
+		if (!ThisPathNode || !ThisPathNode->IsValidMove()) { continue; }
+
+		Vector FromLoc = ThisPathNode->FromLocation;
+		Vector ToLoc = ThisPathNode->ToLocation;
+
+		unsigned char r, g, b;
+
+		GetDebugColorForFlag(ThisPathNode->MovementFlag, r, g, b);
+
+		UTIL_DrawLine(INDEXENT(1), FromLoc, ToLoc, DrawTime, r, g, b);
+
+		NumDrawCalls++;
+
+		if (NumDrawCalls > 20) { return; }
+	}
+}

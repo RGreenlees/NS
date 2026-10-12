@@ -278,6 +278,7 @@ struct AvHAIPlayer
 	EAINavMoveResult MoveTo(const Vector& DesiredLocation);
 	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
 	EAINavMoveResult ProgressMovementTasks();
+	AvHAIMoveTask* GetCurrentMoveTask();
 	Vector GetLocation() const { return Edict->v.origin; }
 	Vector GetVelocity() const { return Edict->v.velocity; }
 	Vector GetEyePosition() const;
@@ -332,6 +333,8 @@ struct AvHAIPlayer
 	bool NewPhaseGateMove(AvHAIPath* Path);
 
 	void HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
+
+	void DEBUG_DrawPath();
 
 	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
 };

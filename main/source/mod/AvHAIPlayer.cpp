@@ -251,14 +251,24 @@ void AvHAIPlayer::InterruptReload()
 	}
 }
 
-EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
+AvHAIMoveTask* AvHAIPlayer::GetCurrentMoveTask()
 {
 	if (BotNavInfo.MovementTasks.size() == 0)
 	{
-		return EAINavMoveResult::NAV_MOVE_NOTASK;
+		return nullptr;
 	}
 
-	AvHAIMoveTask* CurrentMoveTask = &BotNavInfo.MovementTasks.at(BotNavInfo.MovementTasks.size() - 1);
+	return &BotNavInfo.MovementTasks.at(BotNavInfo.MovementTasks.size() - 1);
+}
+
+EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
+{
+	AvHAIMoveTask* CurrentMoveTask = GetCurrentMoveTask();
+
+	if (!CurrentMoveTask || !CurrentMoveTask->IsValid())
+	{
+		return EAINavMoveResult::NAV_MOVE_INVALIDTASK;
+	}
 
 	switch (CurrentMoveTask->TaskType)
 	{
@@ -337,6 +347,7 @@ void AvHAIPlayer::Think(float DeltaTime)
 		if (!vIsZero(DebugDestination))
 		{
 			MoveTo(DebugDestination);
+			DEBUG_DrawPath();
 		}
 	}
 }
@@ -920,6 +931,15 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 void AvHAIPlayer::HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
 {
 
+}
+
+void AvHAIPlayer::DEBUG_DrawPath()
+{
+	AvHAIMoveTask* CurrentMoveTask = GetCurrentMoveTask();
+
+	if (!CurrentMoveTask || !CurrentMoveTask->HasPath()) { return; }
+
+	AINAV_DrawPath(&CurrentMoveTask->TaskPath);
 }
 
 EAINavMoveResult AvHAIPlayer::ProgressMoveTask(AvHAIMoveTask* MoveTask)
