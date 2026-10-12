@@ -656,15 +656,14 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 
 	if (dtStatusSucceed(Result))
 	{
-		float AdjustDistance = MaxDistanceFromWall - HitDist;
+		const float AdjustDistance = MaxDistanceFromWall - HitDist;
 
-		Vector HitPosVector = Vector(HitPos[0], -HitPos[2], HitPos[1]);
+		const Vector HitPosVector = UTIL_VecDetourToGoldSrc(HitPos);
+		const Vector HitNormVector = UTIL_VecDetourToGoldSrc(HitNorm);
 
-		Vector AdjustDir = (HitDist > 0.1f) ? UTIL_GetVectorNormal2D(Location - HitPosVector) : Vector(HitNorm[0], -HitNorm[2], HitNorm[1]);
+		Vector AdjustDir = (HitDist > 0.1f) ? UTIL_GetVectorNormal2D(Location - HitPosVector) : HitNormVector;
 
 		Vector AdjustLocation = Location + (AdjustDir * AdjustDistance);
-
-		float AdjustLoc[3] = { AdjustLocation.x, AdjustLocation.z, -AdjustLocation.y };
 
 		if (AIMESH_QuickTraceNavLine(NavProfile, Location, AdjustLocation, 0.1f))
 		{
