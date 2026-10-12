@@ -281,6 +281,8 @@ Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const 
 
 bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, AvHAIPath* ResultPath, float MaxAcceptableDistance);
 
+edict_t* AINAV_GetMovementObjectForPathNode(AvHAIPathNode* PathNode);
+
 Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination);
 
 Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const edict_t* LiftReference);
@@ -311,7 +313,7 @@ bool AINAV_IsOffJumpNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 bool AINAV_IsOffPlatformNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
 bool AINAV_IsOffPhaseGateNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
 
-Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const AvHAIPath* Path);
+Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const Vector& DesiredMoveDirection, const AvHAIPath* Path);
 
 // From the given start point, determine how high up the bot needs to climb to get to climb end. Will allow the bot to climb over railings
 float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);

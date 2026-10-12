@@ -23,7 +23,7 @@ bool AvHAIPlayer::HasValidPath() const
 
 bool AvHAIPlayer::IsOnGround() const
 {
-	return (!FNullEnt(Edict) && ((Edict->v.flags & FL_ONGROUND) || IsOnLadder()));
+	return (!FNullEnt(Edict) && (Edict->v.flags & FL_ONGROUND));
 }
 
 bool AvHAIPlayer::IsOnLadder() const
@@ -271,7 +271,7 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 
 void AvHAIPlayer::Jump(bool bDuckJump)
 {
-	if (IsOnGround())
+	if (IsOnGround() || IsOnLadder())
 	{
 		if (gpGlobals->time - BotNavInfo.LandedTime >= 0.1f)
 		{
@@ -900,7 +900,7 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	if (vIsZero(NextFrameMovementInput.RequiredLookLocation) && vIsZero(NextFrameMovementInput.DesiredLookLocation))
 	{
-		Vector FurthestView = AINAV_GetFurthestVisiblePointOnPath(GetEyePosition(), Path);
+		Vector FurthestView = AINAV_GetFurthestVisiblePointOnPath(GetEyePosition(), NextFrameMovementInput.DesiredMoveDirection, Path);
 
 		if (vIsZero(FurthestView) || vDist2DSq(FurthestView, GetEyePosition()) < sqrf(200.0f))
 		{
@@ -986,6 +986,11 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
 
+	if (IsOnLadder())
+	{
+		Jump(false);
+	}
+
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
 	const Vector CurrentPos = (IsOnGround()) ? GetLocation() : UTIL_GetFloorUnderEntity(Edict);
@@ -1070,6 +1075,11 @@ bool AvHAIPlayer::NewFallMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
 
+	if (IsOnLadder())
+	{
+		Jump(false);
+	}
+
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
 	const Vector AIPlayerLocation = GetLocation();
@@ -1106,6 +1116,11 @@ bool AvHAIPlayer::NewFallMove(AvHAIPath* Path)
 bool AvHAIPlayer::NewJumpMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
+
+	if (IsOnLadder())
+	{
+		Jump(false);
+	}
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
@@ -1154,22 +1169,7 @@ bool AvHAIPlayer::NewLadderMove(AvHAIPath* Path)
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
-	bool bIsGoingUpLadder = (CurrentPathNode->FromLocation.z < CurrentPathNode->ToLocation.z);
-	bool bAtAppropriateClimbHeight = (bIsGoingUpLadder) ? (GetLocation().z >= CurrentPathNode->RequiredClimbZ) : (GetLocation().z <= CurrentPathNode->RequiredClimbZ);
-
-	const NavAgentProfile* NavProfile = GetNavProfile();
-
-	if (!IsOnLadder())
-	{
-		if (!IsOnGround() || AINAV_IsPointDirectlyReachable(NavProfile, GetBottomOfHitbox(), CurrentPathNode->ToLocation))
-		{
-			return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
-		}
-		else
-		{
-			return NewMountLadderMove(Path);
-		}
-	}
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
 	const Vector BotLocation = GetLocation();
 	const Vector BotEyePosition = GetEyePosition();
@@ -1177,9 +1177,83 @@ bool AvHAIPlayer::NewLadderMove(AvHAIPath* Path)
 	const Vector CollisionTopLocation = GetTopOfHitbox();
 	const float PlayerRadius = GetPlayerRadius();
 
+	const bool bIsUpwardsLadderMove = (CurrentPathNode->FromLocation.z < CurrentPathNode->ToLocation.z);
+
+	if (bIsUpwardsLadderMove)
+	{
+		return NewClimbUpLadderMove(Path);
+	}
+	else
+	{
+		return NewClimbDownLadderMove(Path);
+	}
+}
+
+bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
+{
+	if (!Path || !Path->IsValidPath()) { return false; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	const Vector BotLocation = GetLocation();
+	const Vector CollisionTopLocation = GetTopOfHitbox();
+	const Vector CollisionBottomLocation = GetBottomOfHitbox();
+
 	edict_t* CurrentLadder = UTIL_GetNearestLadderAtPoint(BotLocation);
+
+	if (FNullEnt(CurrentLadder))
+	{
+		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
 	Vector LadderTop = UTIL_GetCentreOfEntity(CurrentLadder);
 	LadderTop.z = CurrentLadder->v.absmax.z;
+
+	if (!UTIL_QuickHullTrace(Edict, BotLocation, CollisionTopLocation, GetPlayerHull(false)))
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+	}
+
+	if (!IsOnLadder())
+	{
+		if (IsOnGround())
+		{
+			if (AINAV_IsPointDirectlyReachable(GetNavProfile(), CollisionBottomLocation, CurrentPathNode->ToLocation))
+			{
+				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+
+				if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+				{
+					NextFrameMovementInput.bShouldCrouch = true;
+				}
+
+				return true;
+			}
+
+			return NewMountLadderMove(Path);
+		}
+
+		if (BotLocation.z >= CurrentPathNode->ToLocation.z)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+			NextFrameMovementInput.DesiredLookLocation = CurrentPathNode->ToLocation;
+
+			if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+			{
+				NextFrameMovementInput.bShouldCrouch = true;
+			}
+
+			return true;
+		}
+
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(LadderTop - GetLocation());
+		NextFrameMovementInput.RequiredLookLocation = LadderTop;
+
+		return true;
+	}
 
 	// We're on the ladder and actively climbing
 
@@ -1192,118 +1266,57 @@ bool AvHAIPlayer::NewLadderMove(AvHAIPath* Path)
 
 	if (vIsZero(CurrentLadderNormal))
 	{
-		if (CurrentPathNode->ToLocation.z > CurrentPathNode->FromLocation.z)
-		{
-			CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentPathNode->FromLocation - CurrentPathNode->ToLocation);
-		}
-		else
-		{
-			CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
-		}
+		CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentPathNode->FromLocation - CurrentPathNode->ToLocation);
 	}
 
 	const Vector LadderRightNormal = UTIL_GetVectorNormal(UTIL_GetCrossProduct(CurrentLadderNormal, UP_VECTOR));
 
-	Vector ClimbRightNormal = (bIsGoingUpLadder) ? -LadderRightNormal : LadderRightNormal;
+	Vector ClimbRightNormal = -LadderRightNormal;
+	Vector ClimbDir = -CurrentLadderNormal;
 
-	Vector ClimbDir = (bIsGoingUpLadder) ? -CurrentLadderNormal : CurrentLadderNormal;
-
-	Vector DisembarkDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+	Vector DisembarkDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
 	float DisembarkDot = UTIL_GetDotProduct2D(CurrentLadderNormal, DisembarkDir);
 
 	float DesiredClimbHeight = CurrentPathNode->RequiredClimbZ;
 
 	if (DisembarkDot > 0.75f)
 	{
-		float JumpDist = vDist2DSq(GetLocation(), CurrentPathNode->ToLocation);
+		float JumpDist = vDist2DSq(BotLocation, CurrentPathNode->ToLocation);
 
 		float ExtraClimbHeight = (JumpDist > sqrf(2.0f)) ? 100.0f : 50.0f;
 
-		DesiredClimbHeight = fminf((CurrentPathNode->RequiredClimbZ + ExtraClimbHeight), LadderTop.z + GetPlayerOriginOffsetFromFloor(Edict, true).z);
+		DesiredClimbHeight = fminf((CurrentPathNode->RequiredClimbZ + ExtraClimbHeight), LadderTop.z);
 	}
 
-	// First check if we should dismount the ladder
-
-	bIsGoingUpLadder = BotLocation.z < DesiredClimbHeight;
-
-	if (bIsGoingUpLadder)
+	// We've reached the end of the ladder, try and make it to the disembark point if we can
+	if (LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z >= DesiredClimbHeight)
 	{
-		bool bReachingDisembarkPoint = CurrentPathNode->ToLocation.z - CollisionTopLocation.z < 8.0f;
-
-		if (!UTIL_QuickHullTrace(Edict, BotLocation, CollisionTopLocation, GetPlayerHull(false)))
+		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
 		{
 			NextFrameMovementInput.bShouldCrouch = true;
 		}
-		else
-		{
-			const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
 
-			if (NextPathNode && NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
-			{
-				if (bReachingDisembarkPoint)
-				{
-					NextFrameMovementInput.bShouldCrouch = true;
-				}
-			}
+		if (DisembarkDot > 0.75f)
+		{
+			Jump(true);
+			return true;
 		}
 
-		bool bAttemptDisembark = LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z > DesiredClimbHeight;
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+		NextFrameMovementInput.RequiredLookLocation = (GetEyePosition() + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
 
-		if (!bAttemptDisembark && DisembarkDot < 0.75f)
-		{
-			if (CurrentPathNode->ToLocation.z > CollisionBottomLocation.z && CurrentPathNode->ToLocation.z < CollisionTopLocation.z)
-			{
-				enum_hull PlayerHull = GetPlayerHull(IsCrouching());
-
-				Vector TraceEnd = CurrentPathNode->ToLocation;
-				TraceEnd.z = BotLocation.z;
-
-				bAttemptDisembark = UTIL_QuickHullTrace(Edict, BotLocation, TraceEnd, PlayerHull);
-			}
-
-			// We've reached the end of the ladder, try and make it to the disembark point if we can
-			if (bAttemptDisembark)
-			{
-				NextFrameMovementInput.DesiredMoveDirection = DisembarkDir;
-
-				const Vector DesiredLookTarget = (BotEyePosition + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
-
-				NextFrameMovementInput.RequiredLookLocation = DesiredLookTarget;
-
-				if (DisembarkDot > 0.75f)
-				{
-					Jump(true);
-				}
-
-				return true;
-			}
-		}
-	}
-	else
-	{
-		bool bDesiredGoingDownLadder = CurrentPathNode->FromLocation.z > CurrentPathNode->ToLocation.z;
-
-		if (bDesiredGoingDownLadder && (BotLocation.z <= DesiredClimbHeight || (CollisionBottomLocation.z - CurrentPathNode->ToLocation.z < 100.0f)))
-		{
-			// We're close enough to the end that we can jump off the ladder
-			if (UTIL_QuickTrace(Edict, CollisionTopLocation, CurrentPathNode->ToLocation))
-			{
-				MoveToWithoutNav(CurrentPathNode->ToLocation);
-				Jump(true);
-				return true;
-			}
-		}
+		return true;
 	}
 
 	// Still climbing
 
-	Vector TraceStartPosition = (bIsGoingUpLadder) ? CollisionTopLocation : CollisionBottomLocation;
+	Vector TraceStartPosition = CollisionTopLocation;
 
-	Vector StartLeftTrace = TraceStartPosition - (ClimbRightNormal * PlayerRadius);
-	Vector StartRightTrace = TraceStartPosition + (ClimbRightNormal * PlayerRadius);
+	Vector StartLeftTrace = TraceStartPosition - (ClimbRightNormal * GetPlayerRadius());
+	Vector StartRightTrace = TraceStartPosition + (ClimbRightNormal * GetPlayerRadius());
 
-	Vector EndLeftTrace = (bIsGoingUpLadder) ? StartLeftTrace + Vector(0.0f, 0.0f, 2.0f) : StartLeftTrace - Vector(0.0f, 0.0f, 2.0f);
-	Vector EndRightTrace = (bIsGoingUpLadder) ? StartRightTrace + Vector(0.0f, 0.0f, 2.0f) : StartRightTrace - Vector(0.0f, 0.0f, 2.0f);
+	Vector EndLeftTrace = StartLeftTrace + Vector(0.0f, 0.0f, 2.0f);
+	Vector EndRightTrace =StartRightTrace + Vector(0.0f, 0.0f, 2.0f);
 
 	bool bBlockedLeft = !UTIL_QuickTrace(Edict, StartLeftTrace, EndLeftTrace);
 	bool bBlockedRight = !UTIL_QuickTrace(Edict, StartRightTrace, EndRightTrace);
@@ -1314,48 +1327,173 @@ bool AvHAIPlayer::NewLadderMove(AvHAIPath* Path)
 	if (bBlockedLeft && !bBlockedRight)
 	{
 		Vector LookLocation = BotLocation - (CurrentLadderNormal * 50.0f);
-		LookLocation.z = CurrentPathNode->RequiredClimbZ + 100.0f;
-
+		LookLocation.z = DesiredClimbHeight + 100.0f;
 		NextFrameMovementInput.RequiredLookLocation = LookLocation;
 		NextFrameMovementInput.DesiredMoveDirection = ClimbRightNormal;
-
 		return true;
 	}
 
 	if (bBlockedRight && !bBlockedLeft)
 	{
 		Vector LookLocation = BotLocation - (CurrentLadderNormal * 50.0f);
-		LookLocation.z = CurrentPathNode->RequiredClimbZ + 100.0f;
-
+		LookLocation.z = DesiredClimbHeight + 100.0f;
 		NextFrameMovementInput.RequiredLookLocation = LookLocation;
 		NextFrameMovementInput.DesiredMoveDirection = -ClimbRightNormal;
-
 		return true;
-	}
-
-	if (CanCrouch())
-	{
-		Vector HeadTraceLocation = CollisionTopLocation;
-
-		bool bHittingHead = !UTIL_QuickTrace(Edict, HeadTraceLocation, HeadTraceLocation + Vector(0.0f, 0.0f, 2.0f));
-
-		if (bHittingHead)
-		{
-			NextFrameMovementInput.bShouldCrouch = true;
-		}
 	}
 
 	NextFrameMovementInput.DesiredMoveDirection = ClimbDir;
 
 	Vector LookTarget = CurrentPathNode->ToLocation;
-
-	if (bIsGoingUpLadder)
-	{
-		LookTarget = LadderTop + (ClimbDir * 50.0f);
-		LookTarget.z = DesiredClimbHeight + 50.0f;
-	}
+	LookTarget = LadderTop + (ClimbDir * 50.0f);
+	LookTarget.z = DesiredClimbHeight + 50.0f;
 
 	NextFrameMovementInput.RequiredLookLocation = LookTarget;
+
+	return true;
+}
+
+bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
+{
+	if (!Path || !Path->IsValidPath()) { return false; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
+
+	const Vector BotLocation = GetLocation();
+	const Vector CollisionTopLocation = GetTopOfHitbox();
+	const Vector CollisionBottomLocation = GetBottomOfHitbox();
+
+	edict_t* CurrentLadder = UTIL_GetNearestLadderAtPoint(BotLocation);
+
+	if (FNullEnt(CurrentLadder))
+	{
+		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
+	Vector LadderBottom = UTIL_GetCentreOfEntity(CurrentLadder);
+	LadderBottom.z = CurrentLadder->v.absmin.z;
+
+	if (!IsOnLadder())
+	{
+		if (IsOnGround())
+		{
+			if (AINAV_IsPointDirectlyReachable(GetNavProfile(), CollisionBottomLocation, CurrentPathNode->ToLocation))
+			{
+				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+
+				if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+				{
+					NextFrameMovementInput.bShouldCrouch = true;
+				}
+
+				return true;
+			}
+
+			return NewMountLadderMove(Path);
+		}
+
+		if (BotLocation.z >= CurrentPathNode->RequiredClimbZ)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+
+			if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+			{
+				NextFrameMovementInput.bShouldCrouch = true;
+			}
+
+			return true;
+		}
+
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(LadderBottom - GetLocation());
+		NextFrameMovementInput.RequiredLookLocation = LadderBottom;
+
+		return true;
+	}
+
+	// We're on the ladder and actively climbing
+
+	Vector LadderNormalCheck = CollisionBottomLocation + Vector(0.0f, 0.0f, 18.0f);
+	LadderNormalCheck = LadderNormalCheck + UTIL_GetVectorNormal2D(LadderNormalCheck - LadderBottom);
+
+	Vector CurrentLadderNormal = UTIL_GetNearestLadderNormal(LadderNormalCheck);
+
+	CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentLadderNormal);
+
+	if (vIsZero(CurrentLadderNormal))
+	{
+		CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentPathNode->FromLocation - CurrentPathNode->ToLocation);
+	}
+
+	const Vector LadderRightNormal = UTIL_GetVectorNormal(UTIL_GetCrossProduct(CurrentLadderNormal, UP_VECTOR));
+
+	Vector ClimbRightNormal = LadderRightNormal;
+	Vector ClimbDir = CurrentLadderNormal;
+
+	Vector DisembarkDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+	float DisembarkDot = UTIL_GetDotProduct2D(CurrentLadderNormal, DisembarkDir);
+
+	float DesiredClimbHeight = CurrentPathNode->RequiredClimbZ;
+
+	if (DisembarkDot > 0.75f)
+	{
+		float JumpDist = vDist2DSq(BotLocation, CurrentPathNode->ToLocation);
+
+		float ExtraClimbHeight = (JumpDist > sqrf(2.0f)) ? 100.0f : 50.0f;
+
+		DesiredClimbHeight = fmaxf((CurrentPathNode->RequiredClimbZ + ExtraClimbHeight), LadderBottom.z + GetPlayerOriginOffsetFromFloor(Edict, true).z);
+	}
+
+	if (BotLocation.z <= DesiredClimbHeight || CollisionBottomLocation.z - NextPathNode->ToLocation.z < 100.0f || fabsf(CollisionBottomLocation.z - LadderBottom.z) <= 2.0f)
+	{
+		// We're close enough to the end that we can jump off the ladder
+		if (UTIL_QuickTrace(Edict, CollisionTopLocation, NextPathNode->ToLocation))
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+			Jump(true);
+			return true;
+		}
+	}
+
+	// Still climbing
+
+	Vector TraceStartPosition = CollisionBottomLocation;
+
+	Vector StartLeftTrace = TraceStartPosition - (ClimbRightNormal * GetPlayerRadius());
+	Vector StartRightTrace = TraceStartPosition + (ClimbRightNormal * GetPlayerRadius());
+
+	Vector EndLeftTrace = StartLeftTrace - Vector(0.0f, 0.0f, 2.0f);
+	Vector EndRightTrace = StartRightTrace - Vector(0.0f, 0.0f, 2.0f);
+
+	bool bBlockedLeft = !UTIL_QuickTrace(Edict, StartLeftTrace, EndLeftTrace);
+	bool bBlockedRight = !UTIL_QuickTrace(Edict, StartRightTrace, EndRightTrace);
+
+	// Look up at the top of the ladder
+
+	// If we are blocked going up the ladder, face the ladder and slide left/right to avoid blockage
+	if (bBlockedLeft && !bBlockedRight)
+	{
+		Vector LookLocation = BotLocation - (CurrentLadderNormal * 50.0f);
+		LookLocation.z = DesiredClimbHeight + 100.0f;
+		NextFrameMovementInput.RequiredLookLocation = LookLocation;
+		NextFrameMovementInput.DesiredMoveDirection = ClimbRightNormal;
+		return true;
+	}
+
+	if (bBlockedRight && !bBlockedLeft)
+	{
+		Vector LookLocation = BotLocation - (CurrentLadderNormal * 50.0f);
+		LookLocation.z = DesiredClimbHeight + 100.0f;
+		NextFrameMovementInput.RequiredLookLocation = LookLocation;
+		NextFrameMovementInput.DesiredMoveDirection = -ClimbRightNormal;
+		return true;
+	}
+
+	NextFrameMovementInput.DesiredMoveDirection = ClimbDir;
+	NextFrameMovementInput.RequiredLookLocation = CurrentPathNode->ToLocation;
 
 	return true;
 }
@@ -1395,6 +1533,7 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 	if (bMountingFromTop && !IsCrouching())
 	{
 		NextFrameMovementInput.bShouldWalk = true;
+		NextFrameMovementInput.RequiredLookLocation = CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotCurrentLocation) * 100.0f);
 	}
 
 	NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(MountPoint - BotCurrentLocation);
@@ -1406,12 +1545,22 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
 
+	if (IsOnLadder())
+	{
+		Jump(false);
+	}
+
 	return true;
 }
 
 bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
+
+	if (IsOnLadder())
+	{
+		Jump(false);
+	}
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 

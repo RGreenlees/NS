@@ -495,7 +495,7 @@ Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, 
 
 	if (!GrenadeHasPath) { return ZERO_VECTOR; }
 
-	Vector FurthestPointVisible = AINAV_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), &CheckPath);
+	Vector FurthestPointVisible = AINAV_GetFurthestVisiblePointOnPath(GetPlayerEyePosition(Player), ZERO_VECTOR, &CheckPath);
 
 	if (vDist3DSq(FurthestPointVisible, TargetLocation) <= sqrf(ExplosionRadius))
 	{

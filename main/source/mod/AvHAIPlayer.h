@@ -325,9 +325,11 @@ struct AvHAIPlayer
 	bool NewFallMove(AvHAIPath* Path);
 	bool NewJumpMove(AvHAIPath* Path);
 	bool NewLadderMove(AvHAIPath* Path);
+	bool NewMountLadderMove(AvHAIPath* Path);
+	bool NewClimbUpLadderMove(AvHAIPath* Path);
+	bool NewClimbDownLadderMove(AvHAIPath* Path);
 	bool NewPlatformMove(AvHAIPath* Path);
 	bool NewPhaseGateMove(AvHAIPath* Path);
-	bool NewMountLadderMove(AvHAIPath* Path);
 
 	void HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
 

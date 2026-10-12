@@ -480,30 +480,7 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 			NextPathNode.ToLocation.z += Offset;
 		}
 
-		if (CurrFlags == EAINavMovementFlag::NAV_FLAG_PLATFORM)
-		{
-			const DynamicMapObject* PlatformRef = AIMAP_GetClosestPlatformToPoints(NextPathNode.FromLocation, NextPathNode.ToLocation);
-
-			if (PlatformRef)
-			{
-				NextPathNode.MovementObject = PlatformRef->Edict;
-			}
-		}
-		else if (CurrFlags == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 || CurrFlags == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2)
-		{
-			const bool bIsTeamOne = (CurrFlags == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
-
-			StructureSearchFilter PGFilter;
-			PGFilter.DeployableTeam = (bIsTeamOne) ? GetGameRules()->GetTeamA()->GetTeamNumber() : GetGameRules()->GetTeamB()->GetTeamNumber();
-			PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
-			PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
-			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
-
-			if (const AvHAIBuildableStructure* MatchingPhaseGate = AITAC_FindSingleMatchingStructure(NextPathNode.FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST))
-			{
-				NextPathNode.MovementObject = MatchingPhaseGate->Edict;
-			}
-		}
+		NextPathNode.MovementObject = AINAV_GetMovementObjectForPathNode(&NextPathNode);
 
 		EnumAddFlags(ResultPath->RequiredMoveFlags, CurrFlags);
 
@@ -523,7 +500,6 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 			{
 				NextPathNode.RequiredClimbZ += 5.0f;
 			}
-
 		}
 		else
 		{
@@ -562,6 +538,39 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 	ResultPath->UsedNavMesh = NavProfile->MeshIndex;
 
 	return true;
+}
+
+edict_t* AINAV_GetMovementObjectForPathNode(AvHAIPathNode* PathNode)
+{
+	if (!PathNode || !PathNode->IsValidMove()) { return nullptr; }
+
+	switch (PathNode->MovementFlag)
+	{
+		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
+		{
+			const DynamicMapObject* PlatformRef = AIMAP_GetClosestPlatformToPoints(PathNode->FromLocation, PathNode->ToLocation);
+
+			return (PlatformRef && PlatformRef->IsValid()) ? PlatformRef->Edict : nullptr;
+		}
+
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+		{
+			const bool bIsTeamOne = (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
+			StructureSearchFilter PGFilter;
+			PGFilter.DeployableTeam = (bIsTeamOne) ? GetGameRules()->GetTeamA()->GetTeamNumber() : GetGameRules()->GetTeamB()->GetTeamNumber();
+			PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+			PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
+			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
+
+			const AvHAIBuildableStructure* MatchingPhaseGate = AITAC_FindSingleMatchingStructure(PathNode->FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
+
+			return (MatchingPhaseGate && MatchingPhaseGate->IsValid()) ? MatchingPhaseGate->Edict : nullptr;
+		}
+
+		default:
+			return nullptr;
+	}
 }
 
 Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination)
@@ -1181,8 +1190,7 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 		}
 	}
 
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->v.absmin, AIPlayer->v.absmax)
-		|| (vDist2DSq(AIPlayer->v.origin, CurrentPathNode->ToLocation) < sqrf(GetPlayerRadius(AIPlayer) * 2.0f));
+	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->v.absmin, AIPlayer->v.absmax);
 }
 
 bool AINAV_IsLadderMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
@@ -1375,7 +1383,7 @@ Vector AINAV_GetLadderMountPoint(const edict_t* MountLadder, const Vector StartP
 	return MountPoint;
 }
 
-Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const AvHAIPath* Path)
+Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const Vector& DesiredMoveDirection, const AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return ZERO_VECTOR; }
 
@@ -1386,6 +1394,13 @@ Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const A
 		const AvHAIPathNode* CheckNode = Path->GetNodeAtIndex(i);
 
 		if (!CheckNode || !CheckNode->IsValidMove()) { continue; }
+
+		const bool bCheckMoveDirection = !vIsZero(DesiredMoveDirection);
+
+		if (bCheckMoveDirection && UTIL_GetDotProduct2D(UTIL_GetVectorNormal2D(CheckNode->ToLocation - ViewerLocation), DesiredMoveDirection) < 0.0f)
+		{
+			continue;
+		}
 
 		if (UTIL_QuickTrace(NULL, ViewerLocation, CheckNode->ToLocation))
 		{
