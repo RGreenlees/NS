@@ -480,8 +480,6 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 			NextPathNode.ToLocation.z += Offset;
 		}
 
-		NextPathNode.MovementObject = AINAV_GetMovementObjectForPathNode(&NextPathNode);
-
 		EnumAddFlags(ResultPath->RequiredMoveFlags, CurrFlags);
 
 		// End alignment to floor
@@ -519,6 +517,8 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		CurrArea = static_cast<EAINavArea>(dtCurrArea);
 
 		NodeFromLocation = NextPathNode.ToLocation;
+
+		NextPathNode.MovementObject = AINAV_GetMovementObjectForPathNode(&NextPathNode);
 
 		ResultPath->PathNodes.push_back(NextPathNode);
 	}
@@ -990,14 +990,16 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 
 	if (!AIMAP_PlatformNeedsActivating(NavProfile, PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation)) { return false; }
 
-	const DynamicMapObjectStop* DesiredEmbarkStop = nullptr;
-	const DynamicMapObjectStop* DesiredDisembarkStop = nullptr;
+	DynamicMapObjectStop DesiredEmbarkStop;
+	DynamicMapObjectStop DesiredDisembarkStop;
 
-	AIMAP_GetDesiredPlatformStops(PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
+	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
+
+	if (!bFoundStops) { return false; }
 
 	const DynamicMapObject* Trigger = nullptr;
 
-	if (DesiredEmbarkStop && vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop->StopLocation, 5.0f))
+	if (vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop.StopLocation, 5.0f))
 	{
 		Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformRef, ImpactedPathNode->FromLocation.z + 32.0f);
 	}

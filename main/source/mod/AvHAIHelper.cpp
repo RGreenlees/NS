@@ -479,7 +479,7 @@ void UTIL_DrawLine(edict_t* pEntity, Vector start, Vector end, int r, int g, int
 	WRITE_BYTE(g);           // r, g, b
 	WRITE_BYTE(b);            // r, g, b
 
-	WRITE_BYTE(250);      // brightness
+	WRITE_BYTE(50);      // brightness
 	WRITE_BYTE(5);           // speed
 	MESSAGE_END();
 }

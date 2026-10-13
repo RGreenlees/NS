@@ -127,6 +127,7 @@ bool vIntersects2D(const Vector LineAStart, const Vector LineAEnd, const Vector 
 
 
 Vector vClosestPointOnBB(const Vector Point, const Vector MinBB, const Vector MaxBB);
+Vector vClosestPointOnBB2D(const Vector Point, const Vector MinBB, const Vector MaxBB);
 
 void vScaleBB(Vector& MinBB, Vector& MaxBB, const float Scale);
 
@@ -183,6 +184,9 @@ Vector GetPitchForProjectile(Vector LaunchPoint, Vector TargetPoint, const float
 // Confirms if the given point is on the inside of a frustum plane or not
 bool UTIL_PointInsidePlane(const AvHBotViewFrustumPlane* plane, const Vector point);
 
+// Returns the required launch unit vector needed to hit the target point from launch point, taking projectile speed and gravity into account
+Vector vGetLaunchAngleForProjectile(Vector LaunchPoint, Vector TargetPoint, const float ProjectileSpeed, const float Gravity);
+
 /* Tests to see if the defined cylinder is intersecting with the supplied frustum plane.
 
    Since players are always upright, it is reasonable to assume that it is impossible for both the
@@ -210,5 +214,11 @@ unsigned int UTIL_CountSetBitsInInteger(unsigned int n);
 float UTIL_CalculateSlopeAngleBetweenPoints(const Vector StartPoint, const Vector EndPoint);
 
 bool vlineIntersectsAABB(Vector lineStart, Vector lineEnd, Vector BoxMinPosition, Vector BoxMaxPosition);
+Vector vClampPointToAABBEdge(const Vector Point, const Vector bbMin, const Vector bbMax);
+Vector vClampPointToAABBEdge2D(const Vector Point, const Vector bbMin, const Vector bbMax);
+bool vPointInsideAABB2D(const Vector Point, const Vector bbMin, const Vector bbMax);
+Vector vClosestPointOnAABB(const Vector Point, const Vector bbMin, const Vector bbMax);
+
+Vector vClosestPointOnBB2D(const Vector Point, const Vector MinBB, const Vector MaxBB);
 
 #endif

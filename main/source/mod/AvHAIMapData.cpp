@@ -301,6 +301,8 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 		NewObject.Master = MasterEdict->edict();
 	}
 
+	const Vector PlatformCentre = UTIL_GetCentreOfEntity(PlatObject);
+
 	NewObject.ObjectName = STRING(NewObject.Edict->v.targetname);
 	NewObject.Triggers.clear();
 	NewObject.Wait = PlatRef->m_flWait;
@@ -308,16 +310,18 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 	NewObject.Type = EAIDynamicMapObjectType::MAPOBJECT_PLATFORM;
 
 	DynamicMapObjectStop FirstStop;
-	FirstStop.StopLocation = PlatRef->m_vecPosition1;
+	FirstStop.StopLocation = PlatformCentre;
 	FirstStop.WaitTime = 0.0f;
 	FirstStop.bWaitForRetrigger = true;
 
 	NewObject.StopPoints.push_back(FirstStop);
 
 	DynamicMapObjectStop SecondStop;
-	SecondStop.StopLocation = PlatRef->m_vecPosition2;
+	SecondStop.StopLocation = PlatformCentre + Vector(0.0f, 0.0f, PlatRef->m_flHeight);
 	SecondStop.WaitTime = 3.0f;
 	SecondStop.bWaitForRetrigger = (NewObject.Edict->v.spawnflags & SF_PLAT_TRIGGER_ONLY);
+
+	NewObject.StopPoints.push_back(SecondStop);
 
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
 
@@ -332,8 +336,6 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 	}
 
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
-
-	NewObject.StopPoints.push_back(SecondStop);
 
 	if (CBaseEntity* Target = PlatRef->GetNextTarget())
 	{
@@ -654,7 +656,7 @@ void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject)
 
 void AIMAP_UpdateDynamicPlatformObject(DynamicMapObject* PlatformObject)
 {
-	if (!PlatformObject || FNullEnt(PlatformObject->Edict)) { return; }
+	if (!PlatformObject || !PlatformObject->IsValid()) { return; }
 
 	CBaseToggle* PlatRef = dynamic_cast<CBaseToggle*>(CBaseEntity::Instance(PlatformObject->Edict));
 
@@ -890,10 +892,14 @@ void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, EAIDynamicMapObjectS
 
 void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 {
+	if (!Object || !Object->IsValid()) { return; }
+
 	// Object will not move again, so block off all connections permanently, and place null obstacles to block nav mesh
 	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_STATIC)
 	{
 		AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_NULL);
+
+		if (Object->StopPoints.empty()) { return; }
 
 		int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
@@ -907,11 +913,13 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 		return;
 	}
 
+	if (Object->StopPoints.empty()) { return; }
+
 	// Door is not permanently blocking anything and can still be activated. We need to do a more nuanced take on how connections are modified
 	// The idea is that if a connection is one-way, we detect how we can activate the door from that side and modify the connection flag accordingly
 	// Two-way connections will end up being treated like a one-way connection, so use 2 one-way connections if a door requires different capabilities for each side!
 
-	int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
+	const int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
 	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
 
@@ -1341,7 +1349,7 @@ const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint
 
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
-		if (it->Type != EAIDynamicMapObjectType::MAPOBJECT_DOOR && it->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM) { continue; }
+		if (it->Type != EAIDynamicMapObjectType::MAPOBJECT_DOOR && it->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM && it->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN) { continue; }
 
 		float distTopPoint = FLT_MAX;
 		float distBottomPoint = FLT_MAX;
@@ -1457,11 +1465,6 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 {
 	if (!Object || FNullEnt(Object->Edict)) { return; }
 
-	Vector HalfExtents = (Object->Edict->v.size * 0.5f);
-	HalfExtents.x += 16.0f;
-	HalfExtents.y += 16.0f;
-	HalfExtents.z += 16.0f;
-
 	const int InvalidIndex = static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 
 	for (int i = 0; i < InvalidIndex; i++)
@@ -1476,17 +1479,7 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 		{
 			Vector ObjectCentre = (*stopIt).StopLocation;
 
-			if (stopIt->AffectedConnections.size() > 0)
-			{
-				for (auto ConnIt = stopIt->AffectedConnections.begin(); ConnIt != stopIt->AffectedConnections.end(); ConnIt++)
-				{
-					NavOffMeshConnection* Connection = (*ConnIt);
-
-					AIMESH_RemoveOffMeshConnection(Connection);
-				}
-
-				stopIt->AffectedConnections.clear();
-			}
+			stopIt->AffectedConnections.clear();
 
 			for (auto it = FoundMesh->MeshConnections.begin(); it != FoundMesh->MeshConnections.end(); it++)
 			{
@@ -1497,7 +1490,6 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 				if (AIMAP_IsOffMeshConnectionAffectedByObject(Object, ObjectCentre, TestConnection))
 				{
 					stopIt->AffectedConnections.push_back(TestConnection);
-					continue;
 				}
 			}
 		}
@@ -1948,29 +1940,29 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 	const DynamicMapObjectStop* CurrentStop = Platform->GetCurrentStop();
 	const DynamicMapObjectStop* PreviousStop = Platform->GetPreviousStop();
 
-	const DynamicMapObjectStop* DesiredEmbarkStop = nullptr;
-	const DynamicMapObjectStop* DesiredDisembarkStop = nullptr;
+	DynamicMapObjectStop DesiredEmbarkStop;
+	DynamicMapObjectStop DesiredDisembarkStop;
 
-	AIMAP_GetDesiredPlatformStops(Platform, EmbarkPoint, DisembarkPoint, DesiredEmbarkStop, DesiredDisembarkStop);
+	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(Platform, EmbarkPoint, DisembarkPoint, DesiredEmbarkStop, DesiredDisembarkStop);
 
-	if (!DesiredEmbarkStop || !DesiredDisembarkStop) { return false; }
+	if (!bFoundStops) { return false; }
 
 	// Platform is at or leaving our desired stop, check if we can get on. If so then we don't need to retrigger
-	if (PreviousStop == DesiredEmbarkStop)
+	if (vEquals(PreviousStop->StopLocation, DesiredEmbarkStop.StopLocation))
 	{
-		if (AIMAP_CanBoardPlatform(NavProfile, Platform, EmbarkPoint, DesiredEmbarkStop->StopLocation)) { return false; }
+		if (AIMAP_CanBoardPlatform(NavProfile, Platform, EmbarkPoint, DesiredEmbarkStop.StopLocation)) { return false; }
 	}
 
 	// If the platform is going to wait at our embark point then we must need to activate it regardless. If we can activate it from the platform then carry on as normal
-	if (DesiredEmbarkStop->bWaitForRetrigger)
+	if (DesiredEmbarkStop.bWaitForRetrigger)
 	{
 		return true;
 	}
 
 	// Platform is coming to our desired stop, we already checked above if we need to retrigger, so now assume it's not needed
-	if (CurrentStop == DesiredEmbarkStop)
+	if (vEquals(CurrentStop->StopLocation, DesiredEmbarkStop.StopLocation))
 	{
-		return DesiredEmbarkStop->bWaitForRetrigger;
+		return DesiredEmbarkStop.bWaitForRetrigger;
 	}
 
 	int32 CurrentIndex = Platform->NextStopIndex;
@@ -1985,15 +1977,15 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 		const DynamicMapObjectStop* PrevStop = &Platform->StopPoints[PrevIndex];
 		const DynamicMapObjectStop* NextStop = &Platform->StopPoints[CurrentIndex];
 
-		if (NextStop == DesiredEmbarkStop)
+		if (vEquals(NextStop->StopLocation, DesiredEmbarkStop.StopLocation))
 		{
-			return DesiredEmbarkStop->bWaitForRetrigger;
+			return DesiredEmbarkStop.bWaitForRetrigger;
 		}
 
-		const Vector ClosestPointOnLine = vClosestPointOnLine(PrevStop->StopLocation, NextStop->StopLocation, DesiredEmbarkStop->StopLocation);
+		const Vector ClosestPointOnLine = vClosestPointOnLine(PrevStop->StopLocation, NextStop->StopLocation, DesiredEmbarkStop.StopLocation);
 
 		// The platform will pass by our desired stop point, so don't need to trigger it
-		if (vEquals(ClosestPointOnLine, DesiredEmbarkStop->StopLocation, 5.0f) && !vEquals(PrevStop->StopLocation, ClosestPointOnLine, 5.0f) && !vEquals(NextStop->StopLocation, ClosestPointOnLine, 5.0f))
+		if (vEquals(ClosestPointOnLine, DesiredEmbarkStop.StopLocation, 5.0f) && !vEquals(PrevStop->StopLocation, ClosestPointOnLine, 5.0f) && !vEquals(NextStop->StopLocation, ClosestPointOnLine, 5.0f))
 		{
 			return false;
 		}
@@ -2013,15 +2005,15 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 	return false;
 }
 
-void AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, const DynamicMapObjectStop* EmbarkStop, const DynamicMapObjectStop* DisembarkStop)
+bool AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, DynamicMapObjectStop& EmbarkStop, DynamicMapObjectStop& DisembarkStop)
 {
-	EmbarkStop = nullptr;
-	DisembarkStop = nullptr;
-
-	if (!PlatformRef) { return; }
+	if (!PlatformRef || !PlatformRef->IsValid()) { return false; }
 
 	float MinStartDist = FLT_MAX;
 	float MinEndDist = FLT_MAX;
+
+	bool bFoundStartStop = false;
+	bool bFoundEndStop = false;
 
 	// Find the desired stop point for us to get onto the lift
 	for (auto it = PlatformRef->StopPoints.begin(); it != PlatformRef->StopPoints.end(); it++)
@@ -2045,16 +2037,20 @@ void AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Ve
 
 		if (ThisStartTouchingDist <= sqrf(100.0f) && ThisStartDist < MinStartDist)
 		{
-			EmbarkStop = ThisStopRef;
+			EmbarkStop = *ThisStopRef;
 			MinStartDist = ThisStartDist;
+			bFoundStartStop = true;
 		}
 
 		if (ThisEndTouchingDist <= sqrf(100.0f) && ThisEndDist < MinEndDist)
 		{
-			DisembarkStop = ThisStopRef;
+			DisembarkStop = *ThisStopRef;
 			MinEndDist = ThisEndDist;
+			bFoundEndStop = true;
 		}
 	}
+
+	return (bFoundStartStop && bFoundEndStop);
 }
 
 Vector AIMAP_GetTriggerFloorLocation(const NavAgentProfile* NavProfile, const DynamicMapObject* TriggerObject, const Vector& UserLocation)

@@ -1356,6 +1356,7 @@ void AITAC_ClearMapAIData()
 	TeamAStructureMap.clear();
 	TeamBStructureMap.clear();
 	ResourceNodes.clear();
+	Hives.clear();
 
 	StructureRefreshFrame = 1;
 	ItemRefreshFrame = 1;

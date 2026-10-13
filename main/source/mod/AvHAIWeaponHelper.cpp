@@ -65,7 +65,7 @@ float GetProjectileVelocityForWeapon(const EAIWeaponId Weapon)
 		case EAIWeaponId::WEAPON_MARINE_GL:
 			return (float)BALANCE_VAR(kGrenadeForce);
 		default:
-			return 0.0f; // Hitscan. We don't bother with bile bomb as it's so short range that it doesn't really need leading the target
+			return 0.0f; // Hitscan.
 	}
 }
 
@@ -404,6 +404,20 @@ float GetMaxIdealWeaponRange(const EAIWeaponId Weapon)
 			return (float)BALANCE_VAR(kWelderRange) + 10.0f;
 		default:
 			return max_player_use_reach;
+	}
+}
+
+bool IsWeaponAffectedByGravity(const EAIWeaponId CheckWeapon)
+{
+	switch (CheckWeapon)
+	{
+		case EAIWeaponId::WEAPON_MARINE_GL:
+		case EAIWeaponId::WEAPON_MARINE_GRENADE:
+		case EAIWeaponId::WEAPON_GORGE_BILEBOMB:
+		case EAIWeaponId::WEAPON_SKULK_LEAP:
+			return true;
+		default:
+			return false;
 	}
 }
 

@@ -274,6 +274,8 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 	{
 		case EAIMovementTaskType::MOVE_TASK_MOVE:
 			return ProgressMoveTask(CurrentMoveTask);
+		case EAIMovementTaskType::MOVE_TASK_BREAK:
+			return ProgressBreakTask(CurrentMoveTask);
 		default:
 			return EAINavMoveResult::NAV_MOVE_NOPATH;
 	}
@@ -612,7 +614,7 @@ bool AvHAIPlayer::UseObject(edict_t* Object, bool bUseContinuously)
 		AimPoint.z = ClosestPoint.z;
 	}
 
-	LookAt(AimPoint);
+	NextFrameMovementInput.RequiredLookLocation = AimPoint;
 
 	if (!bUseContinuously && ((gpGlobals->time - LastUseTime) < min_player_use_interval)) { return false; }
 
@@ -933,6 +935,85 @@ void AvHAIPlayer::HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
 
 }
 
+bool AvHAIPlayer::HasWeapon(EAIWeaponId DesiredWeapon)
+{
+	if (!IsValid()) { return false; }
+
+	return PlayerHasWeapon(Player, DesiredWeapon);
+}
+
+void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
+{
+	if (!UTIL_IsEdictActive(Target) || !PlayerHasWeapon(Player, DesiredWeapon)) { return; }
+
+	const EAIWeaponId CurrentWeapon = GetCurrentWeapon();
+
+	if (IsMeleeWeapon(CurrentWeapon))
+	{
+		LookAt(Target);
+		NextFrameMovementInput.Button |= IN_ATTACK;
+		return;
+	}
+
+	Vector TargetAimDir = ZERO_VECTOR;
+
+	const Vector EyePosition = GetEyePosition();
+
+	if (IsWeaponAffectedByGravity(DesiredWeapon))
+	{
+		Vector AimLocation = UTIL_GetCentreOfEntity(Target);
+
+		const float ProjectileVelocity = GetProjectileVelocityForWeapon(DesiredWeapon);
+
+		Vector NewAimAngle = vGetLaunchAngleForProjectile(EyePosition, AimLocation, ProjectileVelocity, GOLDSRC_GRAVITY);
+
+		AimLocation = EyePosition + (NewAimAngle * 200.0f);
+
+		LookAt(AimLocation);
+		TargetAimDir = UTIL_GetVectorNormal(AimLocation - EyePosition);
+	}
+	else
+	{
+		LookAt(Target);
+		TargetAimDir = UTIL_GetVectorNormal(UTIL_GetCentreOfEntity(Target) - EyePosition);
+	}
+
+	if (CurrentWeapon != DesiredWeapon)
+	{
+		NextFrameMovementInput.DesiredWeapon = DesiredWeapon;
+		return;
+	}
+
+	Vector AimDir = UTIL_GetForwardVector(Edict->v.v_angle);
+
+	bool bWillHit = false;
+
+	float AimDot = UTIL_GetDotProduct(AimDir, TargetAimDir);
+
+	// We can be less accurate with spores and umbra since they have AoE effects
+	float MinAcceptableAccuracy = 0.9f;
+
+	bWillHit = (AimDot >= MinAcceptableAccuracy);
+
+	if (!bWillHit && IsHitscanWeapon(DesiredWeapon))
+	{
+		const edict_t* HitEntity = UTIL_TraceEntity(Edict, EyePosition, EyePosition + (AimDir * GetMaxIdealWeaponRange(DesiredWeapon)));
+
+		bWillHit = (HitEntity == Target);
+	}
+
+	if (bWillHit)
+	{
+		// TODO: Refire timing
+
+		//if ((gpGlobals->time - weapon.LastFireTime) >= pBot->current_weapon.MinRefireTime)
+		//{
+			NextFrameMovementInput.Button |= IN_ATTACK;
+			//pBot->current_weapon.LastFireTime = gpGlobals->time;
+		//}
+	}
+}
+
 void AvHAIPlayer::DEBUG_DrawPath()
 {
 	AvHAIMoveTask* CurrentMoveTask = GetCurrentMoveTask();
@@ -957,6 +1038,36 @@ EAINavMoveResult AvHAIPlayer::ProgressMoveTask(AvHAIMoveTask* MoveTask)
 	}
 
 	return FollowPath(&MoveTask->TaskPath);
+}
+
+EAINavMoveResult AvHAIPlayer::ProgressBreakTask(AvHAIMoveTask* MoveTask)
+{
+	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
+
+	const EAIWeaponId CurrentWeapon = GetCurrentWeapon();
+
+	const EAIAttackResult AttackResult = PerformAttackLOSCheck(GetEyePosition(), CurrentWeapon, MoveTask->TaskTarget);
+
+	if (AttackResult != EAIAttackResult::ATTACK_SUCCESS)
+	{
+		if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != GetNavProfile()->MeshIndex)
+		{
+			const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetEyePosition(), MoveTask->TaskTarget);
+
+			const bool bSuccess = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, GetMaxIdealWeaponRange(CurrentWeapon));
+
+			if (!bSuccess)
+			{
+				return EAINavMoveResult::NAV_MOVE_NOPATH;
+			}
+		}
+
+		return FollowPath(&MoveTask->TaskPath);
+	}
+
+	ShootTarget(MoveTask->TaskTarget, CurrentWeapon);
+
+	return EAINavMoveResult::NAV_MOVE_SUCCESS;
 }
 
 bool AvHAIPlayer::NextSwimMove(AvHAIPath* Path)
@@ -1570,7 +1681,307 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 		Jump(false);
 	}
 
-	return true;
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	const DynamicMapObject* Platform = nullptr;
+
+	if (!FNullEnt(Edict->v.groundentity))
+	{
+		Platform = AIMAP_GetDynamicObjectByEdict(Edict->v.groundentity);
+	}
+
+	if (!Platform || !Platform->IsValid())
+	{
+		Platform = AIMAP_GetDynamicObjectByEdict(CurrentPathNode->MovementObject);
+	}
+
+	if (!Platform || !Platform->IsValid())
+	{
+		return NewGroundMove(Path);
+	}
+
+	const NavAgentProfile* NavProfile = GetNavProfile();
+	const Vector BotLocation = GetLocation();
+	const Vector PlatformPosition = UTIL_GetCentreOfEntity(Platform->Edict);
+
+	DynamicMapObjectStop DesiredStartStop;
+	DynamicMapObjectStop DesiredEndStop;
+
+	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(Platform, CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, DesiredStartStop, DesiredEndStop);
+
+	if (!bFoundStops)
+	{
+		return false;
+	}
+
+	// We are on the lift
+	if (Edict->v.groundentity == Platform->Edict)
+	{
+		return NewRidePlatformMove(Path, Platform->Edict, DesiredEndStop.StopLocation);
+	}
+
+	const Vector CollisionBottomLocation = GetBottomOfHitbox();
+
+	// We have disembarked and just need to head to the end point
+	if (AINAV_IsPointDirectlyReachable(NavProfile, CollisionBottomLocation, CurrentPathNode->ToLocation) || vDist3DSq(CollisionBottomLocation, CurrentPathNode->ToLocation) < sqrf(100.0f))
+	{
+		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
+	int currIndex = Platform->NextStopIndex;
+	int prevIndex = (currIndex == 0) ? Platform->StopPoints.size() - 1 : currIndex - 1;
+
+	int desiredStopIndex = 0;
+
+	const DynamicMapObjectStop* NextStop = Platform->GetNextStop();
+	const DynamicMapObjectStop* PreviousStop = Platform->GetPreviousStop();
+
+	if (AIMAP_PlatformNeedsActivating(NavProfile, Platform, CurrentPathNode->FromLocation, CurrentPathNode->ToLocation))
+	{
+		if (vEquals(PlatformPosition, DesiredStartStop.StopLocation) || (vEquals(NextStop->StopLocation, DesiredStartStop.StopLocation) && Platform->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE))
+		{
+			const DynamicMapObject* PlatTrigger = AIMAP_GetTriggerReachableFromPlatform(Platform, CurrentPathNode->FromLocation.z + 32.0f, DesiredStartStop.StopLocation);
+
+			if (PlatTrigger)
+			{
+				if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+				{
+					return NewBoardPlatformMove(Path, Platform->Edict);
+				}
+			}
+		}
+
+		const DynamicMapObject* BestTrigger = nullptr;
+		bool bForceTrigger = true;
+
+		BestTrigger = AIMAP_GetBestTriggerForObject(NavProfile, Platform, BotLocation);
+
+		if (BestTrigger)
+		{
+			bForceTrigger = false;
+		}
+
+		if (bForceTrigger)
+		{
+			if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+			{
+				for (auto it = Platform->Triggers.begin(); it != Platform->Triggers.end(); it++)
+				{
+					const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
+
+					if (ThisTrigger && ThisTrigger->IsValid() && ThisTrigger->bIsActive && ThisTrigger->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+					{
+						AIMAP_ForceActivateTrigger(this, ThisTrigger);
+						return true;
+					}
+				}
+			}
+			else
+			{
+				AvHAIMoveTask NewDestinationTask;
+
+				const bool bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
+
+				if (bSuccess)
+				{
+					AddMovementTask(NewDestinationTask);
+				}
+
+				return bSuccess;
+			}
+		}
+		else
+		{
+			AvHAIMoveTask NewDestinationTask;
+
+			bool bSuccess = false;
+
+			if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+			{
+				bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), BestTrigger->Edict, Platform->Edict, NewDestinationTask);
+			}
+			else
+			{
+				const Vector ButtonLocation = AIMAP_GetButtonFloorLocation(NavProfile, GetLocation(), BestTrigger->Edict);
+				bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), ButtonLocation, nullptr, NewDestinationTask);
+			}
+
+			if (bSuccess)
+			{
+				AddMovementTask(NewDestinationTask);
+			}
+
+			return bSuccess;
+		}
+	}
+	else
+	{
+		if (AIMAP_CanBoardPlatform(NavProfile, Platform, CurrentPathNode->FromLocation, DesiredStartStop.StopLocation))
+		{
+			return NewBoardPlatformMove(Path, Platform->Edict);
+		}
+		else
+		{
+			AvHAIMoveTask NewDestinationTask;
+
+			const bool bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
+
+			if (bSuccess)
+			{
+				AddMovementTask(NewDestinationTask);
+			}
+
+			return bSuccess;
+		}
+	}
+
+	return false;
+}
+
+bool AvHAIPlayer::NewBoardPlatformMove(AvHAIPath* Path, const edict_t* Platform)
+{
+	if (!Path || !Path->IsValidPath() || !UTIL_IsEdictActive(Platform)) { return false; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
+
+	const Vector BotLocation = GetLocation();
+
+	Vector ClosestPointOnLift = UTIL_GetClosestPointOnEntityToLocation(CurrentPathNode->FromLocation, Platform);
+
+	Vector ClosestPointOnLine = vClosestPointOnLine2D(CurrentPathNode->FromLocation, ClosestPointOnLift, BotLocation);
+
+	if (vEquals2D(ClosestPointOnLine, CurrentPathNode->FromLocation) && vDist2DSq(BotLocation, CurrentPathNode->FromLocation) > sqrf(32.0f))
+	{
+		AvHAIMoveTask NewDestinationTask;
+
+		const bool bSuccess = AINAV_AddMoveMovementTask(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
+
+		if (bSuccess)
+		{
+			AddMovementTask(NewDestinationTask);
+		}
+
+		return bSuccess;
+	}
+	else
+	{
+		return MoveToWithoutNav(UTIL_GetCentreOfEntity(Platform)) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+}
+
+bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, const Vector& DesiredStop)
+{
+	if (!Path || !Path->IsValidPath()) { return false; }
+	if (!UTIL_IsEdictActive(Platform)) { return false; }
+
+	Vector LiftPosition = UTIL_GetCentreOfEntity(Platform);
+
+	bool bLiftHasReachedDestination = false;
+
+	const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Platform);
+
+	if (!PlatformRef || !PlatformRef->IsValid()) { return false; }
+
+	const DynamicMapObjectStop* CurrentLiftStop = PlatformRef->GetCurrentStop();
+	const DynamicMapObjectStop* PreviousLiftStop = PlatformRef->GetPreviousStop();
+
+	if (!CurrentLiftStop) { return false; }
+
+	const bool bCurrentStopIsDisembarkStop = vEquals(CurrentLiftStop->StopLocation, DesiredStop, 5.0f);
+	const bool bPreviousStopIsDisembarkStop = PreviousLiftStop && vEquals(PreviousLiftStop->StopLocation, DesiredStop, 5.0f);
+
+	// Check if we should get off the platform now
+	if (bCurrentStopIsDisembarkStop || bPreviousStopIsDisembarkStop)
+	{
+		const DynamicMapObjectStop* DisembarkStop = bCurrentStopIsDisembarkStop ? CurrentLiftStop : PreviousLiftStop;
+
+		bool bLiftHasReachedDestination = (vDist3DSq(LiftPosition, DisembarkStop->StopLocation) < sqrf(32.0f));
+
+		if (bLiftHasReachedDestination)
+		{
+			Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(GetNavProfile(), GetLocation(), PlatformRef);
+			return MoveToWithoutNav(DisembarkPoint) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
+	}
+
+	// We are riding a moving platform, stay away from the edges so we don't get clipped by something and fall off
+	if (PlatformRef->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING || PlatformRef->State == EAIDynamicMapObjectState::OBJECTSTATE_PREPARING)
+	{
+		float DistToCentre = vDist2DSq(GetLocation(), LiftPosition);
+		// Check we're not already in the middle, we might be on a really small moving platform
+		if (DistToCentre > sqrf(8.0f))
+		{
+			Vector NearestEdgePoint = vClampPointToAABBEdge2D(GetLocation(), Platform->v.absmin, Platform->v.absmax);
+			float DistToEdge = vDist2DSq(NearestEdgePoint, GetLocation());
+			// We're a little too close to the edge of the lift, we might fall off. Move to the centre a bit
+			if (DistToEdge < sqrf(GetPlayerRadius()))
+			{
+				return MoveToWithoutNav(LiftPosition) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+			}
+		}
+
+		return true;
+	}
+
+	const Vector BotLocation = GetLocation();
+
+	// Lift is stopped, we need to reactivate it
+
+	const DynamicMapObject* Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformRef, BotLocation.z, LiftPosition);
+
+	if (Trigger && Trigger->IsValid())
+	{
+		// Self-activated platform, move to the centre
+		if (Trigger == PlatformRef)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(LiftPosition - BotLocation);
+			return true;
+		}
+
+		if (IsPlayerInUseRange(Edict, Trigger->Edict))
+		{
+			UseObject(Trigger->Edict, false);
+			return true;
+		}
+
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(UTIL_GetCentreOfEntity(Trigger->Edict) - BotLocation);
+		NextFrameMovementInput.RequiredLookLocation = UTIL_GetCentreOfEntity(Trigger->Edict);
+
+		return true;
+	}
+
+	const Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(GetNavProfile(), BotLocation, PlatformRef);
+
+	if (!vIsZero(DisembarkPoint))
+	{
+		const DynamicMapObject* DisembarkTrigger = AIMAP_GetBestTriggerForObject(GetNavProfile(), PlatformRef, DisembarkPoint);
+
+		if (DisembarkTrigger && DisembarkTrigger->IsValid())
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(DisembarkPoint - BotLocation);
+			return true;
+		}
+	}
+
+	// We couldn't find a trigger within reach and have nowhere to get off. Use our telepathic powers to re-activate it so we're not trapped forever
+	for (auto it = PlatformRef->Triggers.begin(); it != PlatformRef->Triggers.end(); it++)
+	{
+		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict(*it);
+
+		if (!ThisTrigger || !ThisTrigger->IsValid()) { continue; }
+
+		if (ThisTrigger->bIsActive && ThisTrigger->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+		{
+			AIMAP_ForceActivateTrigger(this, ThisTrigger);
+			return true;
+		}
+	}
+
+	return false;
 }
 
 bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)

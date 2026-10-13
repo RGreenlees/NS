@@ -1416,11 +1416,14 @@ void AIMGR_UpdateAISystem()
 
 	if (!AIMGR_HasMatchEnded())
 	{
+		AIMAP_UpdateDynamicMapObjects();
 		AIMESH_UpdateTileCaches(RecentlyModifiedNavMeshes);
 		AIMGR_UpdateAIMapData();
 	}
 
 	AIMGR_UpdateAIPlayers();
+
+	RecentlyModifiedNavMeshes.clear();
 }
 
 bool AIMGR_HasMatchEnded()

@@ -169,7 +169,7 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vec
 Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const Vector& RiderPosition, const DynamicMapObject* LiftReference);
 const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* PlatformRef);
 bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& EmbarkPoint, const Vector& DisembarkPoint);
-void AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, const DynamicMapObjectStop* EmbarkStop, const DynamicMapObjectStop* DisembarkStop);
+bool AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, DynamicMapObjectStop& EmbarkStop, DynamicMapObjectStop& DisembarkStop);
 bool AIMAP_CanBoardPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& BoardingPoint, const Vector& DesiredStop);
 const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapObject* Platform, float LiftHeight, const Vector& PlatformPosition = ZERO_VECTOR);
 

@@ -126,6 +126,11 @@ Vector vClosestPointOnBB(const Vector Point, const Vector MinBB, const Vector Ma
 	return Vector(clampf(Point.x, MinBB.x, MaxBB.x), clampf(Point.y, MinBB.y, MaxBB.y), clampf(Point.z, MinBB.z, MaxBB.z));
 }
 
+Vector vClosestPointOnBB2D(const Vector Point, const Vector MinBB, const Vector MaxBB)
+{
+	return Vector(clampf(Point.x, MinBB.x, MaxBB.x), clampf(Point.y, MinBB.y, MaxBB.y), Point.z);
+}
+
 void vScaleBB(Vector& MinBB, Vector& MaxBB, const float Scale)
 {
 	Vector Centre = MinBB + ((MaxBB - MinBB) * 0.5f);
@@ -535,7 +540,39 @@ Vector GetPitchForProjectile(Vector LaunchPoint, Vector TargetPoint, const float
 
 	Vector LaunchVector = Vector(unit_vector_x, unit_vector_y, unit_vector_z);
 	return LaunchVector;
+}
 
+Vector vGetLaunchAngleForProjectile(Vector LaunchPoint, Vector TargetPoint, const float ProjectileSpeed, const float Gravity)
+{
+	double start_x = LaunchPoint.x;
+	double start_y = LaunchPoint.y;
+	double start_z = LaunchPoint.z;
+	double target_x = TargetPoint.x;
+	double target_y = TargetPoint.y;
+	double target_z = TargetPoint.z;
+
+	double x = target_x - start_x;
+	double y = target_y - start_y;
+	double z = target_z - start_z;
+
+	double range = sqrt(x * x + y * y);
+
+	double discriminant = pow(ProjectileSpeed, 4) - Gravity * (Gravity * pow(range, 2) + 2 * z * pow(ProjectileSpeed, 2));
+
+	if (discriminant < 0)
+	{
+		return ZERO_VECTOR;
+	}
+
+	double launch_angle = atan((pow(ProjectileSpeed, 2) - sqrt(discriminant)) / (Gravity * range));
+
+	// Calculate the components of the unit vector
+	double unit_vector_x = cos(launch_angle) * cos(atan2(y, x));
+	double unit_vector_y = cos(launch_angle) * sin(atan2(y, x));
+	double unit_vector_z = sin(launch_angle);
+
+	Vector LaunchVector = Vector(unit_vector_x, unit_vector_y, unit_vector_z);
+	return UTIL_GetVectorNormal(LaunchVector);
 }
 
 void UTIL_AnglesToVector(const Vector angles, Vector* fwd, Vector* right, Vector* up)
@@ -878,4 +915,83 @@ bool vlineIntersectsAABB(Vector lineStart, Vector lineEnd, Vector BoxMinPosition
 
 	t = tmin;
 	return t <= LineLength;
+}
+
+bool vPointInsideAABB(const Vector Point, const Vector bbMin, const Vector bbMax)
+{
+	return Point.x > bbMin.x && Point.x < bbMax.x
+		&& Point.y > bbMin.y && Point.y < bbMax.y
+		&& Point.z > bbMin.z && Point.z < bbMax.z;
+}
+
+bool vPointInsideAABB2D(const Vector Point, const Vector bbMin, const Vector bbMax)
+{
+	return Point.x > bbMin.x && Point.x < bbMax.x
+		&& Point.y > bbMin.y && Point.y < bbMax.y;
+}
+
+Vector vClampPointToAABBEdge(const Vector Point, const Vector bbMin, const Vector bbMax)
+{
+	if (!vPointInsideAABB(Point, bbMin, bbMax))
+	{
+		return vClosestPointOnAABB(Point, bbMin, bbMax);
+	}
+
+	Vector bbCentre = bbMin + ((bbMax - bbMin) * 0.5f);
+
+	float xDist = fminf(fabsf(Point.x - bbMin.x), fabsf(Point.x - bbMax.x));
+	float yDist = fminf(fabsf(Point.y - bbMin.y), fabsf(Point.y - bbMax.y));
+	float zDist = fminf(fabsf(Point.z - bbMin.z), fabsf(Point.z - bbMax.z));
+
+	if (xDist < yDist && xDist < zDist)
+	{
+		Vector Result = Point;
+		Result.x = (Point.x < bbCentre.x) ? bbMin.x : bbMax.x;
+
+		return Result;
+	}
+
+	if (yDist < xDist && yDist < zDist)
+	{
+		Vector Result = Point;
+		Result.y = (Point.y < bbCentre.y) ? bbMin.y : bbMax.y;
+
+		return Result;
+	}
+
+	Vector Result = Point;
+	Result.z = (Point.z < bbCentre.z) ? bbMin.z : bbMax.z;
+
+	return Result;
+}
+
+Vector vClampPointToAABBEdge2D(const Vector Point, const Vector bbMin, const Vector bbMax)
+{
+	if (!vPointInsideAABB2D(Point, bbMin, bbMax))
+	{
+		return vClosestPointOnBB2D(Point, bbMin, bbMax);
+	}
+
+	Vector bbCentre = bbMin + ((bbMax - bbMin) * 0.5f);
+
+	float xDist = fminf(fabsf(Point.x - bbMin.x), fabsf(Point.x - bbMax.x));
+	float yDist = fminf(fabsf(Point.y - bbMin.y), fabsf(Point.y - bbMax.y));
+
+	if (xDist < yDist)
+	{
+		Vector Result = Point;
+		Result.x = (Point.x < bbCentre.x) ? bbMin.x : bbMax.x;
+
+		return Result;
+	}
+
+	Vector Result = Point;
+	Result.y = (Point.y < bbCentre.y) ? bbMin.y : bbMax.y;
+
+	return Result;
+}
+
+Vector vClosestPointOnAABB(const Vector Point, const Vector bbMin, const Vector bbMax)
+{
+	return Vector(clampf(Point.x, bbMin.x, bbMax.x), clampf(Point.y, bbMin.y, bbMax.y), clampf(Point.z, bbMin.z, bbMax.z));
 }

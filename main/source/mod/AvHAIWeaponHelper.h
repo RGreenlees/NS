@@ -39,6 +39,8 @@ float GetMinIdealWeaponRange(const EAIWeaponId Weapon);
 bool UTIL_WeaponCanBeReloaded(const EAIWeaponId CheckWeapon);
 bool IsMeleeWeapon(const EAIWeaponId Weapon);
 
+bool IsWeaponAffectedByGravity(const EAIWeaponId CheckWeapon);
+
 Vector UTIL_GetGrenadeThrowTarget(edict_t* Player, const Vector TargetLocation, const float ExplosionRadius, bool bPrecise);
 
 EAIWeaponId BotMarineChooseBestWeaponForStructure(AvHAIPlayer* pBot, edict_t* target);

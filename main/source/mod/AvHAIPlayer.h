@@ -330,13 +330,19 @@ struct AvHAIPlayer
 	bool NewClimbUpLadderMove(AvHAIPath* Path);
 	bool NewClimbDownLadderMove(AvHAIPath* Path);
 	bool NewPlatformMove(AvHAIPath* Path);
+	bool NewBoardPlatformMove(AvHAIPath* Path, const edict_t* Platform);
+	bool NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, const Vector& DesiredStop);
 	bool NewPhaseGateMove(AvHAIPath* Path);
+
+	bool HasWeapon(EAIWeaponId DesiredWeapon);
+	void ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon);
 
 	void HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
 
 	void DEBUG_DrawPath();
 
 	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
+	EAINavMoveResult ProgressBreakTask(AvHAIMoveTask* MoveTask);
 };
 
 
