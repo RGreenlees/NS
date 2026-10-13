@@ -14,6 +14,7 @@
 #include "AvHGamerules.h"
 #include "AvHMessage.h"
 #include "AvHTurret.h"
+#include "AvHWeldable.h"
 
 
 bool AvHAIPlayer::HasValidPath() const
@@ -270,15 +271,110 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 		return EAINavMoveResult::NAV_MOVE_INVALIDTASK;
 	}
 
+	EAINavMoveResult MoveResult = EAINavMoveResult::NAV_MOVE_SUCCESS;
+
 	switch (CurrentMoveTask->TaskType)
 	{
 		case EAIMovementTaskType::MOVE_TASK_MOVE:
-			return ProgressMoveTask(CurrentMoveTask);
+			MoveResult = ProgressMoveTask(CurrentMoveTask);
+			break;
 		case EAIMovementTaskType::MOVE_TASK_BREAK:
-			return ProgressBreakTask(CurrentMoveTask);
+			MoveResult = ProgressBreakTask(CurrentMoveTask);
+			break;
+		case EAIMovementTaskType::MOVE_TASK_USE:
+			MoveResult = ProgressUseTask(CurrentMoveTask);
+			break;
 		default:
-			return EAINavMoveResult::NAV_MOVE_NOPATH;
+			MoveResult = EAINavMoveResult::NAV_MOVE_NOPATH;
+			break;
 	}
+
+	if (IsMovementTaskComplete(CurrentMoveTask))
+	{
+		RemoveTask(CurrentMoveTask);
+	}
+
+	return MoveResult;
+}
+
+bool AvHAIPlayer::IsMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	switch (Task->TaskType)
+	{
+		case EAIMovementTaskType::MOVE_TASK_MOVE:
+			return IsMoveMovementTaskComplete(Task);
+		case EAIMovementTaskType::MOVE_TASK_WELD:
+			return IsWeldMovementTaskComplete(Task);
+		case EAIMovementTaskType::MOVE_TASK_USE:
+			return IsUseMovementTaskComplete(Task);
+		case EAIMovementTaskType::MOVE_TASK_PICKUP:
+			return IsPickupMovementTaskComplete(Task);
+		case EAIMovementTaskType::MOVE_TASK_TOUCH:
+			return IsTouchMovementTaskComplete(Task);
+		case EAIMovementTaskType::MOVE_TASK_BREAK:
+			return IsBreakMovementTaskComplete(Task);
+		default:
+			return true;
+	}
+}
+
+bool AvHAIPlayer::IsMoveMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	return vPointOverlaps3D(Task->TaskLocation, Edict->v.absmin, Edict->v.absmax);
+}
+
+bool AvHAIPlayer::IsPickupMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	return !UTIL_IsEdictActive(Task->TaskTarget);
+}
+
+bool AvHAIPlayer::IsTouchMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	return vBBOverlaps(Edict->v.absmin, Edict->v.absmax, Task->TaskTarget->v.absmin, Task->TaskTarget->v.absmax);
+}
+
+bool AvHAIPlayer::IsUseMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	const DynamicMapObject* TriggerObject = AIMAP_GetDynamicObjectByEdict(Task->TaskTarget);
+
+	if (TriggerObject)
+	{
+		return TriggerObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+	}
+
+	return Task->TaskTarget->v.nextthink > 0.0f;
+}
+
+bool AvHAIPlayer::IsBreakMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	return !UTIL_IsEdictActive(Task->TaskTarget);
+}
+
+bool AvHAIPlayer::IsWeldMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(CBaseEntity::Instance(ENTINDEX(Task->TaskTarget)));
+
+	return (!WeldableRef || WeldableRef->GetIsWelded());
 }
 
 void AvHAIPlayer::Jump(bool bDuckJump)
@@ -896,8 +992,37 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	if (AINAV_CheckAndAddRequiredMovementTasks(GetNavProfile(), Path, NewMoveTask))
 	{
-		AddMovementTask(NewMoveTask);
-		return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		bool bHasExistingTask = false;
+
+		for (auto TaskIt = BotNavInfo.MovementTasks.begin(); TaskIt != BotNavInfo.MovementTasks.end(); TaskIt++)
+		{
+			const AvHAIMoveTask* ThisTask = &(*TaskIt);
+			if (!ThisTask || !ThisTask->IsValid()) { continue; }
+
+			if (ThisTask->TaskType != NewMoveTask.TaskType) { continue; }
+
+			switch (ThisTask->TaskType)
+			{
+				case EAIMovementTaskType::MOVE_TASK_WELD:
+				case EAIMovementTaskType::MOVE_TASK_BREAK:
+				case EAIMovementTaskType::MOVE_TASK_PICKUP:
+				case EAIMovementTaskType::MOVE_TASK_USE:
+				case EAIMovementTaskType::MOVE_TASK_TOUCH:
+					bHasExistingTask = (ThisTask->TaskTarget == NewMoveTask.TaskTarget);
+					break;
+				case EAIMovementTaskType::MOVE_TASK_MOVE:
+					bHasExistingTask = vEquals(ThisTask->TaskLocation, NewMoveTask.TaskLocation, 5.0f);
+					break;
+			}
+
+			if (bHasExistingTask) { break; }
+		}
+
+		if (!bHasExistingTask)
+		{
+			AddMovementTask(NewMoveTask);
+			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
 	}
 
 	if (IsInWater())
@@ -933,6 +1058,30 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 void AvHAIPlayer::HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
 {
 
+}
+
+void AvHAIPlayer::RemoveTask(const AvHAIMoveTask* Task)
+{
+	if (!Task) { return; }
+
+	for (auto TaskIt = BotNavInfo.MovementTasks.begin(); TaskIt != BotNavInfo.MovementTasks.end();)
+	{
+		const AvHAIMoveTask* ThisTask = &(*TaskIt);
+
+		if (!ThisTask || !ThisTask->IsValid())
+		{
+			TaskIt = BotNavInfo.MovementTasks.erase(TaskIt);
+			continue;
+		}
+
+		if (ThisTask == Task)
+		{
+			BotNavInfo.MovementTasks.erase(TaskIt);
+			return;
+		}
+
+		TaskIt++;
+	}
 }
 
 bool AvHAIPlayer::HasWeapon(EAIWeaponId DesiredWeapon)
@@ -1040,6 +1189,34 @@ EAINavMoveResult AvHAIPlayer::ProgressMoveTask(AvHAIMoveTask* MoveTask)
 	return FollowPath(&MoveTask->TaskPath);
 }
 
+EAINavMoveResult AvHAIPlayer::ProgressUseTask(AvHAIMoveTask* MoveTask)
+{
+	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
+
+	if (!UTIL_IsEdictActive(MoveTask->TaskTarget)) { return EAINavMoveResult::NAV_MOVE_INVALIDTASK; }
+
+	if (IsPlayerInUseRange(Edict, MoveTask->TaskTarget))
+	{
+		edict_t* NonConstRef = INDEXENT(ENTINDEX(MoveTask->TaskTarget));
+		UseObject(NonConstRef, false);
+		return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
+	if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != GetNavProfile()->MeshIndex)
+	{
+		const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetEyePosition(), MoveTask->TaskTarget);
+
+		const bool bSuccess = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, max_ai_use_reach);
+
+		if (!bSuccess)
+		{
+			return EAINavMoveResult::NAV_MOVE_NOPATH;
+		}
+	}
+
+	return FollowPath(&MoveTask->TaskPath);
+}
+
 EAINavMoveResult AvHAIPlayer::ProgressBreakTask(AvHAIMoveTask* MoveTask)
 {
 	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
@@ -1136,11 +1313,13 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	Vector stTrcLft = CurrentPos - (vRight * PlayerRadius);
 	Vector stTrcRt = CurrentPos + (vRight * PlayerRadius);
-	Vector endTrcLft = stTrcLft + (vForward * 24.0f);
-	Vector endTrcRt = stTrcRt + (vForward * 24.0f);
+	Vector endTrcLft = stTrcLft + (vForward * (PlayerRadius * 1.2f));
+	Vector endTrcRt = stTrcRt + (vForward * (PlayerRadius * 1.2f));
 
-	bool bumpLeft = !AINAV_IsPointDirectlyReachable(GetNavProfile(), stTrcLft, endTrcLft);
-	bool bumpRight = !AINAV_IsPointDirectlyReachable(GetNavProfile(), stTrcRt, endTrcRt);
+	const NavAgentProfile* NavProfile = GetNavProfile();
+
+	bool bumpLeft = !AINAV_IsPointDirectlyReachable(NavProfile, stTrcLft, endTrcLft) || !UTIL_QuickCollisionTrace(stTrcLft, endTrcLft);
+	bool bumpRight = !AINAV_IsPointDirectlyReachable(NavProfile, stTrcRt, endTrcRt) || !UTIL_QuickCollisionTrace(stTrcRt, endTrcRt);
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 

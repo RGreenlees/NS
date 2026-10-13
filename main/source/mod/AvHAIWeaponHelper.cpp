@@ -1061,7 +1061,7 @@ EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapo
 
 EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId Weapon, const edict_t* Target)
 {
-	if (FNullEnt(Target) || (Target->v.deadflag != DEAD_NO)) { return EAIAttackResult::ATTACK_INVALIDTARGET; }
+	if (!UTIL_IsEdictActive(Target)) { return EAIAttackResult::ATTACK_INVALIDTARGET; }
 
 	if (Weapon == EAIWeaponId::WEAPON_INVALID) { return EAIAttackResult::ATTACK_NOWEAPON; }
 

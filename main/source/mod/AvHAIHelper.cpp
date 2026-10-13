@@ -72,7 +72,7 @@ Vector UTIL_GetTraceHitLocation(const Vector Start, const Vector End)
 
 bool UTIL_IsEdictActive(const edict_t* Edict)
 {
-	return (!FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO);
+	return (Edict && !FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO);
 }
 
 Vector UTIL_GetHullTraceHitLocation(const Vector Start, const Vector End, int HullNum)

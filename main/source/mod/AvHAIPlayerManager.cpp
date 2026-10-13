@@ -691,6 +691,11 @@ void AIMGR_UpdateAIPlayers()
 		}
 	}
 
+	if (DebugDynamicMapObject)
+	{
+		DEBUG_PrintObjectInfo(DebugDynamicMapObject);
+	}
+
 	RecentlyModifiedNavMeshes.clear();
 	PrevTime = CurrTime;
 }

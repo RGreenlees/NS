@@ -60,6 +60,13 @@ bool vPointOverlaps2D(const Vector Point, const Vector MinBB, const Vector MaxBB
 		&& Point.y >= MinBB.y && Point.y <= MaxBB.y);
 }
 
+bool vBBOverlaps(const Vector MinBBA, const Vector MaxBBA, const Vector MinBBB, const Vector MaxBBB)
+{
+	return ((MinBBA.x < MaxBBB.x && MaxBBA.x > MinBBB.x)
+		&& (MinBBA.y < MaxBBB.y && MaxBBA.y > MinBBB.y)
+		&& (MinBBA.z < MaxBBB.z && MaxBBA.z > MinBBB.z));
+}
+
 bool vBBOverlaps2D(const Vector MinBBA, const Vector MaxBBA, const Vector MinBBB, const Vector MaxBBB)
 {
 	return ( (MinBBA.x < MaxBBB.x && MaxBBA.x > MinBBB.x)

@@ -110,16 +110,17 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 	NewObject.Type = EAIDynamicMapObjectType::MAPOBJECT_DOOR;
 
 	Vector DoorCentre = UTIL_GetCentreOfEntity(NewObject.Edict);
+	const bool bZeroOrigin = (vIsZero(DoorRef->m_vecPosition1));
 
 	DynamicMapObjectStop FirstStop;
-	FirstStop.StopLocation = DoorRef->m_vecPosition1;
+	FirstStop.StopLocation = (bZeroOrigin) ? DoorCentre : DoorRef->m_vecPosition1;
 	FirstStop.WaitTime = 0.0f;
 	FirstStop.bWaitForRetrigger = true;
 
 	NewObject.StopPoints.push_back(FirstStop);
 
 	DynamicMapObjectStop SecondStop;
-	SecondStop.StopLocation = DoorRef->m_vecPosition2;
+	SecondStop.StopLocation = (bZeroOrigin) ? DoorCentre + DoorRef->m_vecPosition2 : DoorRef->m_vecPosition2;
 	SecondStop.WaitTime = NewObject.Wait;
 	SecondStop.bWaitForRetrigger = ((NewObject.Edict->v.spawnflags & SF_DOOR_NO_AUTO_RETURN) || NewObject.Wait < 0.0f);
 
@@ -309,15 +310,17 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 	NewObject.Delay = PlatRef->m_flDelay;
 	NewObject.Type = EAIDynamicMapObjectType::MAPOBJECT_PLATFORM;
 
+	const bool bZeroOrigin = vIsZero(PlatRef->m_vecPosition1);
+
 	DynamicMapObjectStop FirstStop;
-	FirstStop.StopLocation = PlatformCentre;
+	FirstStop.StopLocation = (bZeroOrigin) ? PlatformCentre : PlatRef->m_vecPosition1;
 	FirstStop.WaitTime = 0.0f;
 	FirstStop.bWaitForRetrigger = true;
 
 	NewObject.StopPoints.push_back(FirstStop);
 
 	DynamicMapObjectStop SecondStop;
-	SecondStop.StopLocation = PlatformCentre + Vector(0.0f, 0.0f, PlatRef->m_flHeight);
+	SecondStop.StopLocation = (bZeroOrigin) ? PlatformCentre + Vector(0.0f, 0.0f, PlatRef->m_flHeight) : PlatRef->m_vecPosition2;
 	SecondStop.WaitTime = 3.0f;
 	SecondStop.bWaitForRetrigger = (NewObject.Edict->v.spawnflags & SF_PLAT_TRIGGER_ONLY);
 
@@ -382,15 +385,17 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject)
 		NewObject.Type = EAIDynamicMapObjectType::TRIGGER_USE;
 	}
 
+	const bool bZeroOrigin = (vIsZero(ButtonRef->m_vecPosition1));
+
 	DynamicMapObjectStop FirstStop;
-	FirstStop.StopLocation = ButtonRef->m_vecPosition1;
+	FirstStop.StopLocation = (bZeroOrigin) ? UTIL_GetCentreOfEntity(ButtonObject) : ButtonRef->m_vecPosition1;
 	FirstStop.WaitTime = 0.0f;
 	FirstStop.bWaitForRetrigger = true;
 
 	NewObject.StopPoints.push_back(FirstStop);
 
 	DynamicMapObjectStop SecondStop;
-	SecondStop.StopLocation = ButtonRef->m_vecPosition2;
+	SecondStop.StopLocation = (bZeroOrigin) ? FirstStop.StopLocation + ButtonRef->m_vecPosition2 : ButtonRef->m_vecPosition2;
 	SecondStop.WaitTime = ButtonRef->m_flWait;
 	SecondStop.bWaitForRetrigger = (NewObject.Edict->v.spawnflags & SF_DOOR_NO_AUTO_RETURN);
 
@@ -764,13 +769,13 @@ void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
 		return;
 	}
 
-	if (DoorCurrentState == TS_AT_BOTTOM)
+	if (DoorObject->State != EAIDynamicMapObjectState::OBJECTSTATE_PREPARING && DoorCurrentState == TS_AT_BOTTOM)
 	{
 		AIMAP_SetDynamicObjectStatus(DoorObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 		return;
 	}
 
-	if (DoorCurrentState == TS_AT_TOP)
+	if (DoorObject->State != EAIDynamicMapObjectState::OBJECTSTATE_PREPARING && DoorCurrentState == TS_AT_TOP)
 	{
 		if (DoorObject->bToggleActive)
 		{
@@ -1115,6 +1120,14 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector
 			const AvHAIPathNode* ThisPathNode = TestPath.GetNodeAtIndex(i);
 
 			if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
+
+			// Check that this path does not require us to go up the very platform we are checking for blockages
+			if (ThisPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+			{
+				const DynamicMapObject* MovementObject = AIMAP_GetDynamicObjectByEdict(ThisPathNode->MovementObject);
+
+				if (MovementObject && MovementObject == SearchObject) { return true; }
+			}
 
 			if (AIMAP_GetObjectBlockingPathPoint(ThisPathNode->FromLocation, ThisPathNode->ToLocation, ThisPathNode->MovementFlag, SearchObject, nullptr) != nullptr)
 			{
@@ -2146,102 +2159,10 @@ Vector AIMAP_GetTriggerFloorLocation(const NavAgentProfile* NavProfile, const Dy
 	return NewButtonAccessPoint;
 }
 
-const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const AvHAIPlayer* PlayerToTrigger)
-{
-	if (!PlayerToTrigger || !PlayerToTrigger->IsValid()) { return nullptr; }
-	if (!ObjectToActivate || ObjectToActivate->GetNumTriggers() == 0) { return nullptr; }
-
-	const DynamicMapObject* WinningTrigger = nullptr;
-
-	const Vector FromLoc = GetPlayerBottomOfCollisionHull(PlayerToTrigger->Edict);
-
-	float MinDist = FLT_MAX;
-
-	// This object is triggered by itself, such as a door set to USE_ONLY or a func_plat which needs to be touched to activate
-	if (ObjectToActivate->Triggers.size() == 1 && ObjectToActivate->Triggers[0] == ObjectToActivate->Edict) { return AIMAP_GetDynamicObjectByEdict(ObjectToActivate->Triggers[0]); }
-
-	for (auto it = ObjectToActivate->Triggers.begin(); it != ObjectToActivate->Triggers.end(); it++)
-	{
-		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
-
-		if (!ThisTrigger || !ThisTrigger->bIsActive) { continue; }
-
-		// For triggers we can activate from a distance and are in our LOS, short-cut and add them to the list
-		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK)
-		{
-			if (UTIL_PlayerHasLOSToEntity(PlayerToTrigger->Edict, ThisTrigger->Edict, UTIL_MetresToGoldSrcUnits(20.0f), false))
-			{
-				const float ThisDist = vDist3DSq(FromLoc, UTIL_GetCentreOfEntity(ThisTrigger->Edict));
-
-				if (ThisDist < MinDist)
-				{
-					WinningTrigger = ThisTrigger;
-					MinDist = ThisDist;
-				}
-
-				continue;
-			}
-		}
-
-		Vector TriggerLocation = AIMAP_GetButtonFloorLocation(NavProfile, FromLoc, ThisTrigger->Edict);
-
-		if (vIsZero(TriggerLocation))
-		{
-			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
-		}
-
-		const float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
-
-		if (!AINAV_IsPointReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
-
-		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
-		{
-			if (AIMAP_IsPathBlockedByObject(NavProfile, FromLoc, TriggerLocation, ObjectToActivate)) { continue; }
-		}
-		else
-		{
-			AvHAIPath CheckPath;
-
-			const bool bSuccess = AINAV_FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, &CheckPath, MaxDist);
-
-			if (!bSuccess) { continue; }
-
-			bool bOtherSideOfLift = false;
-
-			for (int32 i = 0; i < CheckPath.GetPathSize(); i++)
-			{
-				const AvHAIPathNode* PathNode = CheckPath.GetNodeAtIndex(i);
-
-				if (!PathNode || !PathNode->IsValidMove()) { break; }
-
-				if (!EnumHasAnyFlags(PathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
-				{
-					if (AIMAP_GetClosestPlatformToPoints(PathNode->FromLocation, PathNode->ToLocation) == ObjectToActivate)
-					{
-						bOtherSideOfLift = true;
-						break;
-					}
-				}
-			}
-
-			if (bOtherSideOfLift) { continue; }
-		}
-
-		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
-
-		if (ThisDist < MinDist)
-		{
-			WinningTrigger = ThisTrigger;
-		}
-	}
-
-	return WinningTrigger;
-}
-
 const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const Vector& ActivateLocation)
 {
 	if (!NavProfile || !NavProfile->IsValid()) { return nullptr; }
-	if (!ObjectToActivate || ObjectToActivate->IsValid() || ObjectToActivate->GetNumTriggers() == 0) { return nullptr; }
+	if (!ObjectToActivate || !ObjectToActivate->IsValid() || ObjectToActivate->GetNumTriggers() == 0) { return nullptr; }
 	if (vIsZero(ActivateLocation)) { return nullptr; }
 
 	const DynamicMapObject* WinningTrigger = nullptr;
@@ -2391,7 +2312,7 @@ const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapOb
 	return nullptr;
 }
 
-void DEBUG_PrintObjectInfo(DynamicMapObject* Object)
+void DEBUG_PrintObjectInfo(const DynamicMapObject* Object)
 {
 	char buf[511];
 	char interbuf[164];

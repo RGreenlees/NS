@@ -212,8 +212,8 @@ struct AvHAIMoveTask
 {
 	EAIMovementTaskType TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
 	Vector TaskLocation = ZERO_VECTOR;
-	const edict_t* TaskTarget = nullptr;
-	const edict_t* TriggerToActivate = nullptr;
+	const edict_t* TaskTarget = NULL;
+	const edict_t* TriggerToActivate = NULL;
 	AvHAIPath TaskPath;
 
 	void Clear()
@@ -221,8 +221,8 @@ struct AvHAIMoveTask
 		TaskPath.Clear();
 		TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
 		TaskLocation = ZERO_VECTOR;
-		TaskTarget = nullptr;
-		TriggerToActivate = nullptr;
+		TaskTarget = NULL;
+		TriggerToActivate = NULL;
 	}
 
 	bool HasPath() const

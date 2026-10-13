@@ -163,7 +163,6 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObject, const Vector& ObjectPosition, const NavOffMeshConnection* Connection);
 
-const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const AvHAIPlayer* PlayerToTrigger);
 const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const Vector& ActivateLocation);
 Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vector UserLocation, const edict_t* ButtonEdict);
 Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const Vector& RiderPosition, const DynamicMapObject* LiftReference);
@@ -188,6 +187,6 @@ void AIMAP_RemoveAllTempObstaclesFromObject(DynamicMapObject* Object);
 // Clear all stored map data for the AI
 void AIMAP_ClearCachedMapData();
 
-void DEBUG_PrintObjectInfo(DynamicMapObject* Object);
+void DEBUG_PrintObjectInfo(const DynamicMapObject* Object);
 
 #endif // AVH_AI_MAP_DATA_H

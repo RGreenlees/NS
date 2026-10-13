@@ -334,6 +334,16 @@ struct AvHAIPlayer
 	bool NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, const Vector& DesiredStop);
 	bool NewPhaseGateMove(AvHAIPath* Path);
 
+	bool IsMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsMoveMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsPickupMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsTouchMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsUseMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsBreakMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsWeldMovementTaskComplete(const AvHAIMoveTask* Task);
+
+	void RemoveTask(const AvHAIMoveTask* Task);
+
 	bool HasWeapon(EAIWeaponId DesiredWeapon);
 	void ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon);
 
@@ -343,6 +353,7 @@ struct AvHAIPlayer
 
 	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressBreakTask(AvHAIMoveTask* MoveTask);
+	EAINavMoveResult ProgressUseTask(AvHAIMoveTask* MoveTask);
 };
 
 
