@@ -74,28 +74,28 @@ struct DynamicMapObject
 	bool bToggleActive = false; // Can this be toggled active/inactive?
 	bool bIsActive = true; // If false, means this trigger or object has a dependent multisource or env_global which have not been satisfied yet, therefore this object is inert.
 	int NumTimesActivated = 0; // How many times this object has been triggered
+	DynamicMapObjectStop* CurrentStop = nullptr;
 
 	bool IsValid() const
 	{
 		return ObjectRef != nullptr && EdictIndex > -1 && !FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO;
 	}
 
+	// Returns the current stop the platform / train is at. Will be null if the train is moving (use previous or next stop for that)
 	const DynamicMapObjectStop* GetCurrentStop() const
 	{
-		if (NextStopIndex >= StopPoints.size()) { return nullptr; }
-
-		return &StopPoints[NextStopIndex];
+		return CurrentStop;
 	}
 
+	// This will be either the next stop once the train has reached a destination OR the stop it's currently heading towards
 	const DynamicMapObjectStop* GetNextStop() const
 	{
 		if (StopPoints.size() <= 1) { return nullptr; }
 
-		return (NextStopIndex + 1 >= StopPoints.size())
-			? &StopPoints[0]
-			: &StopPoints[NextStopIndex + 1];
+		return &StopPoints[NextStopIndex];
 	}
 
+	// This will be the previous stop visited
 	const DynamicMapObjectStop* GetPreviousStop() const
 	{
 		if (StopPoints.size() <= 1) { return nullptr; }

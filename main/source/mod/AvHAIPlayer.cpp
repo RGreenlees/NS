@@ -351,9 +351,16 @@ bool AvHAIPlayer::IsUseMovementTaskComplete(const AvHAIMoveTask* Task)
 
 	const DynamicMapObject* TriggerObject = AIMAP_GetDynamicObjectByEdict(Task->TaskTarget);
 
-	if (TriggerObject)
+	if (TriggerObject && TriggerObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
 	{
-		return TriggerObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+		return true;
+	}
+
+	const DynamicMapObject* TriggerTargetObject = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
+
+	if (TriggerTargetObject)
+	{
+		if (TriggerTargetObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return true; }
 	}
 
 	return Task->TaskTarget->v.nextthink > 0.0f;
@@ -1909,93 +1916,7 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
-	int currIndex = Platform->NextStopIndex;
-	int prevIndex = (currIndex == 0) ? Platform->StopPoints.size() - 1 : currIndex - 1;
-
-	int desiredStopIndex = 0;
-
-	const DynamicMapObjectStop* NextStop = Platform->GetNextStop();
-	const DynamicMapObjectStop* PreviousStop = Platform->GetPreviousStop();
-
-	if (AIMAP_PlatformNeedsActivating(NavProfile, Platform, CurrentPathNode->FromLocation, CurrentPathNode->ToLocation))
-	{
-		if (vEquals(PlatformPosition, DesiredStartStop.StopLocation) || (vEquals(NextStop->StopLocation, DesiredStartStop.StopLocation) && Platform->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE))
-		{
-			const DynamicMapObject* PlatTrigger = AIMAP_GetTriggerReachableFromPlatform(Platform, CurrentPathNode->FromLocation.z + 32.0f, DesiredStartStop.StopLocation);
-
-			if (PlatTrigger)
-			{
-				if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-				{
-					return NewBoardPlatformMove(Path, Platform->Edict);
-				}
-			}
-		}
-
-		const DynamicMapObject* BestTrigger = nullptr;
-		bool bForceTrigger = true;
-
-		BestTrigger = AIMAP_GetBestTriggerForObject(NavProfile, Platform, BotLocation);
-
-		if (BestTrigger)
-		{
-			bForceTrigger = false;
-		}
-
-		if (bForceTrigger)
-		{
-			if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-			{
-				for (auto it = Platform->Triggers.begin(); it != Platform->Triggers.end(); it++)
-				{
-					const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
-
-					if (ThisTrigger && ThisTrigger->IsValid() && ThisTrigger->bIsActive && ThisTrigger->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-					{
-						AIMAP_ForceActivateTrigger(this, ThisTrigger);
-						return true;
-					}
-				}
-			}
-			else
-			{
-				AvHAIMoveTask NewDestinationTask;
-
-				const bool bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
-
-				if (bSuccess)
-				{
-					AddMovementTask(NewDestinationTask);
-				}
-
-				return bSuccess;
-			}
-		}
-		else
-		{
-			AvHAIMoveTask NewDestinationTask;
-
-			bool bSuccess = false;
-
-			if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-			{
-				bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), BestTrigger->Edict, Platform->Edict, NewDestinationTask);
-			}
-			else
-			{
-				const Vector ButtonLocation = AIMAP_GetButtonFloorLocation(NavProfile, GetLocation(), BestTrigger->Edict);
-				bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), ButtonLocation, nullptr, NewDestinationTask);
-			}
-
-			if (bSuccess)
-			{
-				AddMovementTask(NewDestinationTask);
-			}
-
-			return bSuccess;
-		}
-	}
-	else
+	if (!AIMAP_PlatformNeedsActivating(NavProfile, Platform, CurrentPathNode->FromLocation, CurrentPathNode->ToLocation))
 	{
 		if (AIMAP_CanBoardPlatform(NavProfile, Platform, CurrentPathNode->FromLocation, DesiredStartStop.StopLocation))
 		{
@@ -2014,6 +1935,73 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 
 			return bSuccess;
 		}
+	}
+
+	const DynamicMapObjectStop* CurrentStop = Platform->GetCurrentStop();
+
+	if (CurrentStop && vEquals(CurrentStop->StopLocation, DesiredStartStop.StopLocation))
+	{
+		const DynamicMapObject* PlatTrigger = AIMAP_GetTriggerReachableFromPlatform(Platform, CurrentPathNode->FromLocation.z + 32.0f, DesiredStartStop.StopLocation);
+
+		if (PlatTrigger)
+		{
+			return NewBoardPlatformMove(Path, Platform->Edict);
+		}
+	}
+
+	const DynamicMapObject* BestTrigger = nullptr;
+
+	BestTrigger = AIMAP_GetBestTriggerForObject(NavProfile, Platform, BotLocation);
+
+	if (BestTrigger)
+	{
+		AvHAIMoveTask NewDestinationTask;
+
+		bool bSuccess = false;
+
+		if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+		{
+			bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), BestTrigger->Edict, Platform->Edict, NewDestinationTask);
+		}
+		else
+		{
+			const Vector ButtonLocation = AIMAP_GetButtonFloorLocation(NavProfile, GetLocation(), BestTrigger->Edict);
+			bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), ButtonLocation, nullptr, NewDestinationTask);
+		}
+
+		if (bSuccess)
+		{
+			AddMovementTask(NewDestinationTask);
+		}
+
+		return bSuccess;
+	}
+
+	if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+	{
+		for (auto it = Platform->Triggers.begin(); it != Platform->Triggers.end(); it++)
+		{
+			const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
+
+			if (ThisTrigger && ThisTrigger->IsValid() && ThisTrigger->bIsActive && ThisTrigger->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+			{
+				AIMAP_ForceActivateTrigger(this, ThisTrigger);
+				return true;
+			}
+		}
+	}
+	else
+	{
+		AvHAIMoveTask NewDestinationTask;
+
+		const bool bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
+
+		if (bSuccess)
+		{
+			AddMovementTask(NewDestinationTask);
+		}
+
+		return bSuccess;
 	}
 
 	return false;

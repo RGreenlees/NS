@@ -705,46 +705,56 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 
 	if (TrainObject->Edict->v.velocity.Length() > 0.0f)
 	{
-		AIMAP_SetDynamicObjectStatus(TrainObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
-
-		CBaseEntity* NextStopRef = TrainRef->GetNextTarget();
-
-		for (int i = 0; i < TrainObject->StopPoints.size(); i++)
+		if (TrainObject->State != EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
 		{
-			DynamicMapObjectStop CheckStop = TrainObject->StopPoints[i];
-
-			if (CheckStop.CornerEdict == NextStopRef->edict())
-			{
-				TrainObject->NextStopIndex = i;
-				break;
-			}
+			TrainObject->CurrentStop = nullptr;
 		}
+
+		AIMAP_SetDynamicObjectStatus(TrainObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 
 		return;
 	}
 
-	// Train was moving last tick, but is now stationary
-	if (TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
+	if (TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING || TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_START)
 	{
-		CBaseEntity* NextStopRef = TrainRef->GetNextTarget();
-
-		for (int i = 0; i < TrainObject->StopPoints.size(); i++)
+		for (int32 StopIndex = 0; StopIndex < TrainObject->StopPoints.size(); StopIndex++)
 		{
-			DynamicMapObjectStop CheckStop = TrainObject->StopPoints[i];
+			const DynamicMapObjectStop* StopPoint = &TrainObject->StopPoints[StopIndex];
 
-			if (CheckStop.CornerEdict == NextStopRef->edict())
+			if (vEquals(StopPoint->StopLocation, UTIL_GetCentreOfEntity(TrainObject->Edict), 5.0f))
 			{
-				TrainObject->NextStopIndex = i;
+				TrainObject->CurrentStop = &TrainObject->StopPoints[StopIndex];
 				break;
 			}
 		}
 
-		const EAIDynamicMapObjectState NewState = (TrainObject->Edict->v.nextthink > 0.0)
-			? EAIDynamicMapObjectState::OBJECTSTATE_PREPARING
-			: EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+		CBaseEntity* NextPathCorner = TrainRef->GetNextTarget();
 
-		AIMAP_SetDynamicObjectStatus(TrainObject, NewState);
+		if (NextPathCorner)
+		{
+			const edict_t* CornerEdict = NextPathCorner->edict();
+
+			if (!FNullEnt(CornerEdict))
+			{
+				for (int32 StopIndex = 0; StopIndex < TrainObject->StopPoints.size(); StopIndex++)
+				{
+					const DynamicMapObjectStop* StopPoint = &TrainObject->StopPoints[StopIndex];
+
+					if (vEquals(StopPoint->StopLocation, CornerEdict->v.origin, 5.0f))
+					{
+						TrainObject->NextStopIndex = StopIndex;
+						break;
+					}
+				}
+			}
+		}
 	}
+
+	const EAIDynamicMapObjectState NewState = (TrainObject->Edict->v.nextthink > 0.0f)
+		? EAIDynamicMapObjectState::OBJECTSTATE_PREPARING
+		: EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+
+	AIMAP_SetDynamicObjectStatus(TrainObject, NewState);
 }
 
 void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
@@ -765,8 +775,52 @@ void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
 
 	if (DoorCurrentState == TS_GOING_UP || DoorCurrentState == TS_GOING_DOWN)
 	{
+		if (DoorObject->State != EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
+		{
+			CBaseToggle* BaseToggle = dynamic_cast<CBaseToggle*>(DoorObject->ObjectRef);
+
+			if (BaseToggle)
+			{
+				const Vector FinalDestination = BaseToggle->m_vecFinalDest;
+
+				for (int32 StopIndex = 0; StopIndex < DoorObject->StopPoints.size(); StopIndex++)
+				{
+					const DynamicMapObjectStop* StopPoint = &DoorObject->StopPoints[StopIndex];
+
+					if (vEquals(StopPoint->StopLocation, FinalDestination, 5.0f))
+					{
+						DoorObject->NextStopIndex = StopIndex;
+						break;
+					}
+				}
+			}
+
+			DoorObject->CurrentStop = nullptr;
+		}
+
 		AIMAP_SetDynamicObjectStatus(DoorObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
 		return;
+	}
+
+	if (DoorObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
+	{
+		for (int32 StopIndex = 0; StopIndex < DoorObject->StopPoints.size(); StopIndex++)
+		{
+			const DynamicMapObjectStop* StopPoint = &DoorObject->StopPoints[StopIndex];
+
+			if (vEquals(StopPoint->StopLocation, UTIL_GetCentreOfEntity(DoorObject->Edict), 5.0f))
+			{
+				DoorObject->CurrentStop = &DoorObject->StopPoints[StopIndex];
+				break;
+			}
+		}
+
+		DoorObject->NextStopIndex++;
+
+		if (DoorObject->NextStopIndex >= DoorObject->StopPoints.size())
+		{
+			DoorObject->NextStopIndex = 0;
+		}
 	}
 
 	if (DoorObject->State != EAIDynamicMapObjectState::OBJECTSTATE_PREPARING && DoorCurrentState == TS_AT_BOTTOM)
@@ -1950,9 +2004,6 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 	// Obviously if the platform is idle then it needs activating regardless of where it is
 	if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return true; }
 
-	const DynamicMapObjectStop* CurrentStop = Platform->GetCurrentStop();
-	const DynamicMapObjectStop* PreviousStop = Platform->GetPreviousStop();
-
 	DynamicMapObjectStop DesiredEmbarkStop;
 	DynamicMapObjectStop DesiredDisembarkStop;
 
@@ -1960,22 +2011,12 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 
 	if (!bFoundStops) { return false; }
 
+	const DynamicMapObjectStop* CurrentStop = Platform->GetCurrentStop();
+
 	// Platform is at or leaving our desired stop, check if we can get on. If so then we don't need to retrigger
-	if (vEquals(PreviousStop->StopLocation, DesiredEmbarkStop.StopLocation))
+	if (CurrentStop && vEquals(CurrentStop->StopLocation, DesiredEmbarkStop.StopLocation))
 	{
 		if (AIMAP_CanBoardPlatform(NavProfile, Platform, EmbarkPoint, DesiredEmbarkStop.StopLocation)) { return false; }
-	}
-
-	// If the platform is going to wait at our embark point then we must need to activate it regardless. If we can activate it from the platform then carry on as normal
-	if (DesiredEmbarkStop.bWaitForRetrigger)
-	{
-		return true;
-	}
-
-	// Platform is coming to our desired stop, we already checked above if we need to retrigger, so now assume it's not needed
-	if (vEquals(CurrentStop->StopLocation, DesiredEmbarkStop.StopLocation))
-	{
-		return DesiredEmbarkStop.bWaitForRetrigger;
 	}
 
 	int32 CurrentIndex = Platform->NextStopIndex;
@@ -2303,7 +2344,7 @@ const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapOb
 		Vector ClosestPointOnButton = UTIL_GetClosestPointOnEntityToLocation(CheckPlatformLocation, ThisTrigger->Edict);
 		Vector ClosestPointOnLift = UTIL_GetClosestPointOnEntityToLocation(ClosestPointOnButton, Platform->Edict, CheckPlatformLocation);
 
-		if (vDist2DSq(ClosestPointOnButton, ClosestPointOnLift) < sqrf(max_player_use_reach) && fabsf(LiftHeight - ClosestPointOnButton.z) < 64.0f)
+		if (vDist2DSq(ClosestPointOnButton, ClosestPointOnLift) < sqrf(max_player_use_reach - 32.0f) && fabsf(LiftHeight - ClosestPointOnButton.z) < 64.0f)
 		{
 			return ThisTrigger;
 		}
@@ -2374,6 +2415,12 @@ void DEBUG_PrintObjectInfo(const DynamicMapObject* Object)
 	strcat(buf, interbuf);
 
 	sprintf(interbuf, "Is Active: %s\n", (Object->bIsActive) ? "True" : "False");
+	strcat(buf, interbuf);
+
+	sprintf(interbuf, "Current Stop: %s\n", (Object->GetCurrentStop()) ? vToString(Object->GetCurrentStop()->StopLocation) : "NONE");
+	strcat(buf, interbuf);
+
+	sprintf(interbuf, "Next Stop: %s\n", (Object->GetNextStop() != nullptr) ? vToString(Object->GetNextStop()->StopLocation) : "NONE");
 	strcat(buf, interbuf);
 
 	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1, 0.1f, 255, 255, 255, buf);

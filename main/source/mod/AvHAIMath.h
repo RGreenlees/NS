@@ -95,6 +95,7 @@ bool vEquals(const Vector v1, const Vector v2, const float epsilon);
 bool vEquals2D(const Vector v1, const Vector v2, const float epsilon);
 bool vIsZero(const Vector v1);
 bool vIsValid(const Vector& v1);
+char* vToString(const Vector& v1);
 
 // Clamps X to between -180 and +180 and Y to < 180
 void vClampViewAngles(Vector& ViewAngles);

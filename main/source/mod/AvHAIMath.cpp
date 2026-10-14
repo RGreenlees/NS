@@ -397,6 +397,15 @@ bool vIsValid(const Vector& v1)
 	return (!isnan(v1.x) && !isnan(v1.y) && !isnan(v1.z));
 }
 
+char* vToString(const Vector& v1)
+{
+	char Result[64];
+
+	sprintf(Result, "(%3.2f, %3.2f, %3.2f)\0", v1.x, v1.y, v1.z);
+
+	return Result;
+}
+
 void vClampViewAngles(Vector& ViewAngles)
 {
 	while (ViewAngles.x > 180.0f)
