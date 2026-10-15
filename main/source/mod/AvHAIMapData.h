@@ -129,6 +129,7 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject);
 bool AIMAP_PopulateDynamicTriggerObject(edict_t* TriggerObject);
 bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject);
 bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject);
+void AIMAP_InitializeDynamicMapObject(DynamicMapObject* Object);
 
 void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, EAIDynamicMapObjectState NewState);
 

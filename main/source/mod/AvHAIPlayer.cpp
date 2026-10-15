@@ -119,6 +119,13 @@ Vector AvHAIPlayer::GetEyePosition() const
 
 void AvHAIPlayer::AddMovementTask(AvHAIMoveTask& NewTask)
 {
+	// Movement tasks are handled last-in-first-out, therefore we clear paths on other tasks because this new task
+	// will likely take us away from our previous position, so it will ensure a fresh start on older tasks
+	for (auto TaskIt = BotNavInfo.MovementTasks.begin(); TaskIt != BotNavInfo.MovementTasks.end(); TaskIt++)
+	{
+		TaskIt->ClearPath();
+	}
+
 	BotNavInfo.MovementTasks.push_back(NewTask);
 }
 
@@ -1271,6 +1278,13 @@ EAINavMoveResult AvHAIPlayer::ProgressUseTask(AvHAIMoveTask* MoveTask)
 
 	if (IsPlayerInUseRange(Edict, MoveTask->TaskTarget))
 	{
+		const DynamicMapObject* TriggerTarget = AIMAP_GetDynamicObjectByEdict(MoveTask->TriggerToActivate);
+
+		if (TriggerTarget && TriggerTarget->IsValid() && TriggerTarget->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+		{
+			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
+
 		edict_t* NonConstRef = INDEXENT(ENTINDEX(MoveTask->TaskTarget));
 		UseObject(NonConstRef, false);
 
@@ -2025,7 +2039,7 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 	{
 		AvHAIMoveTask NewDestinationTask;
 
-		const bool bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), BestTrigger->Edict, Platform->Edict, NewDestinationTask, CurrentPathNode);
+		const bool bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->ToLocation, BestTrigger->Edict, Platform->Edict, NewDestinationTask);
 
 		if (bSuccess)
 		{

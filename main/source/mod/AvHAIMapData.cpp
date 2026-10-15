@@ -128,8 +128,6 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 
 	NewObject.StopPoints.push_back(SecondStop);
 
-	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
-
 	if (CBaseEntity* DoorTarget = DoorRef->GetNextTarget())
 	{
 		edict_t* TargetEdict = DoorTarget->edict();
@@ -521,6 +519,60 @@ bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject)
 	return true;
 }
 
+void AIMAP_InitializeDynamicMapObject(DynamicMapObject* Object)
+{
+	if (!Object || !Object->IsValid()) { return; }
+
+	int32 CurrentStopIndex = 0;
+
+	for (int32 StopIndex = 0; StopIndex < Object->StopPoints.size(); StopIndex++)
+	{
+		const DynamicMapObjectStop* StopPoint = &Object->StopPoints[StopIndex];
+
+		if (vEquals(StopPoint->StopLocation, UTIL_GetCentreOfEntity(Object->Edict), 5.0f))
+		{
+			Object->CurrentStop = &Object->StopPoints[StopIndex];
+			CurrentStopIndex = StopIndex;
+			break;
+		}
+	}
+
+	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_TRAIN)
+	{
+		CBaseToggle* TrainRef = dynamic_cast<CBaseToggle*>(CBaseEntity::Instance(Object->Edict));
+
+		if (!TrainRef) { return; }
+
+		CBaseEntity* NextPathCorner = TrainRef->GetNextTarget();
+
+		if (!NextPathCorner) { return; }
+
+		const edict_t* CornerEdict = NextPathCorner->edict();
+
+		if (FNullEnt(CornerEdict)) { return; }
+
+		for (int32 StopIndex = 0; StopIndex < Object->StopPoints.size(); StopIndex++)
+		{
+			const DynamicMapObjectStop* StopPoint = &Object->StopPoints[StopIndex];
+
+			if (vEquals(StopPoint->StopLocation, CornerEdict->v.origin, 5.0f))
+			{
+				Object->NextStopIndex = StopIndex;
+				return;
+			}
+		}
+	}
+
+	Object->NextStopIndex = CurrentStopIndex + 1;
+
+	if (Object->NextStopIndex >= Object->StopPoints.size())
+	{
+		Object->NextStopIndex = 0;
+	}
+
+	Object->State = EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+}
+
 void AIMAP_UpdateDynamicMapObjects()
 {
 	if (DynamicMapObjects.empty()) { return; }
@@ -553,6 +605,11 @@ void AIMAP_UpdateDynamicMapObjects()
 		else
 		{
 			ThisObject->bIsActive = true;
+		}
+
+		if (ThisObject->State == EAIDynamicMapObjectState::OBJECTSTATE_START)
+		{
+			AIMAP_InitializeDynamicMapObject(ThisObject);
 		}
 
 		switch (ThisObject->Type)
@@ -715,7 +772,7 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 		return;
 	}
 
-	if (TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING || TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_START)
+	if (TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
 	{
 		for (int32 StopIndex = 0; StopIndex < TrainObject->StopPoints.size(); StopIndex++)
 		{
@@ -855,11 +912,6 @@ void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
 void AIMAP_UpdateDynamicTouchTriggerObject(DynamicMapObject* TriggerObject)
 {
 	if (!TriggerObject || FNullEnt(TriggerObject->Edict)) { return; }
-
-	if (TriggerObject->State == EAIDynamicMapObjectState::OBJECTSTATE_START)
-	{
-		AIMAP_SetDynamicObjectStatus(TriggerObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
-	}
 
 	if (TriggerObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE && TriggerObject->Edict->v.nextthink > 0.0f)
 	{
@@ -2026,7 +2078,7 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 	// Platform is at or leaving our desired stop, check if we can get on. If so then we don't need to retrigger
 	if (CurrentStop && vEquals(CurrentStop->StopLocation, DesiredEmbarkStop.StopLocation))
 	{
-		if (AIMAP_CanBoardPlatform(NavProfile, Platform, EmbarkPoint, DesiredEmbarkStop.StopLocation)) { return false; }
+		return false;
 	}
 
 	int32 CurrentIndex = Platform->NextStopIndex;

@@ -245,6 +245,11 @@ struct AvHAIMoveTask
 		bTaskComplete = false;
 	}
 
+	void ClearPath()
+	{
+		TaskPath.Clear();
+	}
+
 	bool HasPath() const
 	{
 		return TaskPath.IsValidPath();
@@ -307,7 +312,7 @@ Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHA
 
 Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const edict_t* LiftReference);
 
-bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& DesiredEndPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask);
 bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
 bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
 bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
