@@ -54,6 +54,18 @@ struct AvHAIPathNode
 	unsigned int ToMeshPoly = 0; // The nav mesh poly the end point resides on
 	edict_t* MovementObject = nullptr;
 
+	void Clear()
+	{
+		FromLocation = ZERO_VECTOR;
+		ToLocation = ZERO_VECTOR;
+		RequiredClimbZ = 0.0f;
+		MovementFlag = EAINavMovementFlag::NAV_FLAG_DISABLED;
+		MovementArea = EAINavArea::NAV_AREA_NULL;
+		FromMeshPoly = 0;
+		ToMeshPoly = 0;
+		MovementObject = nullptr;
+	}
+
 	bool IsValidMove() const
 	{
 		return !vEquals(FromLocation, ToLocation) && MovementFlag != EAINavMovementFlag::NAV_FLAG_DISABLED && MovementArea != EAINavArea::NAV_AREA_NULL;
@@ -211,18 +223,26 @@ struct AvHAIPath
 struct AvHAIMoveTask
 {
 	EAIMovementTaskType TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
+	Vector TaskStartLocation = ZERO_VECTOR;
 	Vector TaskLocation = ZERO_VECTOR;
+	const NavAgentProfile* NavProfile = nullptr;
+	AvHAIPathNode RelatedPathData;
 	const edict_t* TaskTarget = NULL;
 	const edict_t* TriggerToActivate = NULL;
 	AvHAIPath TaskPath;
+	bool bTaskComplete = false;
 
 	void Clear()
 	{
 		TaskPath.Clear();
+		NavProfile = nullptr;
 		TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
+		RelatedPathData.Clear();
+		TaskStartLocation = ZERO_VECTOR;
 		TaskLocation = ZERO_VECTOR;
 		TaskTarget = NULL;
 		TriggerToActivate = NULL;
+		bTaskComplete = false;
 	}
 
 	bool HasPath() const
@@ -287,13 +307,13 @@ Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHA
 
 Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const edict_t* LiftReference);
 
-bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask);
-bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask);
-bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask);
-bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask);
-bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask);
-bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask);
-bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask);
+bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
 
 bool AINAV_IsPathPointComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);

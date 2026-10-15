@@ -750,11 +750,19 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 		}
 	}
 
-	const EAIDynamicMapObjectState NewState = (TrainObject->Edict->v.nextthink > 0.0f)
-		? EAIDynamicMapObjectState::OBJECTSTATE_PREPARING
-		: EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+	if (TrainObject->State != EAIDynamicMapObjectState::OBJECTSTATE_PREPARING)
+	{
+		const DynamicMapObjectStop* CurrentStop = TrainObject->GetCurrentStop();
 
-	AIMAP_SetDynamicObjectStatus(TrainObject, NewState);
+		if (CurrentStop && !CurrentStop->bWaitForRetrigger)
+		{
+			AIMAP_SetDynamicObjectStatus(TrainObject, EAIDynamicMapObjectState::OBJECTSTATE_PREPARING);
+		}
+		else
+		{
+			AIMAP_SetDynamicObjectStatus(TrainObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
+		}
+	}
 }
 
 void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject)
@@ -913,7 +921,9 @@ const DynamicMapObject* AIMAP_TraceForDynamicObject(const Vector& TraceFrom, con
 
 void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject)
 {
-	if (!UsedObject) { return; }
+	if (!UsedObject || !UsedObject->IsValid()) { return; }
+
+	if (!UsedObject->bIsActive) { return; }
 
 	UsedObject->NumTimesActivated++;
 

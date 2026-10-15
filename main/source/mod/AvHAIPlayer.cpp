@@ -124,6 +124,12 @@ void AvHAIPlayer::AddMovementTask(AvHAIMoveTask& NewTask)
 
 EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 {
+	// Already there
+	if (vPointOverlaps3D(DesiredLocation, Edict->v.absmin, Edict->v.absmax))
+	{
+		return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
 	// If the destination is close enough to our core movement task, then we are continuing with our existing movement tasks
 	if (BotNavInfo.MovementTasks.size() > 0)
 	{
@@ -299,7 +305,7 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 
 bool AvHAIPlayer::IsMovementTaskComplete(const AvHAIMoveTask* Task)
 {
-	if (!Task || !Task->IsValid()) { return true; }
+	if (!Task || !Task->IsValid() || Task->bTaskComplete) { return true; }
 
 	switch (Task->TaskType)
 	{
@@ -340,6 +346,22 @@ bool AvHAIPlayer::IsTouchMovementTaskComplete(const AvHAIMoveTask* Task)
 
 	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
 
+	if (Task->RelatedPathData.IsValidMove())
+	{
+		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
+
+			if (PlatformRef)
+			{
+				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
+				{
+					return true;
+				}
+			}
+		}
+	}
+
 	return vBBOverlaps(Edict->v.absmin, Edict->v.absmax, Task->TaskTarget->v.absmin, Task->TaskTarget->v.absmax);
 }
 
@@ -348,6 +370,19 @@ bool AvHAIPlayer::IsUseMovementTaskComplete(const AvHAIMoveTask* Task)
 	if (!Task || !Task->IsValid()) { return true; }
 
 	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	if (Task->RelatedPathData.IsValidMove())
+	{
+		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
+
+			if (PlatformRef)
+			{
+				return !AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation);
+			}
+		}
+	}
 
 	const DynamicMapObject* TriggerObject = AIMAP_GetDynamicObjectByEdict(Task->TaskTarget);
 
@@ -370,6 +405,22 @@ bool AvHAIPlayer::IsBreakMovementTaskComplete(const AvHAIMoveTask* Task)
 {
 	if (!Task || !Task->IsValid()) { return true; }
 
+	if (Task->RelatedPathData.IsValidMove())
+	{
+		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
+
+			if (PlatformRef)
+			{
+				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
+				{
+					return true;
+				}
+			}
+		}
+	}
+
 	return !UTIL_IsEdictActive(Task->TaskTarget);
 }
 
@@ -378,6 +429,22 @@ bool AvHAIPlayer::IsWeldMovementTaskComplete(const AvHAIMoveTask* Task)
 	if (!Task || !Task->IsValid()) { return true; }
 
 	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	if (Task->RelatedPathData.IsValidMove())
+	{
+		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
+
+			if (PlatformRef)
+			{
+				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
+				{
+					return true;
+				}
+			}
+		}
+	}
 
 	AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(CBaseEntity::Instance(ENTINDEX(Task->TaskTarget)));
 
@@ -1206,6 +1273,7 @@ EAINavMoveResult AvHAIPlayer::ProgressUseTask(AvHAIMoveTask* MoveTask)
 	{
 		edict_t* NonConstRef = INDEXENT(ENTINDEX(MoveTask->TaskTarget));
 		UseObject(NonConstRef, false);
+
 		return EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
@@ -1957,17 +2025,7 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 	{
 		AvHAIMoveTask NewDestinationTask;
 
-		bool bSuccess = false;
-
-		if (Platform->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-		{
-			bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), BestTrigger->Edict, Platform->Edict, NewDestinationTask);
-		}
-		else
-		{
-			const Vector ButtonLocation = AIMAP_GetButtonFloorLocation(NavProfile, GetLocation(), BestTrigger->Edict);
-			bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), ButtonLocation, nullptr, NewDestinationTask);
-		}
+		const bool bSuccess = AINAV_AddTriggerMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), BestTrigger->Edict, Platform->Edict, NewDestinationTask, CurrentPathNode);
 
 		if (bSuccess)
 		{
@@ -1994,7 +2052,7 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 	{
 		AvHAIMoveTask NewDestinationTask;
 
-		const bool bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
+		const bool bSuccess = AINAV_AddMoveMovementTask(NavProfile, UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask, CurrentPathNode);
 
 		if (bSuccess)
 		{
@@ -2025,7 +2083,7 @@ bool AvHAIPlayer::NewBoardPlatformMove(AvHAIPath* Path, const edict_t* Platform)
 	{
 		AvHAIMoveTask NewDestinationTask;
 
-		const bool bSuccess = AINAV_AddMoveMovementTask(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask);
+		const bool bSuccess = AINAV_AddMoveMovementTask(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), CurrentPathNode->FromLocation, nullptr, NewDestinationTask, CurrentPathNode);
 
 		if (bSuccess)
 		{

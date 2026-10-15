@@ -964,9 +964,9 @@ bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, con
 			return AINAV_CheckPlatformForMovementTasks(NavProfile, ImpactedPathNode, ImpactingObject, NewMoveTask);
 		case EAIDynamicMapObjectType::TRIGGER_BREAK:
 		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
-			return AINAV_AddBreakMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject, ImpactingObject, NewMoveTask);
+			return AINAV_AddBreakMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject, ImpactingObject, NewMoveTask, ImpactedPathNode);
 		case EAIDynamicMapObjectType::TRIGGER_WELD:
-			return AINAV_AddWeldMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject, ImpactingObject, NewMoveTask);
+			return AINAV_AddWeldMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactingObject, ImpactingObject, NewMoveTask, ImpactedPathNode);
 		default:
 			break;
 	}
@@ -977,7 +977,7 @@ bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, con
 
 	if (!Trigger || !Trigger->IsValid()) { return false; }
 
-	return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, ImpactingObject, NewMoveTask);
+	return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, ImpactingObject, NewMoveTask, ImpactedPathNode);
 }
 
 bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* Platform, AvHAIMoveTask& NewMoveTask)
@@ -1010,21 +1010,14 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 
 		if (Trigger)
 		{
-			if (PlatformRef->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
-			{
-				return AINAV_AddUseMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, Trigger->Edict, NewMoveTask);
-			}
-			else
-			{
-				return AINAV_AddMoveMovementTask(NavProfile, ImpactedPathNode->FromLocation, AIMAP_GetButtonFloorLocation(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict), nullptr, NewMoveTask);
-			}
+			return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, Trigger->Edict, PlatformRef->Edict, NewMoveTask, ImpactedPathNode);
 		}
 	}
 
 	return false;
 }
 
-bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask)
+bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
 
@@ -1040,35 +1033,46 @@ bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vecto
 	{
 		case EAIDynamicMapObjectType::TRIGGER_SHOOT:
 		case EAIDynamicMapObjectType::TRIGGER_BREAK:
-			return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			return AINAV_AddBreakMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, RelevantMoveInfo);
 			break;
 		case EAIDynamicMapObjectType::TRIGGER_TOUCH:
-			return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			return AINAV_AddTouchMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, RelevantMoveInfo);
 			break;
 		case EAIDynamicMapObjectType::TRIGGER_USE:
-			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, RelevantMoveInfo);
 			break;
 		default:
-			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask);
+			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, RelevantMoveInfo);
 			break;
 	}
 }
 
-bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
 
+	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(ThingToPickup)) { return false; }
+
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_PICKUP;
+	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = ThingToPickup;
-	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
+	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = ThingToPickup->v.origin;
+
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
 
 	return true;
 }
 
-bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
+
+	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToTouch)) { return false; }
 
 	AvHAIPath TestPath;
 	bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartPoint, UTIL_GetCentreOfEntity(EntityToTouch), &TestPath, 200.0f);
@@ -1076,52 +1080,88 @@ bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector&
 	if (!bFoundPath) { return false; }
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_TOUCH;
+	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = EntityToTouch;
-	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
+	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = TestPath.GetFinalDestination();
 
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
+
 	return true;
 }
 
-bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
 
+	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToBreak)) { return false; }
+
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
+	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = EntityToBreak;
-	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
+	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToBreak);
 
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
+
 	return true;
 }
 
-bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
+
+	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToWeld)) { return false; }
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
+	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = EntityToWeld;
-	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
+	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToWeld);
 
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
+
 	return true;
 }
 
-bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
+
+	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToUse)) { return false; }
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_USE;
+	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = EntityToUse;
-	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerToActivate)) ? TriggerToActivate : nullptr;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
+	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = AIMAP_GetButtonFloorLocation(NavProfile, StartPoint, EntityToUse);
+
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
 
 	return true;
 }
 
-bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerToActivate, AvHAIMoveTask& NewTask)
+bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
 	NewTask.Clear();
+
+	if (!NavProfile || !NavProfile->IsValid()) { return false; }
 
 	AvHAIPath TestPath;
 	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartPoint, MoveLocation, &TestPath, 200.0f);
@@ -1129,7 +1169,14 @@ bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& 
 	if (!bFoundPath) { return false; }
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
+	NewTask.NavProfile = NavProfile;
+	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = MoveLocation;
+
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
 
 	return true;
 }
