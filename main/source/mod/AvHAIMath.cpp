@@ -47,6 +47,21 @@ Vector UTIL_GetSurfaceNormal(const Vector v1, const Vector v2, const Vector v3)
 	return normal;
 }
 
+float UTIL_GetWalkableSlopeAngle(const Vector v1)
+{
+	const Vector Normalizedv1 = v1.Normalize();
+
+	if (vIsZero(Normalizedv1))
+	{
+		return 0.0f;
+	}
+
+	const float DotProduct = clampf(Normalizedv1.z, -1.0f, 1.0f);
+
+	// 5. Calculate arccosine to get radians, then convert to degrees
+	return (acosf(DotProduct) * (180.0f / M_PI));
+}
+
 bool vPointOverlaps3D(const Vector Point, const Vector MinBB, const Vector MaxBB)
 {
 	return (Point.x >= MinBB.x && Point.x <= MaxBB.x

@@ -351,6 +351,8 @@ struct AvHAIPlayer
 
 	void DEBUG_DrawPath();
 
+	Vector QuickMovementTrace(const Vector MoveDir);
+
 	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressBreakTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressUseTask(AvHAIMoveTask* MoveTask);

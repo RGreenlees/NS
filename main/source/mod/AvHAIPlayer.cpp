@@ -15,6 +15,8 @@
 #include "AvHMessage.h"
 #include "AvHTurret.h"
 #include "AvHWeldable.h"
+#include <pm_shared/pm_shared.h>
+#include <pm_shared/pm_defs.h>
 
 
 bool AvHAIPlayer::HasValidPath() const
@@ -1141,6 +1143,58 @@ void AvHAIPlayer::HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
 
 }
 
+Vector AvHAIPlayer::QuickMovementTrace(const Vector MoveDir)
+{
+	if (vIsZero(MoveDir)) { return ZERO_VECTOR; }
+
+	const Vector MoveDirNormal = MoveDir.Normalize();
+
+	enum_hull PlayerHull = GetPlayerHull(IsCrouching());
+	Vector StartTrace = GetLocation();
+	StartTrace.z += 10.0f;
+
+	Vector EndTrace = StartTrace + (MoveDirNormal * 10.0f);
+
+	int HullIndex = 0;
+
+	switch (PlayerHull)
+	{
+	case point_hull:
+		HullIndex = 2;
+		break;
+	case head_hull:
+		HullIndex = 1;
+		break;
+	case human_hull:
+		HullIndex = 0;
+		break;
+	case large_hull:
+		HullIndex = 3;
+		break;
+	default:
+		break;
+	}
+
+	trace_t TraceResult;
+	NS_TraceLine(StartTrace, EndTrace, HullIndex, PM_WORLD_ONLY, -1, true, TraceResult);
+
+	if (TraceResult.fraction >= 1.0f) { return ZERO_VECTOR; }
+
+	if (TraceResult.allsolid || TraceResult.startsolid) { return false; }
+
+	const Vector HitNormal = TraceResult.plane.normal;
+
+	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(TraceResult.plane.normal);
+
+	if (WalkableSlopeAngle <= 45.0f) { return ZERO_VECTOR; }
+
+	const Vector BottomOfHull = GetBottomOfHitbox();
+
+	if ((TraceResult.endpos.z - BottomOfHull.z) <= 18.0f) { return ZERO_VECTOR; }
+
+	return TraceResult.endpos;
+}
+
 void AvHAIPlayer::RemoveTask(const AvHAIMoveTask* Task)
 {
 	if (!Task) { return; }
@@ -1389,8 +1443,9 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 	}
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
 
-	const Vector CurrentPos = (IsOnGround()) ? GetLocation() : UTIL_GetFloorUnderEntity(Edict);
+	const Vector CurrentPos = GetBottomOfHitbox();
 
 	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPos);
 	// Same goes for the right vector, might not be the same as the bot's right
@@ -1400,41 +1455,49 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	const float PlayerRadius = GetPlayerRadius() + 2.0f;
 
-	Vector stTrcLft = CurrentPos - (vRight * PlayerRadius);
-	Vector stTrcRt = CurrentPos + (vRight * PlayerRadius);
-	Vector endTrcLft = stTrcLft + (vForward * (PlayerRadius * 1.2f));
-	Vector endTrcRt = stTrcRt + (vForward * (PlayerRadius * 1.2f));
+	Vector stNavTrcLft = CurrentPos - (vRight * PlayerRadius);
+	Vector stNavTrcRt = CurrentPos + (vRight * PlayerRadius);
+	Vector endNavTrcLft = stNavTrcLft + (vForward * (PlayerRadius * 1.2f));
+	Vector endNavTrcRt = stNavTrcRt + (vForward * (PlayerRadius * 1.2f));
+
+	Vector stCollTrcLft = stNavTrcLft + Vector(0.0f, 0.0f, 17.0f);
+	Vector stCollTrcRt = stNavTrcRt + Vector(0.0f, 0.0f, 17.0f);
+	Vector endCollTrcLft = endNavTrcLft + Vector(0.0f, 0.0f, 17.0f);
+	Vector endCollTrcRt = endNavTrcRt + Vector(0.0f, 0.0f, 17.0f);
 
 	const NavAgentProfile* NavProfile = GetNavProfile();
 
-	bool bumpLeft = !AINAV_IsPointDirectlyReachable(NavProfile, stTrcLft, endTrcLft) || !UTIL_QuickCollisionTrace(stTrcLft, endTrcLft);
-	bool bumpRight = !AINAV_IsPointDirectlyReachable(NavProfile, stTrcRt, endTrcRt) || !UTIL_QuickCollisionTrace(stTrcRt, endTrcRt);
+	const bool bNavBumpLeft = !AINAV_IsPointDirectlyReachable(NavProfile, stNavTrcLft, endNavTrcLft);
+	const bool bNavBumpRight = !AINAV_IsPointDirectlyReachable(NavProfile, stNavTrcRt, endNavTrcRt);
 
-	NextFrameMovementInput.DesiredMoveDirection = vForward;
+	const Vector MovementBump = QuickMovementTrace(vForward);
 
-	if (bumpRight && !bumpLeft)
+	if (!vIsZero(MovementBump))
 	{
-		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
-	}
-	else if (bumpLeft && !bumpRight)
-	{
-		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
-	}
-	else if (bumpLeft && bumpRight)
-	{
-		stTrcLft.z = Edict->v.origin.z;
-		stTrcRt.z = Edict->v.origin.z;
-		endTrcLft.z = Edict->v.origin.z;
-		endTrcRt.z = Edict->v.origin.z;
+		const float HeightDifference = MovementBump.z - CurrentPos.z;
 
-		if (!UTIL_QuickTrace(Edict, stTrcLft, endTrcLft))
+		if (HeightDifference <= 62.0f)
 		{
-			NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
+			Jump(true);
 		}
 		else
 		{
-			NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
+			if (CanCrouch())
+			{
+				NextFrameMovementInput.bShouldCrouch = true;
+			}
 		}
+	}
+
+	NextFrameMovementInput.DesiredMoveDirection = vForward;
+
+	if (bNavBumpRight && !bNavBumpLeft)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
+	}
+	else if (bNavBumpLeft && !bNavBumpRight)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
 	}
 	else
 	{
@@ -1457,6 +1520,12 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 		}
 		else
 		{
+			if (NextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+			{
+				NextFrameMovementInput.bShouldCrouch = true;
+				return true;
+			}
+
 			Vector HeadLocation = GetPlayerTopOfCollisionHull(Edict, false);
 
 			// Crouch if we have something in our way at head height
@@ -1519,6 +1588,7 @@ bool AvHAIPlayer::NewJumpMove(AvHAIPath* Path)
 	if (IsOnLadder())
 	{
 		Jump(false);
+		return true;
 	}
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
@@ -1536,10 +1606,8 @@ bool AvHAIPlayer::NewJumpMove(AvHAIPath* Path)
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 
-	float Dot = UTIL_GetDotProduct2D(vForward, CurrentVelocity2D);
-
-	// Yes this is cheating, but I'm up against millions of years of human evolution here...
-	if (IsOnGround() && Dot < 0.95f)
+	// Yes, this is cheating
+	if (IsOnGround())
 	{
 		float MoveSpeed = vSize2D(GetVelocity());
 		Vector NewVelocity = vForward * fmaxf(MoveSpeed, GetDesiredMovementSpeed(false));
@@ -1551,6 +1619,12 @@ bool AvHAIPlayer::NewJumpMove(AvHAIPath* Path)
 	Jump(true);
 
 	if (!CanCrouch()) { return true; }
+
+	if (NextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+		return true;
+	}
 
 	Vector HeadLocation = GetPlayerTopOfCollisionHull(Edict, false);
 
@@ -1640,7 +1714,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 			NextFrameMovementInput.DesiredLookLocation = CurrentPathNode->ToLocation;
 
-			if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+			if (CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
 				NextFrameMovementInput.bShouldCrouch = true;
 			}
@@ -1690,7 +1764,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 	// We've reached the end of the ladder, try and make it to the disembark point if we can
 	if (LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z >= DesiredClimbHeight)
 	{
-		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+		if (CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 		{
 			NextFrameMovementInput.bShouldCrouch = true;
 		}
@@ -1784,7 +1858,7 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 			{
 				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 
-				if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+				if (NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 				{
 					NextFrameMovementInput.bShouldCrouch = true;
 				}
@@ -1799,7 +1873,7 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 		{
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 
-			if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+			if (NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
 				NextFrameMovementInput.bShouldCrouch = true;
 			}

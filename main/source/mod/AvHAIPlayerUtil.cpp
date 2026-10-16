@@ -1027,8 +1027,44 @@ Vector UTIL_GetNearestSurfaceNormal(Vector SearchLocation)
 bool UTIL_QuickCollisionTrace(Vector StartTrace, Vector EndTrace)
 {
 	trace_t TraceResult;
-	NS_TraceLine(StartTrace, EndTrace, 0, PM_WORLD_ONLY, -1, true, TraceResult);
+	NS_TraceLine(StartTrace, EndTrace, 1, PM_WORLD_ONLY, -1, true, TraceResult);
 	return TraceResult.fraction >= 1.0f;
+}
+
+bool UTIL_QuickMovementTrace(Vector StartTrace, Vector EndTrace, enum_hull Hull)
+{
+	int HullIndex = 0;
+
+	switch (Hull)
+	{
+		case point_hull:
+			HullIndex = 2;
+			break;
+		case head_hull:
+			HullIndex = 1;
+			break;
+		case human_hull:
+			HullIndex = 0;
+			break;
+		case large_hull:
+			HullIndex = 3;
+			break;
+		default:
+			break;
+	}
+
+	trace_t TraceResult;
+	NS_TraceLine(StartTrace, EndTrace, HullIndex, PM_WORLD_ONLY, -1, true, TraceResult);
+
+	if (TraceResult.fraction >= 1.0f) { return true; }
+
+	if (TraceResult.allsolid || TraceResult.startsolid) { return false; }
+
+	const Vector HitNormal = TraceResult.plane.normal;
+
+	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(TraceResult.plane.normal);
+
+	return WalkableSlopeAngle < 45.0f;
 }
 
 Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder)
