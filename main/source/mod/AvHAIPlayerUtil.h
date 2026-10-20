@@ -183,7 +183,7 @@ Vector UTIL_GetNearestLadderBottomPoint(edict_t* pEdict);
 Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder);
 
 bool UTIL_QuickCollisionTrace(Vector StartTrace, Vector EndTrace);
-bool UTIL_QuickMovementTrace(Vector StartTrace, Vector EndTrace, enum_hull Hull);
+bool UTIL_QuickMovementTrace(edict_t* MoverEdict, Vector StartTrace, Vector EndTrace, enum_hull Hull);
 
 Vector UTIL_GetNearestSurfaceNormal(Vector SearchLocation);
 

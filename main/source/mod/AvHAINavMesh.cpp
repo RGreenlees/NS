@@ -747,6 +747,7 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 
 	float ClosestPoint[3] = { 0.0f, 0.0f, 0.0f };
 	float Height = 0.0f;
+
 	FoundMesh->NavQueryRef->closestPointOnPolyBoundary(PolyPath[PathCount - 1], dtEndNearest, ClosestPoint);
 	FoundMesh->NavQueryRef->getPolyHeight(PolyPath[PathCount - 1], ClosestPoint, &Height);
 

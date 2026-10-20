@@ -250,9 +250,21 @@ struct AvHAIMoveTask
 		TaskPath.Clear();
 	}
 
-	bool HasPath() const
+	bool HasPath(const Vector DesiredDestination = ZERO_VECTOR) const
 	{
-		return TaskPath.IsValidPath();
+		const bool bHasPath = TaskPath.IsValidPath();
+
+		if (!bHasPath) { return false; }
+
+		if (!vIsZero(DesiredDestination))
+		{
+			if (!vEquals(DesiredDestination, TaskPath.DesiredDestination, 5.0f))
+			{
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	bool IsValid() const
@@ -329,6 +341,7 @@ bool AINAV_IsJumpMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 bool AINAV_IsLadderMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool AINAV_IsObstacleMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool AINAV_IsPhaseGateMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
+bool AINAV_IsWallClimbMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 
 bool AINAV_IsOffPathNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
 bool AINAV_IsOffWalkNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);

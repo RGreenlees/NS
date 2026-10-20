@@ -1031,40 +1031,24 @@ bool UTIL_QuickCollisionTrace(Vector StartTrace, Vector EndTrace)
 	return TraceResult.fraction >= 1.0f;
 }
 
-bool UTIL_QuickMovementTrace(Vector StartTrace, Vector EndTrace, enum_hull Hull)
+bool UTIL_QuickMovementTrace(edict_t* MoverEdict, Vector StartTrace, Vector EndTrace, enum_hull Hull)
 {
-	int HullIndex = 0;
+	const bool bHasValidMover = (MoverEdict && !FNullEnt(MoverEdict));
 
-	switch (Hull)
-	{
-		case point_hull:
-			HullIndex = 2;
-			break;
-		case head_hull:
-			HullIndex = 1;
-			break;
-		case human_hull:
-			HullIndex = 0;
-			break;
-		case large_hull:
-			HullIndex = 3;
-			break;
-		default:
-			break;
-	}
+	TraceResult Hit;
+	UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, Hull, (bHasValidMover) ? MoverEdict->v.pContainingEntity : nullptr, &Hit);
 
-	trace_t TraceResult;
-	NS_TraceLine(StartTrace, EndTrace, HullIndex, PM_WORLD_ONLY, -1, true, TraceResult);
+	if (Hit.flFraction >= 1.0f) { return true; }
 
-	if (TraceResult.fraction >= 1.0f) { return true; }
+	if (Hit.fAllSolid || Hit.fStartSolid) { return false; }
 
-	if (TraceResult.allsolid || TraceResult.startsolid) { return false; }
+	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(Hit.vecPlaneNormal);
 
-	const Vector HitNormal = TraceResult.plane.normal;
+	if (WalkableSlopeAngle < 45.0f) { return true; }
 
-	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(TraceResult.plane.normal);
+	if (!bHasValidMover) { return false; }
 
-	return WalkableSlopeAngle < 45.0f;
+	return Hit.vecEndPos.z - GetPlayerBottomOfCollisionHull(MoverEdict).z < 18.0f;
 }
 
 Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder)

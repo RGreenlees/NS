@@ -34,6 +34,11 @@ bool AvHAIPlayer::IsOnLadder() const
 	return (!FNullEnt(Edict) && Edict->v.movetype == MOVETYPE_FLY);
 }
 
+bool AvHAIPlayer::IsWallSticking() const
+{
+	return (!FNullEnt(Edict) && IsPlayerSkulk(Edict) && (Edict->v.iuser4 & MASK_WALLSTICKING));
+}
+
 bool AvHAIPlayer::CanCrouch() const
 {
 	if (!IsValid()) { return false; }
@@ -298,6 +303,9 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 			break;
 		case EAIMovementTaskType::MOVE_TASK_USE:
 			MoveResult = ProgressUseTask(CurrentMoveTask);
+			break;
+		case EAIMovementTaskType::MOVE_TASK_WELD:
+			MoveResult = ProgressWeldTask(CurrentMoveTask);
 			break;
 		default:
 			MoveResult = EAINavMoveResult::NAV_MOVE_NOPATH;
@@ -1143,56 +1151,74 @@ void AvHAIPlayer::HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
 
 }
 
-Vector AvHAIPlayer::QuickMovementTrace(const Vector MoveDir)
+bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace)
 {
-	if (vIsZero(MoveDir)) { return ZERO_VECTOR; }
+	if (vIsZero(MoveDir)) { return true; }
 
 	const Vector MoveDirNormal = MoveDir.Normalize();
 
 	enum_hull PlayerHull = GetPlayerHull(IsCrouching());
 	Vector StartTrace = GetLocation();
-	StartTrace.z += 10.0f;
+	const Vector RightDir = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(MoveDir, UP_VECTOR));
 
-	Vector EndTrace = StartTrace + (MoveDirNormal * 10.0f);
+	const float HullOffset = (bPointTrace) ? 1.0f : (UTIL_GetHullOffsetFromFloor(head_hull).z + 1.0f);
 
-	int HullIndex = 0;
-
-	switch (PlayerHull)
+	if (PlayerHull != head_hull)
 	{
-	case point_hull:
-		HullIndex = 2;
-		break;
-	case head_hull:
-		HullIndex = 1;
-		break;
-	case human_hull:
-		HullIndex = 0;
-		break;
-	case large_hull:
-		HullIndex = 3;
-		break;
-	default:
-		break;
+		switch (TraceType)
+		{
+			case EAIMovementTraceType::HEAD_CENTER:
+				StartTrace.z = GetTopOfHitbox().z - HullOffset;
+				break;
+			case EAIMovementTraceType::HEAD_LEFT:
+				StartTrace.z = GetTopOfHitbox().z - HullOffset;
+				StartTrace = StartTrace - (RightDir * GetPlayerRadius());
+				break;
+			case EAIMovementTraceType::HEAD_RIGHT:
+				StartTrace.z = GetTopOfHitbox().z - HullOffset;
+				StartTrace = StartTrace + (RightDir * GetPlayerRadius());
+				break;
+			case EAIMovementTraceType::ORIGIN_LEFT:
+				StartTrace = StartTrace - (RightDir * GetPlayerRadius());
+				break;
+			case EAIMovementTraceType::ORIGIN_RIGHT:
+				StartTrace = StartTrace + (RightDir * GetPlayerRadius());
+				break;
+			case EAIMovementTraceType::LOWER_LEFT:
+				StartTrace.z = GetBottomOfHitbox().z + HullOffset;
+				StartTrace = StartTrace - (RightDir * GetPlayerRadius());
+				break;
+			case EAIMovementTraceType::LOWER_RIGHT:
+				StartTrace.z = GetBottomOfHitbox().z + HullOffset;
+				StartTrace = StartTrace + (RightDir * GetPlayerRadius());
+				break;
+			case EAIMovementTraceType::LOWER_CENTER:
+				StartTrace.z = GetBottomOfHitbox().z + HullOffset;
+				break;
+			default:
+				break;
+		}
 	}
 
-	trace_t TraceResult;
-	NS_TraceLine(StartTrace, EndTrace, HullIndex, PM_WORLD_ONLY, -1, true, TraceResult);
+	Vector EndTrace = StartTrace + (MoveDirNormal * 5.0f);
 
-	if (TraceResult.fraction >= 1.0f) { return ZERO_VECTOR; }
+	TraceResult HitResult;
 
-	if (TraceResult.allsolid || TraceResult.startsolid) { return false; }
+	UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
 
-	const Vector HitNormal = TraceResult.plane.normal;
+	if (HitResult.flFraction >= 1.0f) { return true; }
 
-	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(TraceResult.plane.normal);
+	if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
 
-	if (WalkableSlopeAngle <= 45.0f) { return ZERO_VECTOR; }
+	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal);
+
+	if (WalkableSlopeAngle <= 45.0f) { return true; }
 
 	const Vector BottomOfHull = GetBottomOfHitbox();
 
-	if ((TraceResult.endpos.z - BottomOfHull.z) <= 18.0f) { return ZERO_VECTOR; }
+	if ((HitResult.vecEndPos.z - BottomOfHull.z) <= 18.0f) { return true; }
 
-	return TraceResult.endpos;
+	return false;
 }
 
 void AvHAIPlayer::RemoveTask(const AvHAIMoveTask* Task)
@@ -1360,6 +1386,43 @@ EAINavMoveResult AvHAIPlayer::ProgressUseTask(AvHAIMoveTask* MoveTask)
 	return FollowPath(&MoveTask->TaskPath);
 }
 
+EAINavMoveResult AvHAIPlayer::ProgressWeldTask(AvHAIMoveTask* MoveTask)
+{
+	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
+
+	if (!UTIL_IsEdictActive(MoveTask->TaskTarget)) { return EAINavMoveResult::NAV_MOVE_INVALIDTASK; }
+
+	if (HasWeapon(EAIWeaponId::WEAPON_MARINE_WELDER))
+	{
+		EAIAttackResult WeldResult = PerformAttackLOSCheck(GetEyePosition(), EAIWeaponId::WEAPON_MARINE_WELDER, MoveTask->TaskTarget);
+
+		if (WeldResult == EAIAttackResult::ATTACK_SUCCESS)
+		{
+			ShootTarget(MoveTask->TaskTarget, EAIWeaponId::WEAPON_MARINE_WELDER);
+
+			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
+
+		if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != GetNavProfile()->MeshIndex)
+		{
+			const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetEyePosition(), MoveTask->TaskTarget);
+
+			const bool bSuccess = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, max_ai_use_reach);
+
+			if (!bSuccess)
+			{
+				return EAINavMoveResult::NAV_MOVE_NOPATH;
+			}
+		}
+
+		return FollowPath(&MoveTask->TaskPath);
+	}
+
+	// TODO: Need to get a welder from somewhere
+
+	return EAINavMoveResult::NAV_MOVE_SUCCESS;
+}
+
 EAINavMoveResult AvHAIPlayer::ProgressBreakTask(AvHAIMoveTask* MoveTask)
 {
 	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
@@ -1421,6 +1484,9 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 	case EAINavMovementFlag::NAV_FLAG_LADDER:
 		return NewLadderMove(Path);
 		break;
+	case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
+		return NewWallClimbMove(Path);
+		break;
 	case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 		return NewPlatformMove(Path);
 		break;
@@ -1455,58 +1521,29 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	const float PlayerRadius = GetPlayerRadius() + 2.0f;
 
-	Vector stNavTrcLft = CurrentPos - (vRight * PlayerRadius);
-	Vector stNavTrcRt = CurrentPos + (vRight * PlayerRadius);
-	Vector endNavTrcLft = stNavTrcLft + (vForward * (PlayerRadius * 1.2f));
-	Vector endNavTrcRt = stNavTrcRt + (vForward * (PlayerRadius * 1.2f));
-
-	Vector stCollTrcLft = stNavTrcLft + Vector(0.0f, 0.0f, 17.0f);
-	Vector stCollTrcRt = stNavTrcRt + Vector(0.0f, 0.0f, 17.0f);
-	Vector endCollTrcLft = endNavTrcLft + Vector(0.0f, 0.0f, 17.0f);
-	Vector endCollTrcRt = endNavTrcRt + Vector(0.0f, 0.0f, 17.0f);
-
-	const NavAgentProfile* NavProfile = GetNavProfile();
-
-	const bool bNavBumpLeft = !AINAV_IsPointDirectlyReachable(NavProfile, stNavTrcLft, endNavTrcLft);
-	const bool bNavBumpRight = !AINAV_IsPointDirectlyReachable(NavProfile, stNavTrcRt, endNavTrcRt);
-
-	const Vector MovementBump = QuickMovementTrace(vForward);
-
-	if (!vIsZero(MovementBump))
-	{
-		const float HeightDifference = MovementBump.z - CurrentPos.z;
-
-		if (HeightDifference <= 62.0f)
-		{
-			Jump(true);
-		}
-		else
-		{
-			if (CanCrouch())
-			{
-				NextFrameMovementInput.bShouldCrouch = true;
-			}
-		}
-	}
+	const bool bBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, vForward, /* Line trace */ true);
+	const bool bBumpRight = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_RIGHT, vForward, /* Line trace */ true);
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 
-	if (bNavBumpRight && !bNavBumpLeft)
+	if (bBumpRight && !bBumpLeft)
 	{
 		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
 	}
-	else if (bNavBumpLeft && !bNavBumpRight)
+	else if (bBumpLeft && !bBumpRight)
 	{
 		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
 	}
-	else
+	else if (!bBumpLeft && !bBumpRight)
 	{
-		const float DistFromLine = vDistanceFromLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentPos);
-
-		if (DistFromLine > 18.0f)
+		if (!QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Hull trace */ false))
 		{
-			float modifier = (float)vPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentPos);
-			NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + (vRight * modifier);
+			NextFrameMovementInput.bShouldCrouch = true;
+		}
+
+		if (!QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Hull trace */ false))
+		{
+			Jump(true);
 		}
 	}
 
@@ -2295,6 +2332,155 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 	}
 
 	return false;
+}
+
+bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
+{
+	if (!Path || !Path->IsValidPath()) { return false; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	const NavAgentProfile* NavProfile = GetNavProfile();
+	const Vector CurrentFloorPosition = UTIL_GetFloorUnderEntity(Edict);
+	const Vector BottomOfHitbox = GetBottomOfHitbox();
+	const Vector CurrentPosition = GetLocation();
+
+	if (AINAV_IsPointDirectlyReachable(NavProfile, CurrentFloorPosition, CurrentPathNode->ToLocation, 5.0f))
+	{
+		Vector PointOnMoveLine = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentFloorPosition);
+
+		if (vEquals2D(PointOnMoveLine, CurrentPathNode->ToLocation, 4.0f))
+		{
+			if (IsPlayerSkulk(Edict))
+			{
+				NextFrameMovementInput.bShouldCrouch = true;
+			}
+
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentFloorPosition);
+
+			return;
+		}
+	}
+
+	Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+	Vector ClimbAngle = UTIL_GetVectorNormal(Vector(CurrentPathNode->ToLocation.x, CurrentPathNode->ToLocation.y, CurrentPathNode->RequiredClimbZ) - CurrentPosition);
+
+	TraceResult SurfaceCheck;
+
+	UTIL_TraceHull(CurrentPosition - Vector(0.0f, 0.0f, 1.0f), CurrentPosition + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, Edict->v.pContainingEntity, &SurfaceCheck);
+
+	const Vector CeilNormal = SurfaceCheck.vecPlaneNormal;
+
+	bool bIsUnderClimbing = false;
+
+	bool bClimbingUnderway = ((BottomOfHitbox.z - CurrentPathNode->FromLocation.z) >= 32.0f) && IsWallSticking();
+
+	if (CurrentPosition.z < (CurrentPathNode->RequiredClimbZ - 10.0f) && !IsOnGround() && bClimbingUnderway)
+	{
+		bIsUnderClimbing = (SurfaceCheck.flFraction < 1.0f && UTIL_GetDotProduct(ClimbAngle, CeilNormal) < 0.0f);
+	}
+
+	if (bIsUnderClimbing)
+	{
+		NextFrameMovementInput.bShouldWalk = true;
+		vForward = (UTIL_GetDotProduct2D(vForward, CeilNormal) > 0.0f) ? vForward : -vForward;
+
+	}
+
+	Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
+
+	NextFrameMovementInput.DesiredMoveDirection = vForward;
+
+	Vector CheckLine = CurrentPathNode->FromLocation + (vForward * 1000.0f);
+
+	float DistFromLine = vDistanceFromLine2D(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
+
+	// Draw an imaginary 2D line between from and to movement, and make sure we're aligned. If we've drifted off to one side, readjust.
+	if (DistFromLine > 18.0f)
+	{
+		float modifier = (float)vPointOnLine(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
+
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection + (vRight * modifier));
+	}
+
+	// Stop holding crouch if we're a skulk so we can actually climb
+	if (IsPlayerSkulk(Edict))
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+	}
+
+	const Vector EyePosition = GetEyePosition();
+
+	float ZDiff = fabs(CurrentPosition.z - CurrentPathNode->RequiredClimbZ);
+	Vector AdjustedTargetLocation = CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation) * 1000.0f);
+	Vector DirectAheadView = EyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - EyePosition) * 100.0f);
+
+	Vector LookLocation = g_vecZero;
+
+	if (ZDiff < 1.0f)
+	{
+		LookLocation = DirectAheadView;
+	}
+	else
+	{
+		// Don't look up/down quite so much as we reach the desired height so we slow down a bit, reduces the chance of over-shooting and climbing right over a vent
+		if (CurrentPosition.z > CurrentPathNode->RequiredClimbZ)
+		{
+			if (ZDiff > 16.0f)
+			{
+				ClimbAngle = ClimbAngle - (2.0f * (UTIL_GetDotProduct(ClimbAngle, UP_VECTOR) * ClimbAngle));
+				LookLocation = EyePosition + (ClimbAngle * 100.0f);
+			}
+			else
+			{
+				LookLocation = DirectAheadView - Vector(0.0f, 0.0f, 20.0f);
+			}
+		}
+		else
+		{
+			if (bIsUnderClimbing)
+			{
+				LookLocation = EyePosition + vForward;
+				LookLocation.z = CurrentPathNode->ToLocation.z + 100.0f;
+			}
+			else
+			{
+				if (bClimbingUnderway)
+				{
+					LookLocation = EyePosition + (ClimbAngle * 100.0f);
+				}
+				else
+				{
+					LookLocation = EyePosition + vForward;
+					LookLocation.z = CurrentPathNode->RequiredClimbZ;
+				}
+			}
+		}
+	}
+
+	if (IsWallSticking() && !bIsUnderClimbing)
+	{
+		Vector RightDir = UTIL_GetCrossProduct(vForward, UP_VECTOR);
+
+		Vector LeftCheckStart = CurrentPosition - (RightDir * (GetPlayerRadius() + 2.0f));
+		Vector LeftCheckEnd = LeftCheckStart + Vector(0.0f, 0.0f, 50.0f);
+
+		Vector RightCheckStart = CurrentPosition + (RightDir * (GetPlayerRadius() + 2.0f));
+		Vector RightCheckEnd = RightCheckStart + Vector(0.0f, 0.0f, 50.0f);
+
+		if (!UTIL_QuickTrace(Edict, LeftCheckStart, LeftCheckEnd))
+		{
+			if (UTIL_QuickTrace(Edict, RightCheckStart, RightCheckEnd))
+			{
+				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward + RightDir);
+			}
+		}
+		else if (!UTIL_QuickTrace(Edict, RightCheckStart, RightCheckEnd))
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward - RightDir);
+		}
+	}
+
+	NextFrameMovementInput.RequiredLookLocation = LookLocation;
 }
 
 bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)

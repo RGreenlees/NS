@@ -36,6 +36,19 @@ enum class EAICombatStrategy
 	COMBAT_STRATEGY_ATTACK		// Attack the enemy
 };
 
+enum class EAIMovementTraceType
+{
+	HEAD_CENTER = 0,
+	HEAD_LEFT,
+	HEAD_RIGHT,
+	ORIGIN_CENTER,
+	ORIGIN_LEFT,
+	ORIGIN_RIGHT,
+	LOWER_CENTER,
+	LOWER_LEFT,
+	LOWER_RIGHT
+};
+
 struct AvHAIMovementInput
 {
 	float			ForwardMove = 0.0f;
@@ -268,6 +281,7 @@ struct AvHAIPlayer
 	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
 	bool IsOnGround() const;
 	bool IsOnLadder() const;
+	bool IsWallSticking() const;
 	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
 	bool CanCrouch() const;
 	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
@@ -333,6 +347,7 @@ struct AvHAIPlayer
 	bool NewBoardPlatformMove(AvHAIPath* Path, const edict_t* Platform);
 	bool NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, const Vector& DesiredStop);
 	bool NewPhaseGateMove(AvHAIPath* Path);
+	bool NewWallClimbMove(AvHAIPath* Path);
 
 	bool IsMovementTaskComplete(const AvHAIMoveTask* Task);
 	bool IsMoveMovementTaskComplete(const AvHAIMoveTask* Task);
@@ -351,11 +366,13 @@ struct AvHAIPlayer
 
 	void DEBUG_DrawPath();
 
-	Vector QuickMovementTrace(const Vector MoveDir);
+	// Returns true if trace completed without hitting anything
+	bool QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace);
 
 	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressBreakTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressUseTask(AvHAIMoveTask* MoveTask);
+	EAINavMoveResult ProgressWeldTask(AvHAIMoveTask* MoveTask);
 };
 
 

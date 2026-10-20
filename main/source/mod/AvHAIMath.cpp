@@ -202,8 +202,8 @@ Vector vClosestPointOnInfiniteLine3D(const Vector PointOnLine, const Vector Norm
 
 Vector vClosestPointOnInfiniteLine2D(const Vector PointOnLine, const Vector NormalisedLineDir, const Vector TestPoint)
 {
-	Vector NormalisedLineDir2D = UTIL_GetVectorNormal2D(NormalisedLineDir);
-	Vector DirectionToPoint = UTIL_GetVectorNormal2D(PointOnLine - TestPoint);
+	const Vector NormalisedLineDir2D = UTIL_GetVectorNormal2D(NormalisedLineDir);
+	const Vector DirectionToPoint = UTIL_GetVectorNormal2D(PointOnLine - TestPoint);
 
 	float DirectionDot = UTIL_GetDotProduct2D(DirectionToPoint, NormalisedLineDir2D);
 
@@ -213,7 +213,7 @@ Vector vClosestPointOnInfiniteLine2D(const Vector PointOnLine, const Vector Norm
 // Returns 0 if point sits right on the line defined by lineFrom and lineTo, -1 if it sits to the left, 1 if it sits to the right. Ignores Z axis
 int vPointOnLine(const Vector lineFrom, const Vector lineTo, const Vector point)
 {
-	float value = ((lineTo.x - lineFrom.x) * (point.y - lineFrom.y)) - ((point.x - lineFrom.x) * (lineTo.y - lineFrom.y));
+	const float value = ((lineTo.x - lineFrom.x) * (point.y - lineFrom.y)) - ((point.x - lineFrom.x) * (lineTo.y - lineFrom.y));
 
 	if (value > 1.0f)
 		return 1;

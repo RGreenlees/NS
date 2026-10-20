@@ -1346,25 +1346,6 @@ bool AINAV_IsLiftMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->v.absmin, AIPlayer->v.absmax);
 }
 
-bool AINAV_IsWallClimbMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
-{
-	if (!NavProfile || !UTIL_IsEdictActive(AIPlayer) || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
-
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
-	{
-		if (!IsPlayerClimbingWall(AIPlayer))
-		{
-			const Vector FloorLocation = UTIL_GetFloorUnderEntity(AIPlayer);
-
-			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorLocation, NextPathNode->ToLocation)) { return true; }
-		}
-	}
-
-	Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, AIPlayer->v.origin);
-
-	return vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 4.0f) && IsPlayerOnGround(AIPlayer);
-}
-
 bool AINAV_IsObstacleMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
 {
 	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
@@ -1377,6 +1358,28 @@ bool AINAV_IsPhaseGateMoveComplete(const NavAgentProfile* NavProfile, const edic
 	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
 
 	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->v.absmin, AIPlayer->v.absmax) || vDist2DSq(AIPlayer->v.origin, CurrentPathNode->ToLocation) < sqrf(32.0f);
+}
+
+bool AINAV_IsWallClimbMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)
+{
+	if (!AIPlayer || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	const Vector CurrentPosition = AIPlayer->v.origin;
+
+	Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentPosition);
+
+	if (!vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 4.0f)) { return false; }
+
+	if (vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->v.absmin, AIPlayer->v.absmax)) { return true; }
+
+	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
+
+	if (!bHasNextPathNode) { return false; }
+
+	const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer);
+
+	return AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation)
+		&& UTIL_QuickHullTrace(AIPlayer, CurrentPosition, NextPathNode->ToLocation);
 }
 
 AvHPlayer* AINAV_GetPlayerRidingOnBot(const edict_t* AIPlayer)
