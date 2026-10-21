@@ -557,24 +557,33 @@ dtStatus dtTileCache::addOffMeshConnection(const float* spos, const float* epos,
 	return DT_SUCCESS;
 }
 
-dtStatus dtTileCache::modifyOffMeshConnection(dtOffMeshConnectionRef ConRef, const unsigned int newFlag)
+dtStatus dtTileCache::modifyOffMeshConnection(dtOffMeshConnectionRef ConRef, const unsigned int newFlag, dtNavMesh* navmesh)
 {
-	if (m_nOffMeshReqs >= MAX_REQUESTS)
-		return DT_FAILURE | DT_BUFFER_TOO_SMALL;
-
 	dtOffMeshConnection* con = getOffMeshConnectionByRef(ConRef);
 
-	if (!con) { return DT_FAILURE; }
+	if (!con || !navmesh || con->state == DT_OFFMESH_EMPTY || con->state == DT_OFFMESH_REMOVING)
+		return DT_FAILURE | DT_INVALID_PARAM;
 
-	con->state = DT_OFFMESH_DIRTY;
+	const unsigned int oldFlag = con->flags;
 	con->flags = newFlag;
 
-	OffMeshRequest* req = &m_OffMeshReqs[m_nOffMeshReqs++];
-	memset(req, 0, sizeof(OffMeshRequest));
-	req->action = REQUEST_OFFMESH_REFRESH;
-	req->ref = ConRef;
+	// A new connection has no polygon yet. Its flags will be copied when its source tile is built.
+	if (con->state == DT_OFFMESH_NEW)
+		return DT_SUCCESS;
 
-	return DT_SUCCESS;
+	dtMeshTile* tile = navmesh->getTileAt(con->FromTileX, con->FromTileY, con->FromTileLayer);
+	if (!tile || !tile->header || con->poly >= tile->header->polyCount ||
+		tile->polys[con->poly].getType() != DT_POLYTYPE_OFFMESH_CONNECTION)
+	{
+		con->flags = oldFlag;
+		return DT_FAILURE | DT_INVALID_PARAM;
+	}
+
+	const dtPolyRef polyRef = navmesh->getPolyRefBase(tile) | (dtPolyRef)con->poly;
+	const dtStatus status = navmesh->setPolyFlags(polyRef, newFlag);
+	if (dtStatusFailed(status))
+		con->flags = oldFlag;
+	return status;
 }
 
 dtStatus dtTileCache::queryTiles(const float* bmin, const float* bmax,
@@ -679,6 +688,7 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 
 		m_nreqs = 0;
 
+		bool bDeferredOffMeshRequests = false;
 		for (int i = 0; i < m_nOffMeshReqs; ++i)
 		{
 			OffMeshRequest* req = &m_OffMeshReqs[i];
@@ -694,8 +704,6 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 
 			if (req->action == REQUEST_OFFMESH_ADD)
 			{
-				con->state = DT_OFFMESH_DIRTY;
-
 				// Find touched tiles.
 				float bmin[3], bmax[3];
 				float ext[3] = { con->rad, 18.0f, con->rad };
@@ -725,7 +733,14 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 					EndTileRef = touched[0];
 				}
 
-				if (!StartTileRef || !EndTileRef) { continue; }
+				if (!StartTileRef || !EndTileRef)
+				{
+					const int RemainingRequests = m_nOffMeshReqs - i;
+					memmove(m_OffMeshReqs, req, RemainingRequests * sizeof(OffMeshRequest));
+					m_nOffMeshReqs = RemainingRequests;
+					if (upToDate) { *upToDate = false; }
+					return DT_FAILURE | DT_INVALID_PARAM;
+				}
 
 				const dtCompressedTile* StartTile = getTileByRef(StartTileRef);
 				const dtCompressedTile* EndTile = getTileByRef(EndTileRef);
@@ -738,11 +753,24 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 				con->ToTileY = EndTile->header->ty;
 				con->ToTileLayer = EndTile->header->tlayer;
 
-				if (m_nupdate < MAX_UPDATE)
+				const bool bStartTileQueued = contains(m_update, m_nupdate, StartTileRef);
+				const bool bEndTileQueued = EndTileRef == StartTileRef || contains(m_update, m_nupdate, EndTileRef);
+				const int RequiredUpdateSlots = (bStartTileQueued ? 0 : 1) + (bEndTileQueued ? 0 : 1);
+
+				if (m_nupdate + RequiredUpdateSlots > MAX_UPDATE)
 				{
-					if (!contains(m_update, m_nupdate, StartTileRef))
-						m_update[m_nupdate++] = StartTileRef;
+					const int RemainingRequests = m_nOffMeshReqs - i;
+					memmove(m_OffMeshReqs, req, RemainingRequests * sizeof(OffMeshRequest));
+					m_nOffMeshReqs = RemainingRequests;
+					bDeferredOffMeshRequests = true;
+					break;
 				}
+
+				if (!contains(m_update, m_nupdate, StartTileRef))
+					m_update[m_nupdate++] = StartTileRef;
+				if (!contains(m_update, m_nupdate, EndTileRef))
+					m_update[m_nupdate++] = EndTileRef;
+				con->state = DT_OFFMESH_DIRTY;
 			}
 			else if (req->action == REQUEST_OFFMESH_REMOVE)
 			{
@@ -767,7 +795,8 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 			}
 		}
 
-		m_nOffMeshReqs = 0;
+		if (!bDeferredOffMeshRequests)
+			m_nOffMeshReqs = 0;
 	}
 
 	dtStatus status = DT_SUCCESS;
@@ -778,6 +807,11 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 		// Build mesh
 		const dtCompressedTileRef ref = m_update[0];
 		status = buildNavMeshTile(ref, navmesh);
+		if (dtStatusFailed(status))
+		{
+			if (upToDate) { *upToDate = false; }
+			return status;
+		}
 		m_nupdate--;
 		if (m_nupdate > 0)
 			memmove(m_update, m_update+1, m_nupdate*sizeof(dtCompressedTileRef));
@@ -831,8 +865,18 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 			if (con->state == DT_OFFMESH_DIRTY)
 			{
 				navmesh->unconnectOffMeshLink(con);
-				navmesh->baseOffMeshLinks(con);
-				navmesh->GlobalOffMeshLinks(con);
+				status = navmesh->baseOffMeshLinks(con);
+				if (dtStatusFailed(status))
+				{
+					if (upToDate) { *upToDate = false; }
+					return status;
+				}
+				status = navmesh->GlobalOffMeshLinks(con);
+				if (dtStatusFailed(status))
+				{
+					if (upToDate) { *upToDate = false; }
+					return status;
+				}
 				con->state = DT_OFFMESH_CLEAN;
 				if (workDone) { *workDone = true; }
 			}

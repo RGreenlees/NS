@@ -1014,6 +1014,12 @@ void AvHAIPlayer::UpdateNavProfile()
 	if (IsPlayerMarine(Edict))
 	{
 		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+
+		const EAINavMovementFlag PhaseGateFlag = (Player->GetTeam() == GetGameRules()->GetTeamANumber())
+			? EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
+			: EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2;
+
+		BotNavInfo.NavProfile.Filters.addIncludeFlags(static_cast<unsigned int>(PhaseGateFlag));
 		return;
 	}
 

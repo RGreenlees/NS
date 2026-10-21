@@ -216,7 +216,13 @@ bool AIMESH_UpdateTileCache(EAINavMeshIndex MeshIndex)
 	if (!FoundMesh) { return false; }
 
 	bool bWasNavMeshModified = false;
-	FoundMesh->TileCacheRef->update(0.0f, FoundMesh->NavMeshRef, &FoundMesh->bIsMeshUpToDate, &bWasNavMeshModified);
+	const dtStatus UpdateStatus = FoundMesh->TileCacheRef->update(0.0f, FoundMesh->NavMeshRef, &FoundMesh->bIsMeshUpToDate, &bWasNavMeshModified);
+
+	if (dtStatusFailed(UpdateStatus))
+	{
+		FoundMesh->bIsMeshUpToDate = false;
+		return false;
+	}
 
 	return FoundMesh->IsUpToDate() && bWasNavMeshModified;
 }
@@ -538,17 +544,22 @@ NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh,
 	return nullptr;
 }
 
-void AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const EAINavMovementFlag NewFlag)
+bool AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const EAINavMovementFlag NewFlag)
 {
 	// Don't do anything if the connection is invalid, or already has the desired flags set
-	if (!Connection || !Connection->IsValid() || Connection->ConnectionFlags == NewFlag) { return; }
+	if (!Connection || !Connection->IsValid()) { return false; }
+	if (Connection->ConnectionFlags == NewFlag) { return true; }
 
 	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(Connection->NavMeshIndex);
 
-	if (!ParentMesh) { return; }
+	if (!ParentMesh) { return false; }
+
+	const dtStatus ModifyStatus = ParentMesh->TileCacheRef->modifyOffMeshConnection(Connection->ConnectionRef, static_cast<unsigned int>(NewFlag), ParentMesh->NavMeshRef);
+
+	if (dtStatusFailed(ModifyStatus)) { return false; }
 
 	Connection->ConnectionFlags = NewFlag;
-	ParentMesh->TileCacheRef->modifyOffMeshConnection(Connection->ConnectionRef, static_cast<unsigned int>(NewFlag));
+	return true;
 }
 
 bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
@@ -564,7 +575,6 @@ bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
 	if (dtStatusSucceed(RemoveStatus))
 	{
 		ParentNavMesh->RemoveOffMeshConnectionFromList(RemoveConnectionDef);
-		RemoveConnectionDef->ConnectionRef = 0;
 		return true;
 	}
 	else
@@ -1162,14 +1172,17 @@ void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTi
 void NavMesh::RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionToRemove)
 {
 	if (!ConnectionToRemove || !ConnectionToRemove->IsValid()) { return; }
+	const unsigned int ConnectionRef = ConnectionToRemove->ConnectionRef;
 
 	for (auto it = MeshConnections.begin(); it != MeshConnections.end();)
 	{
 		NavOffMeshConnection* CheckRef = &(*it);
 
-		if (!CheckRef || !CheckRef->IsValid() || CheckRef->ConnectionRef == ConnectionToRemove->ConnectionRef)
+		if (!CheckRef || !CheckRef->IsValid() || CheckRef->ConnectionRef == ConnectionRef)
 		{
+			const bool bRemovedRequestedConnection = CheckRef && CheckRef->ConnectionRef == ConnectionRef;
 			it = MeshConnections.erase(it);
+			if (bRemovedRequestedConnection) { return; }
 		}
 		else
 		{

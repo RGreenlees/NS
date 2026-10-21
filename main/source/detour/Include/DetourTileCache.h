@@ -155,7 +155,7 @@ public:
 	dtStatus removeOffMeshConnection(const dtOffMeshConnectionRef ref);
 
 	dtStatus addOffMeshConnection(const float* spos, const float* epos, const float radius, const unsigned char area, const unsigned int flags, const bool bBiDirectional, dtOffMeshConnectionRef* result);
-	dtStatus modifyOffMeshConnection(dtOffMeshConnectionRef ConRef, const unsigned int newFlag);
+	dtStatus modifyOffMeshConnection(dtOffMeshConnectionRef ConRef, const unsigned int newFlag, class dtNavMesh* navmesh);
 
 	dtStatus queryTiles(const float* bmin, const float* bmax,
 						dtCompressedTileRef* results, int* resultCount, const int maxResults) const;

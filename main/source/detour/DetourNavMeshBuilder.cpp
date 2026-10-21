@@ -298,7 +298,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 	
 	if (params->NumOffMeshConnections > 0)
 	{
-		offMeshConClass = (unsigned char*)dtAlloc(sizeof(unsigned char) * params->offMeshConCount * 2, DT_ALLOC_TEMP);
+		offMeshConClass = (unsigned char*)dtAlloc(sizeof(unsigned char) * params->NumOffMeshConnections * 2, DT_ALLOC_TEMP);
 		if (!offMeshConClass)
 			return false;
 
@@ -314,14 +314,19 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 			if (bOriginates)
 			{
 				con->state = DT_OFFMESH_DIRTY;
-				offMeshConLinkCount++;
+				// Source ground -> connection, connection -> source ground, and connection -> destination ground.
+				offMeshConLinkCount += 3;
 				storedOffMeshConCount++;
 			}
 
 			if (bTargets)
 			{
 				con->state = DT_OFFMESH_DIRTY;
-				offMeshConLinkCount++;
+				if (con->bBiDir)
+				{
+					// Destination ground -> connection for bidirectional traversal.
+					offMeshConLinkCount++;
+				}
 			}
 		}
 	}
@@ -350,7 +355,7 @@ bool dtCreateNavMeshData(dtNavMeshCreateParams* params, unsigned char** outData,
 		}
 	}
 
-	const int maxLinkCount = edgeCount + portalCount*2 + offMeshConLinkCount*2;
+	const int maxLinkCount = edgeCount + portalCount*2 + offMeshConLinkCount;
 	
 	// Find unique detail vertices.
 	int uniqueDetailVertCount = 0;

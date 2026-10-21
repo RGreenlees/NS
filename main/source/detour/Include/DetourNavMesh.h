@@ -638,8 +638,8 @@ public:
 	}
 
 	void unconnectOffMeshLink(const dtOffMeshConnection* con);
-	void baseOffMeshLinks(dtOffMeshConnection* Connection);
-	void GlobalOffMeshLinks(dtOffMeshConnection* con);
+	dtStatus baseOffMeshLinks(dtOffMeshConnection* Connection);
+	dtStatus GlobalOffMeshLinks(dtOffMeshConnection* con);
 
 	/// @}
 	

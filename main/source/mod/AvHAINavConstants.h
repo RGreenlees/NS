@@ -12,6 +12,7 @@
 #define AVH_AI_NAV_CONSTANTS_H
 
 #include <vector>
+#include <list>
 #include <dlls/extdll.h>
 #include <dlls/util.h>
 #include "DetourNavMeshQuery.h"
@@ -210,7 +211,7 @@ struct NavOffMeshConnection
 		return ConnectionRef > 0 && IsValidNavMeshIndex(static_cast<int>(NavMeshIndex));
 	}
 };
-typedef std::vector<NavOffMeshConnection> OffMeshConnectionList;
+typedef std::list<NavOffMeshConnection> OffMeshConnectionList;
 
 // A temporary obstacle is a shape placed on the map during play which affects the area it covers, changing the movement flags on it.
 // For example, a temporary obstacle with an area type of NULL would cut a hole in the nav mesh, e.g. a door is permanently welded shut.
