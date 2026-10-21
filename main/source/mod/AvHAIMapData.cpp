@@ -1057,7 +1057,6 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 		if (!ThisTrigger)
 		{
 			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_DISABLED);
-			continue;
 		}
 	}
 }
