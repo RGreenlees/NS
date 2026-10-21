@@ -155,18 +155,30 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 		}
 	}
 
+	const NavAgentProfile* NavProfile = GetNavProfile();
+
 	// This is a brand new destination
 	BotNavInfo.ClearPath();
 
 	AvHAIMoveTask NewDestinationTask;
 
-	if (AINAV_AddMoveMovementTask(GetNavProfile(), GetBottomOfHitbox(), DesiredLocation, nullptr, NewDestinationTask))
+	const bool bAddedCoreMovementTask = AINAV_AddMoveMovementTask(NavProfile, GetBottomOfHitbox(), DesiredLocation, nullptr, NewDestinationTask);
+
+	if (bAddedCoreMovementTask)
 	{
 		BotNavInfo.MovementTasks.push_back(NewDestinationTask);
 		return EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
-	return EAINavMoveResult::NAV_MOVE_NOTASK;
+	AvHAIPath TestPath;
+	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, DesiredLocation, GetBottomOfHitbox(), &TestPath, 200.0f);
+
+	if (bFoundPath)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(TestPath.GetFinalDestination() - GetBottomOfHitbox());
+	}
+
+	return EAINavMoveResult::NAV_MOVE_NOPATH;
 }
 
 EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
@@ -999,9 +1011,16 @@ void AvHAIPlayer::TakeDamage(float DamageAmount, const edict_t* Inflictor)
 
 void AvHAIPlayer::UpdateNavProfile()
 {
-	if (IsPlayerMarine(Player))
+	if (IsPlayerMarine(Edict))
 	{
 		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+		return;
+	}
+
+	if (IsPlayerSkulk(Edict))
+	{
+		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_SKULK);
+		return;
 	}
 }
 
@@ -1216,7 +1235,7 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 
 	const Vector BottomOfHull = GetBottomOfHitbox();
 
-	if ((HitResult.vecEndPos.z - BottomOfHull.z) <= 18.0f) { return true; }
+	if ((HitResult.vecEndPos.z - BottomOfHull.z) <= 16.0f) { return true; }
 
 	return false;
 }
@@ -1468,34 +1487,40 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 
 	bool bMoveSuccess = false;
 
+	if (IsPlayerSkulk(Edict))
+	{
+		// Always crouch as skulk so we don't wall stick. We undo this in the wall climb move.
+		NextFrameMovementInput.bShouldCrouch = true;
+	}
+
 	switch (CurrentPathNode->MovementFlag)
 	{
-	case EAINavMovementFlag::NAV_FLAG_WALK:
-		return NewGroundMove(Path);
-		break;
-	case EAINavMovementFlag::NAV_FLAG_FALL:
-	case EAINavMovementFlag::NAV_FLAG_FATALFALL:
-		return NewFallMove(Path);
-		break;
-	case EAINavMovementFlag::NAV_FLAG_JUMP:
-	case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
-		return NewJumpMove(Path);
-		break;
-	case EAINavMovementFlag::NAV_FLAG_LADDER:
-		return NewLadderMove(Path);
-		break;
-	case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
-		return NewWallClimbMove(Path);
-		break;
-	case EAINavMovementFlag::NAV_FLAG_PLATFORM:
-		return NewPlatformMove(Path);
-		break;
-	case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
-	case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
-		return NewPhaseGateMove(Path);
-	default:
-		return NewGroundMove(Path);
-		break;
+		case EAINavMovementFlag::NAV_FLAG_WALK:
+			return NewGroundMove(Path);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_FALL:
+		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
+			return NewFallMove(Path);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_JUMP:
+		case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
+			return NewJumpMove(Path);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_LADDER:
+			return NewLadderMove(Path);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
+			return NewWallClimbMove(Path);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
+			return NewPlatformMove(Path);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+			return NewPhaseGateMove(Path);
+		default:
+			return NewGroundMove(Path);
+			break;
 	}
 }
 
@@ -2344,6 +2369,12 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 	const Vector BottomOfHitbox = GetBottomOfHitbox();
 	const Vector CurrentPosition = GetLocation();
 
+	if (IsPlayerSkulk(Edict))
+	{
+		// We always crouch as skulk in NextMove, so we reverse it here so we can wall-stick
+		NextFrameMovementInput.bShouldCrouch = false;
+	}
+
 	if (AINAV_IsPointDirectlyReachable(NavProfile, CurrentFloorPosition, CurrentPathNode->ToLocation, 5.0f))
 	{
 		Vector PointOnMoveLine = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentFloorPosition);
@@ -2357,7 +2388,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentFloorPosition);
 
-			return;
+			return true;
 		}
 	}
 
@@ -2400,12 +2431,6 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		float modifier = (float)vPointOnLine(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
 
 		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection + (vRight * modifier));
-	}
-
-	// Stop holding crouch if we're a skulk so we can actually climb
-	if (IsPlayerSkulk(Edict))
-	{
-		NextFrameMovementInput.bShouldCrouch = true;
 	}
 
 	const Vector EyePosition = GetEyePosition();
@@ -2481,6 +2506,8 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 	}
 
 	NextFrameMovementInput.RequiredLookLocation = LookLocation;
+
+	return true;
 }
 
 bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)

@@ -221,6 +221,42 @@ AIBuildableStructureList AITAC_FindAllMatchingStructures(const Vector& Location,
 	return Result;
 }
 
+AIBuildableStructureList_Mutable AITAC_FindAllMatchingStructures_Mutable(const Vector& Location, const StructureSearchFilter* Filter)
+{
+	AIBuildableStructureList_Mutable Result;
+
+	AvHTeamNumber TeamA = GetGameRules()->GetTeamANumber();
+	AvHTeamNumber TeamB = GetGameRules()->GetTeamBNumber();
+
+	if (Filter->DeployableTeam == TeamA || Filter->DeployableTeam == TEAM_IND)
+	{
+		for (auto& it : TeamAStructureMap)
+		{
+			AvHAIBuildableStructure* Structure = &it.second;
+
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter, Location))
+			{
+				Result.push_back(Structure);
+			}
+		}
+	}
+
+	if (Filter->DeployableTeam == TeamB || Filter->DeployableTeam == TEAM_IND)
+	{
+		for (auto& it : TeamBStructureMap)
+		{
+			AvHAIBuildableStructure* Structure = &it.second;
+
+			if (AITAC_DoesStructureMatchFilter(Structure, Filter, Location))
+			{
+				Result.push_back(Structure);
+			}
+		}
+	}
+
+	return Result;
+}
+
 const AvHAIBuildableStructure* AITAC_FindSingleMatchingStructure(const Vector& Location, const StructureSearchFilter* Filter, EAIStructureSortType SortBy)
 {
 	const AIBuildableStructureList AllMatchingStructures = AITAC_FindAllMatchingStructures(Location, Filter);
@@ -294,6 +330,85 @@ const AvHAIBuildableStructure* AITAC_FindSingleMatchingStructure(const Vector& L
 			default:
 				WinningStructure = ThisStructure;
 				break;
+		}
+	}
+
+	return WinningStructure;
+}
+
+AvHAIBuildableStructure* AITAC_FindSingleMatchingStructure_Mutable(const Vector& Location, const StructureSearchFilter* Filter, EAIStructureSortType SortBy)
+{
+	const AIBuildableStructureList_Mutable AllMatchingStructures = AITAC_FindAllMatchingStructures_Mutable(Location, Filter);
+
+	if (AllMatchingStructures.empty()) { return nullptr; }
+
+	if (AllMatchingStructures.size() == 1) { return AllMatchingStructures.at(0); }
+
+	if (SortBy == EAIStructureSortType::FIND_STRUCTURE_RANDOM)
+	{
+		int RandomIndex = RANDOM_LONG(0, AllMatchingStructures.size() - 1);
+		return AllMatchingStructures[RandomIndex];
+	}
+
+	AvHAIBuildableStructure* WinningStructure = nullptr;
+
+	float CurrentBestScore = 0.0f;
+
+	for (AvHAIBuildableStructure* ThisStructure : AllMatchingStructures)
+	{
+		switch (SortBy)
+		{
+		case EAIStructureSortType::FIND_STRUCTURE_NEAREST:
+		{
+			const float ThisScore = vDist2DSq(ThisStructure->Location, Location);
+
+			if (!WinningStructure || ThisScore < CurrentBestScore)
+			{
+				WinningStructure = ThisStructure;
+				CurrentBestScore = ThisScore;
+			}
+		}
+		break;
+
+		case EAIStructureSortType::FIND_STRUCTURE_FURTHEST:
+		{
+			const float ThisScore = vDist2DSq(ThisStructure->Location, Location);
+
+			if (!WinningStructure || ThisScore > CurrentBestScore)
+			{
+				WinningStructure = ThisStructure;
+				CurrentBestScore = ThisScore;
+			}
+		}
+		break;
+
+		case EAIStructureSortType::FIND_STRUCTURE_WEAKEST:
+		{
+			const float ThisScore = ThisStructure->HealthPercent;
+
+			if (!WinningStructure || ThisScore < CurrentBestScore)
+			{
+				WinningStructure = ThisStructure;
+				CurrentBestScore = ThisScore;
+			}
+		}
+		break;
+
+		case EAIStructureSortType::FIND_STRUCTURE_STRONGEST:
+		{
+			const float ThisScore = ThisStructure->HealthPercent;
+
+			if (!WinningStructure || ThisScore > CurrentBestScore)
+			{
+				WinningStructure = ThisStructure;
+				CurrentBestScore = ThisScore;
+			}
+		}
+		break;
+
+		default:
+			WinningStructure = ThisStructure;
+			break;
 		}
 	}
 
@@ -1294,18 +1409,122 @@ void AITAC_OnStructureBecomeSolid(AvHAIBuildableStructure* Structure)
 void AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure)
 {
 	if (!Structure || !Structure->IsValid()) { return; }
+
+	if (Structure->StructureType == EAIStructureType::STRUCTURE_MARINE_PHASEGATE)
+	{
+		StructureSearchFilter MatchingPG;
+		MatchingPG.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
+		MatchingPG.DeployableTeam = Structure->Team;
+		MatchingPG.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+		MatchingPG.ExcludeStatusFlags = (EAIStructureStatus::STRUCTURE_STATUS_PARTIAL | EAIStructureStatus::STRUCTURE_STATUS_RECYCLING);
+
+		AIBuildableStructureList OtherPGs = AITAC_FindAllMatchingStructures(Structure->Location, &MatchingPG);
+
+		const EAINavMovementFlag NewPGConnectionFlag = (Structure->Team == GetGameRules()->GetTeamANumber())
+			? EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
+			: EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2;
+
+		for (const AvHAIBuildableStructure* OtherPG : OtherPGs)
+		{
+			if (!OtherPG || !OtherPG->IsValid()) { continue; }
+
+			NavOffMeshConnection* NewConnection = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true);
+
+			if (NewConnection && NewConnection->IsValid())
+			{
+				NewConnection->LinkedObject = OtherPG->Edict;
+				Structure->OffMeshConnections.push_back(NewConnection);
+			}
+		}
+	}
 }
 
 void AITAC_OnStructureBeginRecycling(AvHAIBuildableStructure* RecyclingStructure)
 {
 	if (!RecyclingStructure || !RecyclingStructure->IsValid()) { return; }
+
+	if (RecyclingStructure->StructureType == EAIStructureType::STRUCTURE_MARINE_PHASEGATE)
+	{
+		RecyclingStructure->ClearOffMeshConnections();
+
+		StructureSearchFilter MatchingPG;
+		MatchingPG.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
+		MatchingPG.DeployableTeam = RecyclingStructure->Team;
+		MatchingPG.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+		MatchingPG.ExcludeStatusFlags = (EAIStructureStatus::STRUCTURE_STATUS_PARTIAL | EAIStructureStatus::STRUCTURE_STATUS_RECYCLING);
+
+		AIBuildableStructureList_Mutable OtherPGs = AITAC_FindAllMatchingStructures_Mutable(RecyclingStructure->Location, &MatchingPG);
+
+		const EAINavMovementFlag NewPGConnectionFlag = (RecyclingStructure->Team == GetGameRules()->GetTeamANumber())
+			? EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
+			: EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2;
+
+		for (AvHAIBuildableStructure* OtherPG : OtherPGs)
+		{
+			if (!OtherPG || !OtherPG->IsValid()) { continue; }
+
+			for (auto ConnIt = OtherPG->OffMeshConnections.begin(); ConnIt != OtherPG->OffMeshConnections.end();)
+			{
+				NavOffMeshConnection* OtherConnection = (*ConnIt);
+
+				if (!OtherConnection || !OtherConnection->IsValid()) { continue; }
+
+				if (OtherConnection->LinkedObject == RecyclingStructure->Edict)
+				{
+					AIMESH_RemoveOffMeshConnection(OtherConnection);
+					ConnIt = OtherPG->OffMeshConnections.erase(ConnIt);
+				}
+				else
+				{
+					ConnIt++;
+				}
+			}
+		}
+	}
 }
 
 void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 {
 	if (!DestroyedStructure || !DestroyedStructure->IsValid()) { return; }
 
+	DestroyedStructure->ClearNavInformation();
 
+	if (DestroyedStructure->StructureType == EAIStructureType::STRUCTURE_MARINE_PHASEGATE)
+	{
+		StructureSearchFilter MatchingPG;
+		MatchingPG.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
+		MatchingPG.DeployableTeam = DestroyedStructure->Team;
+		MatchingPG.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+		MatchingPG.ExcludeStatusFlags = (EAIStructureStatus::STRUCTURE_STATUS_PARTIAL | EAIStructureStatus::STRUCTURE_STATUS_RECYCLING);
+
+		AIBuildableStructureList_Mutable OtherPGs = AITAC_FindAllMatchingStructures_Mutable(DestroyedStructure->Location, &MatchingPG);
+
+		const EAINavMovementFlag NewPGConnectionFlag = (DestroyedStructure->Team == GetGameRules()->GetTeamANumber())
+			? EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
+			: EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2;
+
+		for (AvHAIBuildableStructure* OtherPG : OtherPGs)
+		{
+			if (!OtherPG || !OtherPG->IsValid()) { continue; }
+
+			for (auto ConnIt = OtherPG->OffMeshConnections.begin(); ConnIt != OtherPG->OffMeshConnections.end();)
+			{
+				NavOffMeshConnection* OtherConnection = (*ConnIt);
+
+				if (!OtherConnection || !OtherConnection->IsValid()) { continue; }
+
+				if (OtherConnection->LinkedObject == DestroyedStructure->Edict)
+				{
+					AIMESH_RemoveOffMeshConnection(OtherConnection);
+					ConnIt = OtherPG->OffMeshConnections.erase(ConnIt);
+				}
+				else
+				{
+					ConnIt++;
+				}
+			}
+		}
+	}
 }
 
 void AITAC_ClearStructureNavData()
@@ -2497,7 +2716,7 @@ void AvHAITeamStartingLocation::RefreshReachabilityMap()
 	}
 }
 
-void AvHAIBuildableStructure::ClearNavInformation()
+void AvHAIBuildableStructure::ClearTempObstacles()
 {
 	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
 	{
@@ -2508,6 +2727,11 @@ void AvHAIBuildableStructure::ClearNavInformation()
 		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
 	}
 
+	TempObstacles.clear();
+}
+
+void AvHAIBuildableStructure::ClearOffMeshConnections()
+{
 	for (auto ConnIt = OffMeshConnections.begin(); ConnIt != OffMeshConnections.end(); ConnIt++)
 	{
 		NavOffMeshConnection* ThisConnection = (*ConnIt);
@@ -2517,8 +2741,13 @@ void AvHAIBuildableStructure::ClearNavInformation()
 		AIMESH_RemoveOffMeshConnection(ThisConnection);
 	}
 
-	TempObstacles.clear();
 	OffMeshConnections.clear();
+}
+
+void AvHAIBuildableStructure::ClearNavInformation()
+{
+	ClearTempObstacles();
+	ClearOffMeshConnections();
 }
 
 void AvHAIHive::Update()

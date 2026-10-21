@@ -570,7 +570,7 @@ void AIMAP_InitializeDynamicMapObject(DynamicMapObject* Object)
 		Object->NextStopIndex = 0;
 	}
 
-	Object->State = EAIDynamicMapObjectState::OBJECTSTATE_IDLE;
+	AIMAP_SetDynamicObjectStatus(Object, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 }
 
 void AIMAP_UpdateDynamicMapObjects()
@@ -1596,6 +1596,15 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 
 	const int InvalidIndex = static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 
+	for (auto stopIt = Object->StopPoints.begin(); stopIt != Object->StopPoints.end(); stopIt++)
+	{
+		DynamicMapObjectStop* ThisStop = &(*stopIt);
+
+		if (!ThisStop) { continue; }
+
+		ThisStop->AffectedConnections.clear();
+	}
+
 	for (int i = 0; i < InvalidIndex; i++)
 	{
 		const EAINavMeshIndex MeshIndex = static_cast<EAINavMeshIndex>(i);
@@ -1606,9 +1615,11 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 
 		for (auto stopIt = Object->StopPoints.begin(); stopIt != Object->StopPoints.end(); stopIt++)
 		{
-			Vector ObjectCentre = (*stopIt).StopLocation;
+			DynamicMapObjectStop* ThisStop = &(*stopIt);
 
-			stopIt->AffectedConnections.clear();
+			if (!ThisStop) { continue; }
+
+			Vector ObjectCentre = ThisStop->StopLocation;
 
 			for (auto it = FoundMesh->MeshConnections.begin(); it != FoundMesh->MeshConnections.end(); it++)
 			{
@@ -1618,7 +1629,7 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 
 				if (AIMAP_IsOffMeshConnectionAffectedByObject(Object, ObjectCentre, TestConnection))
 				{
-					stopIt->AffectedConnections.push_back(TestConnection);
+					ThisStop->AffectedConnections.push_back(TestConnection);
 				}
 			}
 		}

@@ -564,7 +564,7 @@ bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
 	if (dtStatusSucceed(RemoveStatus))
 	{
 		ParentNavMesh->RemoveOffMeshConnectionFromList(RemoveConnectionDef);
-		RemoveConnectionDef = nullptr;
+		RemoveConnectionDef->ConnectionRef = 0;
 		return true;
 	}
 	else
@@ -1161,7 +1161,7 @@ void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTi
 
 void NavMesh::RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionToRemove)
 {
-	if (!ConnectionToRemove) { return; }
+	if (!ConnectionToRemove || !ConnectionToRemove->IsValid()) { return; }
 
 	for (auto it = MeshConnections.begin(); it != MeshConnections.end();)
 	{

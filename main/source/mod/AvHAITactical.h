@@ -193,10 +193,13 @@ struct AvHAIBuildableStructure
 	}
 
 	void ClearNavInformation();
+	void ClearOffMeshConnections();
+	void ClearTempObstacles();
 };
 typedef unordered_map<const AvHAIBuildableStructure*, EAIReachabilityFlags> AIStructureReachabilityMap;
 typedef unordered_map<int, AvHAIBuildableStructure> AIBuildableStructureMap;
 typedef vector<const AvHAIBuildableStructure*> AIBuildableStructureList;
+typedef vector<AvHAIBuildableStructure*> AIBuildableStructureList_Mutable;
 
 // Data structure used to track resource nodes in the map
 struct AvHAIResourceNode
@@ -338,7 +341,9 @@ bool						AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structur
 bool						AITAC_DoesDroppedItemMatchFilter(const AvHAIDroppedItem* Item, const DroppedItemSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
 bool						AITAC_DoesResourceNodeMatchFilter(const AvHAIResourceNode* ResourceNode, const ResourceNodeSearchFilter* Filter, const Vector& SearchLocation = ZERO_VECTOR);
 AIBuildableStructureList	 AITAC_FindAllMatchingStructures(const Vector& Location, const StructureSearchFilter* Filter);
+AIBuildableStructureList_Mutable	 AITAC_FindAllMatchingStructures_Mutable(const Vector& Location, const StructureSearchFilter* Filter);
 const AvHAIBuildableStructure*		AITAC_FindSingleMatchingStructure(const Vector& Location, const StructureSearchFilter* Filter, EAIStructureSortType SortBy);
+AvHAIBuildableStructure* AITAC_FindSingleMatchingStructure_Mutable(const Vector& Location, const StructureSearchFilter* Filter, EAIStructureSortType SortBy);
 const AvHAIBuildableStructure*		AITAC_GetStructureFromEdict(const edict_t* Structure);
 int							AITAC_GetNumStructuresAtLocation(const Vector& Location, const StructureSearchFilter* Filter);
 void						AITAC_PopulateHiveData();

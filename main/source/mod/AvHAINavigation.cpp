@@ -1294,11 +1294,15 @@ bool AINAV_IsFallMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 		{
 			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer);
 
-			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f)
-				&& UTIL_QuickTrace(AIPlayer, AIPlayer->v.origin, NextPathNode->ToLocation)
-				&& fabsf(GetPlayerBottomOfCollisionHull(AIPlayer).z - CurrentPathNode->ToLocation.z) < 100.0f)
+			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f))
 			{
-				return true;
+				TraceResult hit;
+				UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);
+
+				if (hit.flFraction >= 1.0f || vDist3DSq(hit.vecEndPos, NextPathNode->ToLocation) <= sqrf(GetPlayerHeight(AIPlayer, false)))
+				{
+					return true;
+				}
 			}
 		}
 	}
@@ -1327,11 +1331,15 @@ bool AINAV_IsJumpMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 			Vector HullTraceEnd = CurrentPathNode->ToLocation;
 			HullTraceEnd.z = AIPlayer->v.origin.z;
 
-			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f)
-				&& UTIL_QuickHullTrace(AIPlayer, AIPlayer->v.origin, HullTraceEnd, head_hull, false)
-				&& fabsf(GetPlayerBottomOfCollisionHull(AIPlayer).z - NextPathNode->ToLocation.z) < 100.0f)
+			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f))
 			{
-				return true;
+				TraceResult hit;
+				UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);
+
+				if (hit.flFraction >= 1.0f || vDist3DSq(hit.vecEndPos, NextPathNode->ToLocation) <= sqrf(GetPlayerHeight(AIPlayer, false)))
+				{
+					return true;
+				}
 			}
 		}
 	}
@@ -1378,8 +1386,19 @@ bool AINAV_IsWallClimbMoveComplete(const NavAgentProfile* NavProfile, const edic
 
 	const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer);
 
-	return AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation)
-		&& UTIL_QuickHullTrace(AIPlayer, CurrentPosition, NextPathNode->ToLocation);
+	const bool bIsNextPointReachable = AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation);
+
+	if (!bIsNextPointReachable) { return false; }
+
+	TraceResult hit;
+	UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);
+
+	if (hit.flFraction >= 1.0f || vDist3DSq(hit.vecEndPos, NextPathNode->ToLocation) <= sqrf(GetPlayerHeight(AIPlayer, false)))
+	{
+		return true;
+	}
+
+	return false;
 }
 
 AvHPlayer* AINAV_GetPlayerRidingOnBot(const edict_t* AIPlayer)
