@@ -74,13 +74,24 @@ struct AvHAIPathNode
 	// Returns true if this movement requires careful alignment from start to end point to avoid screwing it up
 	bool IsPrecisionMove() const
 	{
-		EAINavMovementFlag PrecisionFlags = (EAINavMovementFlag::NAV_FLAG_WALLCLIMB | EAINavMovementFlag::NAV_FLAG_LADDER | EAINavMovementFlag::NAV_FLAG_JUMP | EAINavMovementFlag::NAV_FLAG_FALL);
-		return EnumHasAnyFlags(MovementFlag, PrecisionFlags);
+		switch (MovementFlag)
+		{
+			case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
+			case EAINavMovementFlag::NAV_FLAG_LADDER:
+			case EAINavMovementFlag::NAV_FLAG_JUMP:
+			case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
+			case EAINavMovementFlag::NAV_FLAG_FALL:
+			case EAINavMovementFlag::NAV_FLAG_FATALFALL:
+			case EAINavMovementFlag::NAV_FLAG_LEAP:
+				return true;
+			default:
+				return false;
+		}
 	}
 
 	bool IsTeleportMove() const
 	{
-		EAINavMovementFlag TeleportFlags = (EAINavMovementFlag::NAV_FLAG_TELEPORT | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
+		EAINavMovementFlag TeleportFlags = (EAINavMovementFlag::NAV_FLAG_TELEPORT | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2);
 		return EnumHasAnyFlags(MovementFlag, TeleportFlags);
 	}
 };

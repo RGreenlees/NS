@@ -1426,7 +1426,7 @@ void AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure)
 
 		for (const AvHAIBuildableStructure* OtherPG : OtherPGs)
 		{
-			if (!OtherPG || !OtherPG->IsValid() || OtherPG = Structure) { continue; }
+			if (!OtherPG || !OtherPG->IsValid() || OtherPG == Structure) { continue; }
 
 			NavOffMeshConnection* NewConnection = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true);
 
@@ -1436,6 +1436,8 @@ void AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure)
 				Structure->OffMeshConnections.push_back(NewConnection);
 			}
 		}
+
+		return;
 	}
 }
 

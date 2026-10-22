@@ -563,6 +563,7 @@ edict_t* AINAV_GetMovementObjectForPathNode(AvHAIPathNode* PathNode)
 
 			StructureSearchFilter PGFilter;
 			PGFilter.DeployableTeam = StructureTeam;
+			PGFilter.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
 			PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
 			PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
 			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
@@ -1271,19 +1272,33 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 {
 	if (!NavProfile || !UTIL_IsEdictActive(AIPlayer) || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
 
+	const Vector CurrentPosition = UTIL_GetFloorUnderEntity(AIPlayer);
+
+	const Vector PlayerFloorBBMin = CurrentPosition + Vector(AIPlayer->v.mins.x, AIPlayer->v.mins.y, 0.0f);
+	const Vector PlayerFloorBBMax = CurrentPosition + Vector(AIPlayer->v.maxs.x, AIPlayer->v.maxs.y, AIPlayer->v.maxs.z - AIPlayer->v.mins.z);
+
+	UTIL_DrawLine(INDEXENT(1), PlayerFloorBBMin, PlayerFloorBBMax);
+
+	if (vPointOverlaps3D(CurrentPathNode->ToLocation, PlayerFloorBBMin, PlayerFloorBBMax)) { return true; }
+
 	if (NextPathNode && !NextPathNode->IsPrecisionMove())
 	{
-		const Vector CurrentPosition = UTIL_GetFloorUnderEntity(AIPlayer);
-		if (AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, 5.0f))
+		const bool bNextPointDirectlyReachable = AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, 5.0f);
+
+		if (!bNextPointDirectlyReachable) { return false; }
+
+		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_WALK) { return true; }
+
+		TraceResult hit;
+		UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);
+
+		if (hit.flFraction >= 1.0f || vDist3DSq(hit.vecEndPos, NextPathNode->ToLocation) <= sqrf(GetPlayerHeight(AIPlayer, false)))
 		{
-			if (UTIL_QuickHullTrace(nullptr, AIPlayer->v.origin, NextPathNode->ToLocation, head_hull))
-			{
-				return true;
-			}
+			return true;
 		}
 	}
 
-	return vPointOverlaps3D(CurrentPathNode->ToLocation, AIPlayer->v.absmin, AIPlayer->v.absmax);
+	return false;
 }
 
 bool AINAV_IsLadderMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode)

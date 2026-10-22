@@ -120,7 +120,8 @@ Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity)
 		}
 		else
 		{
-			return (hit.vecEndPos + Vector(0.0f, 0.0f, 1.0f));
+			// Offset the head hull size to get the actual collision point in world space
+			return (hit.vecEndPos - Vector(0.0f, 0.0f, 18.0f));
 		}
 	}
 

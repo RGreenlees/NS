@@ -57,8 +57,8 @@ enum class EAINavMovementFlag : uint32
 	NAV_FLAG_PHASEGATE_TEAM1 = 1u << 12,		// Team 1 Phase Gate
 	NAV_FLAG_PHASEGATE_TEAM2 = 1u << 13,		// Team 2 Phase Gate
 	NAV_FLAG_FLY = 1u << 14,		// Fly
-	NAV_FLAG_FATALFALL = 1 << 15,		// Fatal Fall
-	NAV_FLAG_FATALJUMP = 1 << 16,		// Fatal Jump
+	NAV_FLAG_FATALFALL = 1 << 15,		// A fall that would kill player types not immune to fall damage
+	NAV_FLAG_FATALJUMP = 1 << 16,		// A jump that would kill player types not immune to fall damage
 	NAV_FLAG_ALL = 0xFFFFFFFF		// All flags
 };
 

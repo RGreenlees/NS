@@ -1235,13 +1235,35 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 
 	if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
 
+	if (TraceType != EAIMovementTraceType::LOWER_RIGHT && TraceType != EAIMovementTraceType::LOWER_CENTER && TraceType != EAIMovementTraceType::LOWER_RIGHT) { return false; }
+
 	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal);
 
 	if (WalkableSlopeAngle <= 45.0f) { return true; }
 
-	const Vector BottomOfHull = GetBottomOfHitbox();
+	float HeightOffset = 1.0f;
 
-	if ((HitResult.vecEndPos.z - BottomOfHull.z) <= 16.0f) { return true; }
+	Vector JumpTraceStart = StartTrace;
+	Vector JumpTraceEnd = EndTrace;
+
+	// Keep tracing upwards until we determine the blockage is above step height or not
+	while (HeightOffset < 16.0f)
+	{
+		StartTrace.z = JumpTraceStart.z + HeightOffset;
+		EndTrace.z = JumpTraceEnd.z + HeightOffset;
+
+		UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
+
+		if (HitResult.flFraction >= 1.0f) { return true; }
+
+		if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
+
+		const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal);
+
+		if (WalkableSlopeAngle <= 45.0f) { return true; }
+
+		HeightOffset += 1.0f;
+	}
 
 	return false;
 }
@@ -1552,8 +1574,8 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	const float PlayerRadius = GetPlayerRadius() + 2.0f;
 
-	const bool bBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, vForward, /* Line trace */ true);
-	const bool bBumpRight = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_RIGHT, vForward, /* Line trace */ true);
+	const bool bBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, vForward, /* Point trace? */ true);
+	const bool bBumpRight = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_RIGHT, vForward, /* Point trace? */ true);
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 
@@ -1567,12 +1589,12 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 	}
 	else if (!bBumpLeft && !bBumpRight)
 	{
-		if (!QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Hull trace */ false))
+		if (!QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Point trace? */ false))
 		{
 			NextFrameMovementInput.bShouldCrouch = true;
 		}
 
-		if (!QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Hull trace */ false))
+		if (!QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Point trace? */ false))
 		{
 			Jump(true);
 		}
