@@ -2527,23 +2527,17 @@ bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
-	StructureSearchFilter PGFilter;
-	PGFilter.DeployableTeam = (AvHTeamNumber)Edict->v.team;
-	PGFilter.DeployableTypes = EAIStructureType::STRUCTURE_MARINE_PHASEGATE;
-	PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
-	PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+	const AvHAIBuildableStructure* UsePhaseGate = AITAC_GetStructureFromEdict(CurrentPathNode->MovementObject);
 
-	const AvHAIBuildableStructure* NearestPhaseGate = AITAC_FindSingleMatchingStructure(CurrentPathNode->FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
+	if (!UsePhaseGate || !UsePhaseGate->IsValid()) { return true; }
 
-	if (!NearestPhaseGate || !NearestPhaseGate->IsValid()) { return true; }
-
-	if (IsPlayerInUseRange(Edict, NearestPhaseGate->Edict))
+	if (IsPlayerInUseRange(Edict, UsePhaseGate->Edict))
 	{
-		NextFrameMovementInput.RequiredLookLocation = NearestPhaseGate->Location;
+		NextFrameMovementInput.RequiredLookLocation = UsePhaseGate->Location;
 		NextFrameMovementInput.DesiredMoveDirection = g_vecZero;
-		UseObject(NearestPhaseGate->Edict, false);
+		UseObject(UsePhaseGate->Edict, false);
 
-		if (vDist2DSq(GetLocation(), NearestPhaseGate->Location) < sqrf(16.0f))
+		if (vDist2DSq(GetLocation(), UsePhaseGate->Location) < sqrf(16.0f))
 		{
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetForwardVector2D(Edict->v.angles);
 		}
@@ -2552,7 +2546,7 @@ bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)
 	}
 	else
 	{
-		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NearestPhaseGate->Location - GetLocation());
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(UsePhaseGate->Location - GetLocation());
 	}
 
 	return true;

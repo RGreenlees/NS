@@ -552,21 +552,26 @@ edict_t* AINAV_GetMovementObjectForPathNode(AvHAIPathNode* PathNode)
 
 			return (PlatformRef && PlatformRef->IsValid()) ? PlatformRef->Edict : nullptr;
 		}
+		break;
 
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
 		{
-			const bool bIsTeamOne = (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1);
+			const AvHTeamNumber StructureTeam = (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1)
+				? GetGameRules()->GetTeamA()->GetTeamNumber()
+				: GetGameRules()->GetTeamB()->GetTeamNumber();
+
 			StructureSearchFilter PGFilter;
-			PGFilter.DeployableTeam = (bIsTeamOne) ? GetGameRules()->GetTeamA()->GetTeamNumber() : GetGameRules()->GetTeamB()->GetTeamNumber();
+			PGFilter.DeployableTeam = StructureTeam;
 			PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
 			PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
-			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
+			PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(5.0f);
 
 			const AvHAIBuildableStructure* MatchingPhaseGate = AITAC_FindSingleMatchingStructure(PathNode->FromLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
 
 			return (MatchingPhaseGate && MatchingPhaseGate->IsValid()) ? MatchingPhaseGate->Edict : nullptr;
 		}
+		break;
 
 		default:
 			return nullptr;
@@ -902,15 +907,11 @@ bool AINAV_IsOffPhaseGateNode(const NavAgentProfile* NavProfile, const edict_t* 
 
 	const AvHAIBuildableStructure* StartingPhaseGate = AITAC_GetStructureFromEdict(PathNode->MovementObject);
 
-	if (!StartingPhaseGate || !StartingPhaseGate->IsValid() || StartingPhaseGate->StructureType != EAIStructureType::STRUCTURE_MARINE_PHASEGATE || !StartingPhaseGate->IsCompleted()) { return true; }
+	if (!StartingPhaseGate || !StartingPhaseGate->IsValid() || StartingPhaseGate->StructureType != EAIStructureType::STRUCTURE_MARINE_PHASEGATE) { return true; }
 
-	StructureSearchFilter PGFilter;
-	PGFilter.DeployableTeam = (AvHTeamNumber)AIPlayer->v.team;
-	PGFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
-	PGFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
-	PGFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(2.0f);
+	if (StartingPhaseGate->Team != (AvHTeamNumber)AIPlayer->v.team) { return true; }
 
-	return (AITAC_FindSingleMatchingStructure(PathNode->ToLocation, &PGFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST) != nullptr);
+	return StartingPhaseGate->IsRecycling() || !StartingPhaseGate->IsCompleted();
 }
 
 bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPath* Path, AvHAIMoveTask& NewMoveTask)
@@ -1223,6 +1224,21 @@ bool AINAV_IsPathPointComplete(const NavAgentProfile* NavProfile, const edict_t*
 		bool bAtOrPastDestination = vEquals(ClosestPointToPath, MoveTo, 32.0f);
 
 		return vPointOverlaps3D(MoveTo, AIPlayer->v.absmin, AIPlayer->v.absmax) || bAtOrPastDestination;
+	}
+
+	if (NextPathNode && NextPathNode->IsValidMove())
+	{
+		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
+			|| NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2)
+		{
+			if (!FNullEnt(NextPathNode->MovementObject))
+			{
+				if (IsPlayerInUseRange(AIPlayer, NextPathNode->MovementObject))
+				{
+					return true;
+				}
+			}
+		}
 	}
 
 	switch (CurrentNavFlag)
