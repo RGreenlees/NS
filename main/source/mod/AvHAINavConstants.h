@@ -237,7 +237,7 @@ struct NavTempObstacle
 		ObstacleRef = 0;
 	}
 };
-typedef std::vector<NavTempObstacle> NavTempObstacleList;
+typedef std::list<NavTempObstacle> NavTempObstacleList;
 
 // Retrieve appropriate flag for area (See process() in the MeshProcess struct)
 inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)
@@ -251,7 +251,7 @@ inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)
 		case EAINavArea::NAV_AREA_CROUCH:
 			return EAINavMovementFlag::NAV_FLAG_CROUCH;
 		case EAINavArea::NAV_AREA_OBSTRUCTED:
-			return EAINavMovementFlag::NAV_FLAG_JUMP;
+			return EAINavMovementFlag::NAV_FLAG_WALK;
 		case EAINavArea::NAV_AREA_HAZARD:
 			return EAINavMovementFlag::NAV_FLAG_WALK;
 		case EAINavArea::NAV_AREA_TELEPORT:

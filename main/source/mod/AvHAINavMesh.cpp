@@ -846,13 +846,16 @@ NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vect
 	if (!ParentNavMesh) { return nullptr; }
 
 	// Convert to Detour coordinate system, and adjust so position is the centre of the obstacle rather than bottom
-	float Pos[3];
+	float Pos[3] = { 0.0f, 0.0f, 0.0f };
 	UTIL_VecGoldSrcToDetour(Position, Pos);
+
+	// In Detour, an obstacle's origin is at the bottom centre, whereas we pass in the centre of the desired obstacle. Adjust accordingly.
+	Pos[1] -= Height * 0.5f;
 
 	dtObstacleRef ObsRef = 0;
 	dtStatus status = ParentNavMesh->TileCacheRef->addObstacle(Pos, Radius, Height, static_cast<int>(Area), &ObsRef);
 
-	if (!dtStatusSucceed(status)) { return nullptr; }
+	if (!dtStatusSucceed(status) || ObsRef == 0) { return nullptr; }
 
 	NavTempObstacle NewObstacle;
 	NewObstacle.NavMeshIndex = TargetNavMesh;

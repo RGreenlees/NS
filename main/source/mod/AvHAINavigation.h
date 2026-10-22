@@ -68,7 +68,7 @@ struct AvHAIPathNode
 
 	bool IsValidMove() const
 	{
-		return !vEquals(FromLocation, ToLocation) && MovementFlag != EAINavMovementFlag::NAV_FLAG_DISABLED && MovementArea != EAINavArea::NAV_AREA_NULL;
+		return MovementFlag != EAINavMovementFlag::NAV_FLAG_DISABLED && MovementArea != EAINavArea::NAV_AREA_NULL;
 	}
 
 	// Returns true if this movement requires careful alignment from start to end point to avoid screwing it up

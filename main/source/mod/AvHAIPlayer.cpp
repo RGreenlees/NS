@@ -18,6 +18,289 @@
 #include <pm_shared/pm_shared.h>
 #include <pm_shared/pm_defs.h>
 
+namespace
+{
+	struct AIMovementStructureCollision
+	{
+		edict_t* Edict = nullptr;
+		Vector Mins = ZERO_VECTOR;
+		Vector Maxs = ZERO_VECTOR;
+		Vector Axis[3];
+	};
+
+	bool NS_GetCollisionSizeForUser3(AvHUser3 inUser3, vec3_t& outMinSize, vec3_t& outMaxSize)
+	{
+
+		switch (inUser3)
+		{
+
+		case AVH_USER3_COMMANDER_STATION:
+			outMinSize[0] = -45;
+			outMinSize[1] = -16;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 45;
+			outMaxSize[1] = 16;
+			outMaxSize[2] = 70.34;
+			return true;
+
+		case AVH_USER3_INFANTRYPORTAL:
+			outMinSize[0] = -25;
+			outMinSize[1] = -25;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 25;
+			outMaxSize[1] = 25;
+			outMaxSize[2] = 5;
+			return true;
+
+		case AVH_USER3_PHASEGATE:
+			outMinSize[0] = -55;
+			outMinSize[1] = -40;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 40;
+			outMaxSize[1] = 50;
+			outMaxSize[2] = 14.49;
+			return true;
+
+		case AVH_USER3_ARMORY:
+		case AVH_USER3_ADVANCED_ARMORY:
+			outMinSize[0] = -20;
+			outMinSize[1] = -20;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 20;
+			outMaxSize[1] = 20;
+			outMaxSize[2] = 62.1931;
+			return true;
+
+		case AVH_USER3_ARMSLAB:
+			outMinSize[0] = -30;
+			outMinSize[1] = -20;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 30;
+			outMaxSize[1] = 20;
+			outMaxSize[2] = 60;
+			return true;
+
+		case AVH_USER3_PROTOTYPE_LAB:
+			outMinSize[0] = -16;
+			outMinSize[1] = -16;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 16;
+			outMaxSize[1] = 16;
+			outMaxSize[2] = 67.7443;
+			return true;
+
+		case AVH_USER3_OBSERVATORY:
+			outMinSize[0] = -16;
+			outMinSize[1] = -16;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 16;
+			outMaxSize[1] = 16;
+			outMaxSize[2] = 80.7443;
+			return true;
+
+		case AVH_USER3_TURRET_FACTORY:
+		case AVH_USER3_ADVANCED_TURRET_FACTORY:
+			outMinSize[0] = -40;
+			outMinSize[1] = -25;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 40;
+			outMaxSize[1] = 25;
+			outMaxSize[2] = 50;
+			return true;
+
+		case AVH_USER3_TURRET:
+			outMinSize[0] = -16;
+			outMinSize[1] = -16;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 16;
+			outMaxSize[1] = 16;
+			outMaxSize[2] = 42;
+			return true;
+
+		case AVH_USER3_SIEGETURRET:
+			outMinSize[0] = -16;
+			outMinSize[1] = -16;
+			outMinSize[2] = 0;
+			outMaxSize[0] = 16;
+			outMaxSize[1] = 16;
+			outMaxSize[2] = 62.1931;
+			return true;
+		}
+
+		return false;
+	}
+
+	const std::vector<AIMovementStructureCollision>& AIGetMovementStructureCollisions(const bool bForceRefresh = false)
+	{
+		static float LastCacheTime = -1.0f;
+		static std::vector<AIMovementStructureCollision> StructureCollisions;
+
+		if (!bForceRefresh && LastCacheTime == gpGlobals->time) { return StructureCollisions; }
+
+		LastCacheTime = gpGlobals->time;
+		StructureCollisions.clear();
+
+		if (StructureCollisions.capacity() == 0) { StructureCollisions.reserve(64); }
+
+		for (int i = 1; i < gpGlobals->maxEntities; ++i)
+		{
+			edict_t* StructureEdict = INDEXENT(i);
+
+			if (!UTIL_IsEdictActive(StructureEdict) || StructureEdict->v.solid == SOLID_NOT) { continue; }
+
+			vec3_t StructureMins;
+			vec3_t StructureMaxs;
+
+			if (!NS_GetCollisionSizeForUser3((AvHUser3)StructureEdict->v.iuser3, StructureMins, StructureMaxs)) { continue; }
+
+			AIMovementStructureCollision StructureCollision;
+			StructureCollision.Edict = StructureEdict;
+			StructureCollision.Mins = Vector(StructureMins);
+			StructureCollision.Maxs = Vector(StructureMaxs);
+
+			UTIL_AnglesToVector(StructureEdict->v.angles, &StructureCollision.Axis[0], &StructureCollision.Axis[1], &StructureCollision.Axis[2]);
+			StructureCollision.Axis[1] = StructureCollision.Axis[1] * -1.0f;
+
+			StructureCollisions.push_back(StructureCollision);
+		}
+
+		return StructureCollisions;
+	}
+
+	bool AISegmentIntersectsAABB(const Vector Start, const Vector End, const Vector Mins, const Vector Maxs, float* ExitFraction = nullptr)
+	{
+		const Vector Direction = End - Start;
+		float MinFraction = 0.0f;
+		float MaxFraction = 1.0f;
+
+		for (int i = 0; i < 3; ++i)
+		{
+			if (fabsf(Direction[i]) < 0.0001f)
+			{
+				if (Start[i] < Mins[i] || Start[i] > Maxs[i]) { return false; }
+				continue;
+			}
+
+			float NearFraction = (Mins[i] - Start[i]) / Direction[i];
+			float FarFraction = (Maxs[i] - Start[i]) / Direction[i];
+
+			if (NearFraction > FarFraction)
+			{
+				const float SwapFraction = NearFraction;
+				NearFraction = FarFraction;
+				FarFraction = SwapFraction;
+			}
+
+			MinFraction = max(MinFraction, NearFraction);
+			MaxFraction = min(MaxFraction, FarFraction);
+
+			if (MinFraction > MaxFraction) { return false; }
+		}
+
+		if (ExitFraction) { *ExitFraction = MaxFraction; }
+
+		return true;
+	}
+
+	bool AITraceHitsMovementStructure(const Vector StartTrace, const Vector EndTrace, const enum_hull Hull, const edict_t* IgnoreEdict, const edict_t* OnlyEdict = nullptr, bool* bFoundOnlyEdict = nullptr, const bool bForceRefresh = false)
+	{
+		// Match NS_HullForBox: movement uses a cylindrical player radius, reduced
+		// to 80%, rather than the engine's rectangular head-hull extents.
+		const float HullOffset = (Hull == point_hull) ? 0.0f : 12.8f;
+		if (bFoundOnlyEdict) { *bFoundOnlyEdict = false; }
+
+		for (const AIMovementStructureCollision& StructureCollision : AIGetMovementStructureCollisions(bForceRefresh))
+		{
+			if (StructureCollision.Edict == IgnoreEdict || !UTIL_IsEdictActive(StructureCollision.Edict) || StructureCollision.Edict->v.solid == SOLID_NOT) { continue; }
+
+			// Don't check for collisions if we're on top of this structure! Hopefully stops the bot bouncing on top of it
+			if (UTIL_IsEdictActive(IgnoreEdict) && StructureCollision.Edict == IgnoreEdict->v.groundentity) { continue; }
+
+			if (OnlyEdict && StructureCollision.Edict != OnlyEdict) { continue; }
+			if (bFoundOnlyEdict) { *bFoundOnlyEdict = true; }
+
+			const Vector StartOffset = StartTrace - StructureCollision.Edict->v.origin;
+			const Vector EndOffset = EndTrace - StructureCollision.Edict->v.origin;
+
+			Vector LocalStart;
+			Vector LocalEnd;
+			Vector ExpandedMins = StructureCollision.Mins;
+			Vector ExpandedMaxs = StructureCollision.Maxs;
+
+			for (int i = 0; i < 3; ++i)
+			{
+				const Vector& Axis = StructureCollision.Axis[i];
+
+				LocalStart[i] = UTIL_GetDotProduct(StartOffset, Axis);
+				LocalEnd[i] = UTIL_GetDotProduct(EndOffset, Axis);
+				ExpandedMins[i] -= HullOffset;
+				ExpandedMaxs[i] += HullOffset;
+			}
+
+			if (AISegmentIntersectsAABB(LocalStart, LocalEnd, ExpandedMins, ExpandedMaxs))
+			{
+				if (vPointOverlaps3D(LocalStart, ExpandedMins, ExpandedMaxs))
+				{
+					const Vector StructureCentre = StructureCollision.Edict->v.origin + ((StructureCollision.Edict->v.mins + StructureCollision.Edict->v.maxs) * 0.5f);
+
+					if (UTIL_GetDotProduct(EndTrace - StartTrace, StartTrace - StructureCentre) >= 0.0f) { continue; }
+				}
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	bool AITraceMovementSegment(const Vector StartTrace, const Vector EndTrace, const enum_hull Hull, edict_t* IgnoreEdict, TraceResult& HitResult, bool& bHitMovementStructure)
+	{
+		bHitMovementStructure = AITraceHitsMovementStructure(StartTrace, EndTrace, Hull, IgnoreEdict);
+		if (bHitMovementStructure)
+		{
+			memset(&HitResult, 0, sizeof(HitResult));
+			return true;
+		}
+
+		const Vector HullExtents = (Hull == point_hull) ? ZERO_VECTOR : Vector(16.0f, 16.0f, 18.0f);
+		Vector EngineTraceStart = StartTrace;
+
+		for (int SkippedCustomBoxes = 0; SkippedCustomBoxes < 8; ++SkippedCustomBoxes)
+		{
+			UTIL_TraceHull(EngineTraceStart, EndTrace, ignore_monsters, Hull, IgnoreEdict, &HitResult);
+
+			if (HitResult.flFraction >= 1.0f && !HitResult.fStartSolid && !HitResult.fAllSolid) { return false; }
+
+			if (!HitResult.pHit) { return true; }
+
+			vec3_t CustomMins;
+			vec3_t CustomMaxs;
+
+			if (!NS_GetCollisionSizeForUser3((AvHUser3)HitResult.pHit->v.iuser3, CustomMins, CustomMaxs)) { return true; }
+
+			bool bFoundCustomEdict = false;
+
+			if (AITraceHitsMovementStructure(EngineTraceStart, EndTrace, Hull, IgnoreEdict, HitResult.pHit, &bFoundCustomEdict)) { return true; }
+
+			if (!bFoundCustomEdict && AITraceHitsMovementStructure(EngineTraceStart, EndTrace, Hull, IgnoreEdict, HitResult.pHit, &bFoundCustomEdict, true)) { return true; }
+
+			const Vector ExpandedMins = HitResult.pHit->v.absmin - HullExtents;
+			const Vector ExpandedMaxs = HitResult.pHit->v.absmax + HullExtents;
+			float ExitFraction = 1.0f;
+
+			if (!AISegmentIntersectsAABB(EngineTraceStart, EndTrace, ExpandedMins, ExpandedMaxs, &ExitFraction) || ExitFraction >= 1.0f) { break; }
+
+			EngineTraceStart = EngineTraceStart + ((EndTrace - EngineTraceStart) * min(ExitFraction + 0.001f, 1.0f));
+		}
+
+		// A rejected server bbox can mask world geometry. Check the world separately
+		// if there was no remaining segment beyond that bbox.
+		UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, Hull, IgnoreEdict, &HitResult);
+
+		return HitResult.flFraction < 1.0f || HitResult.fStartSolid || HitResult.fAllSolid;
+	}
+}
+
 
 bool AvHAIPlayer::HasValidPath() const
 {
@@ -1182,64 +1465,61 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 
 	const Vector MoveDirNormal = MoveDir.Normalize();
 
-	enum_hull PlayerHull = GetPlayerHull(IsCrouching());
 	Vector StartTrace = GetLocation();
 	const Vector RightDir = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(MoveDir, UP_VECTOR));
 
 	const float HullOffset = (bPointTrace) ? 1.0f : (UTIL_GetHullOffsetFromFloor(head_hull).z + 1.0f);
 
-	if (PlayerHull != head_hull)
+	switch (TraceType)
 	{
-		switch (TraceType)
-		{
-			case EAIMovementTraceType::HEAD_CENTER:
-				StartTrace.z = GetTopOfHitbox().z - HullOffset;
-				break;
-			case EAIMovementTraceType::HEAD_LEFT:
-				StartTrace.z = GetTopOfHitbox().z - HullOffset;
-				StartTrace = StartTrace - (RightDir * GetPlayerRadius());
-				break;
-			case EAIMovementTraceType::HEAD_RIGHT:
-				StartTrace.z = GetTopOfHitbox().z - HullOffset;
-				StartTrace = StartTrace + (RightDir * GetPlayerRadius());
-				break;
-			case EAIMovementTraceType::ORIGIN_LEFT:
-				StartTrace = StartTrace - (RightDir * GetPlayerRadius());
-				break;
-			case EAIMovementTraceType::ORIGIN_RIGHT:
-				StartTrace = StartTrace + (RightDir * GetPlayerRadius());
-				break;
-			case EAIMovementTraceType::LOWER_LEFT:
-				StartTrace.z = GetBottomOfHitbox().z + HullOffset;
-				StartTrace = StartTrace - (RightDir * GetPlayerRadius());
-				break;
-			case EAIMovementTraceType::LOWER_RIGHT:
-				StartTrace.z = GetBottomOfHitbox().z + HullOffset;
-				StartTrace = StartTrace + (RightDir * GetPlayerRadius());
-				break;
-			case EAIMovementTraceType::LOWER_CENTER:
-				StartTrace.z = GetBottomOfHitbox().z + HullOffset;
-				break;
-			default:
-				break;
-		}
+		case EAIMovementTraceType::HEAD_CENTER:
+			StartTrace.z = GetTopOfHitbox().z - HullOffset;
+			break;
+		case EAIMovementTraceType::HEAD_LEFT:
+			StartTrace.z = GetTopOfHitbox().z - HullOffset;
+			StartTrace = StartTrace - (RightDir * GetPlayerRadius());
+			break;
+		case EAIMovementTraceType::HEAD_RIGHT:
+			StartTrace.z = GetTopOfHitbox().z - HullOffset;
+			StartTrace = StartTrace + (RightDir * GetPlayerRadius());
+			break;
+		case EAIMovementTraceType::ORIGIN_LEFT:
+			StartTrace = StartTrace - (RightDir * GetPlayerRadius());
+			break;
+		case EAIMovementTraceType::ORIGIN_RIGHT:
+			StartTrace = StartTrace + (RightDir * GetPlayerRadius());
+			break;
+		case EAIMovementTraceType::LOWER_LEFT:
+			StartTrace.z = GetBottomOfHitbox().z + HullOffset;
+			StartTrace = StartTrace - (RightDir * GetPlayerRadius());
+			break;
+		case EAIMovementTraceType::LOWER_RIGHT:
+			StartTrace.z = GetBottomOfHitbox().z + HullOffset;
+			StartTrace = StartTrace + (RightDir * GetPlayerRadius());
+			break;
+		case EAIMovementTraceType::LOWER_CENTER:
+			StartTrace.z = GetBottomOfHitbox().z + HullOffset;
+			break;
+		default:
+			break;
 	}
+
+	// Point probes represent the left/right leading edges of the player's hull.
+	if (bPointTrace) { StartTrace = StartTrace + (MoveDirNormal * GetPlayerRadius()); }
 
 	Vector EndTrace = StartTrace + (MoveDirNormal * 5.0f);
 
 	TraceResult HitResult;
+	bool bHitMovementStructure = false;
+	const enum_hull TraceHull = (bPointTrace) ? point_hull : head_hull;
 
-	UTIL_TraceHull(StartTrace, EndTrace, dont_ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
-
-	if (HitResult.flFraction >= 1.0f) {	return true; }
+	if (!AITraceMovementSegment(StartTrace, EndTrace, TraceHull, Edict->v.pContainingEntity, HitResult, bHitMovementStructure)) { return true; }
 
 	if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
 
-	if (TraceType != EAIMovementTraceType::LOWER_RIGHT && TraceType != EAIMovementTraceType::LOWER_CENTER && TraceType != EAIMovementTraceType::LOWER_RIGHT) { return false; }
+	if (TraceType != EAIMovementTraceType::LOWER_LEFT && TraceType != EAIMovementTraceType::LOWER_CENTER && TraceType != EAIMovementTraceType::LOWER_RIGHT) { return false; }
 
-	const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal);
-
-	if (WalkableSlopeAngle <= 45.0f) { return true; }
+	if (!bHitMovementStructure && UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal) <= 45.0f) { return true; }
 
 	float HeightOffset = 1.0f;
 
@@ -1252,15 +1532,11 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 		StartTrace.z = JumpTraceStart.z + HeightOffset;
 		EndTrace.z = JumpTraceEnd.z + HeightOffset;
 
-		UTIL_TraceHull(StartTrace, EndTrace, dont_ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
-
-		if (HitResult.flFraction >= 1.0f) { return true; }
+		if (!AITraceMovementSegment(StartTrace, EndTrace, TraceHull, Edict->v.pContainingEntity, HitResult, bHitMovementStructure)) { return true; }
 
 		if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
 
-		const float WalkableSlopeAngle = UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal);
-
-		if (WalkableSlopeAngle <= 45.0f) { return true; }
+		if (!bHitMovementStructure && UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal) <= 45.0f) { return true; }
 
 		HeightOffset += 1.0f;
 	}
@@ -1572,8 +1848,6 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	bool bAdjustingForCollision = false;
 
-	const float PlayerRadius = GetPlayerRadius() + 2.0f;
-
 	const bool bBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, vForward, /* Point trace? */ true);
 	const bool bBumpRight = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_RIGHT, vForward, /* Point trace? */ true);
 
@@ -1587,17 +1861,15 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 	{
 		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
 	}
-	else if (!bBumpLeft && !bBumpRight)
-	{
-		if (!QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Point trace? */ false))
-		{
-			NextFrameMovementInput.bShouldCrouch = true;
-		}
 
-		if (!QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Point trace? */ false))
-		{
-			Jump(true);
-		}
+	if (!QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Point trace? */ false))
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+	}
+
+	if (!QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Point trace? */ false))
+	{
+		Jump(true);
 	}
 
 	NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection);
