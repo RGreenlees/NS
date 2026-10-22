@@ -1229,9 +1229,9 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 
 	TraceResult HitResult;
 
-	UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
+	UTIL_TraceHull(StartTrace, EndTrace, dont_ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
 
-	if (HitResult.flFraction >= 1.0f) { return true; }
+	if (HitResult.flFraction >= 1.0f) {	return true; }
 
 	if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
 
@@ -1252,7 +1252,7 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 		StartTrace.z = JumpTraceStart.z + HeightOffset;
 		EndTrace.z = JumpTraceEnd.z + HeightOffset;
 
-		UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
+		UTIL_TraceHull(StartTrace, EndTrace, dont_ignore_monsters, (bPointTrace) ? point_hull : head_hull, Edict->v.pContainingEntity, &HitResult);
 
 		if (HitResult.flFraction >= 1.0f) { return true; }
 
