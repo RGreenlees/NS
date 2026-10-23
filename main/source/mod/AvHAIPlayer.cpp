@@ -15,6 +15,8 @@
 #include "AvHMessage.h"
 #include "AvHTurret.h"
 #include "AvHWeldable.h"
+#include "AvHServerUtil.h"
+#include "AvHMovementUtil.h"
 #include <pm_shared/pm_shared.h>
 #include <pm_shared/pm_defs.h>
 
@@ -461,7 +463,7 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(TestPath.GetFinalDestination() - GetBottomOfHitbox());
 	}
 
-	return EAINavMoveResult::NAV_MOVE_NOPATH;
+	return (bFoundPath) ? EAINavMoveResult::NAV_MOVE_OFFPATH : EAINavMoveResult::NAV_MOVE_NOPATH;
 }
 
 EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
@@ -1364,10 +1366,11 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 		if (GetVelocity().Length2D() > 10.0f)
 		{
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(-Edict->v.groundentity->v.velocity);
-			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+			return EAINavMoveResult::NAV_MOVE_AVOID_PLAYER;
 		}
 
-		return MoveToWithoutNav(CurrentPathNode->ToLocation);
+		MoveToWithoutNav(CurrentPathNode->ToLocation);
+		return EAINavMoveResult::NAV_MOVE_AVOID_PLAYER;
 	}
 
 	AvHPlayer* RidingPlayer = AINAV_GetPlayerRidingOnBot(Edict);
@@ -1375,6 +1378,7 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 	if (RidingPlayer)
 	{
 		// TODO: Something here
+		// return EAINavMoveResult::NAV_MOVE_AVOID_PLAYER;
 	}
 
 	if (AINAV_IsOffPathNode(GetNavProfile(), Edict, CurrentPathNode))
@@ -1787,7 +1791,19 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
 
-	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
+
+	const Vector CurrentPosition = GetLocation();
+
+	if (vEquals(CurrentPosition, CurrentPathNode->LastRecordedPosition, 1.0f))
+	{
+		CurrentPathNode->TimeSinceMovement += gpGlobals->frametime;
+	}
+	else
+	{
+		CurrentPathNode->LastRecordedPosition = CurrentPosition;
+		CurrentPathNode->TimeSinceMovement = 0.0f;
+	}
 
 	bool bMoveSuccess = false;
 
@@ -1837,8 +1853,17 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 		Jump(false);
 	}
 
-	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
 	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
+
+	if (!IsOnGround() && CurrentPathNode->TimeSinceMovement > 3.0f)
+	{
+		const Vector CheckPoint = GetLocation() + Vector(0.0f, 0.0f, 50.0f);
+		if (AvHSUGetIsEnoughRoomForHull(CheckPoint, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+		{
+			Edict->v.origin = CheckPoint;
+		}
+	}
 
 	const Vector CurrentPos = GetBottomOfHitbox();
 

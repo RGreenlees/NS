@@ -53,6 +53,9 @@ struct AvHAIPathNode
 	unsigned int FromMeshPoly = 0; // The nav mesh poly the start point resides on
 	unsigned int ToMeshPoly = 0; // The nav mesh poly the end point resides on
 	edict_t* MovementObject = nullptr;
+	Vector LastRecordedPosition = ZERO_VECTOR;
+	float TimeSinceMovement = 0.0f; // How long the bot has been frozen in place during this move
+	float TimeSinceProgressMade = 0.0f; // How long since the bot managed to make meaningful progress along this path node
 
 	void Clear()
 	{
@@ -64,6 +67,9 @@ struct AvHAIPathNode
 		FromMeshPoly = 0;
 		ToMeshPoly = 0;
 		MovementObject = nullptr;
+		LastRecordedPosition = ZERO_VECTOR;
+		TimeSinceMovement = 0.0f;
+		TimeSinceProgressMade = 0.0f;
 	}
 
 	bool IsValidMove() const
@@ -123,6 +129,13 @@ struct AvHAIPath
 	}
 
 	const AvHAIPathNode* GetCurrentPathNode() const
+	{
+		if (!IsValidPath()) { return nullptr; }
+
+		return &PathNodes[CurrentNodeIndex];
+	}
+
+	AvHAIPathNode* GetCurrentPathNode_Mutable()
 	{
 		if (!IsValidPath()) { return nullptr; }
 
