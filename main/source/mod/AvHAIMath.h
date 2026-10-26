@@ -15,8 +15,11 @@
 
 static const Vector ZERO_VECTOR = Vector(0.0f, 0.0f, 0.0f);
 static const Vector UP_VECTOR = Vector(0.0f, 0.0f, 1.0f); // Normalized "up" direction
+static const Vector DOWN_VECTOR = Vector(0.0f, 0.0f, -1.0f); // Normalized "down" direction
 static const Vector RIGHT_VECTOR = Vector(1.0f, 0.0f, 0.0f); // Normalized "right" direction
+static const Vector LEFT_VECTOR = Vector(-1.0f, 0.0f, 0.0f); // Normalized "left" direction
 static const Vector FWD_VECTOR = Vector(0.0f, 1.0f, 0.0f); // Normalized "forward" direction
+static const Vector BACK_VECTOR = Vector(0.0f, -1.0f, 0.0f); // Normalized "backward" direction
 
 static const float MATH_PI = 3.141592654f;
 static const float DEGREES_RADIANS_CONV = (MATH_PI / 180.0f);
@@ -94,6 +97,7 @@ bool vEquals2D(const Vector v1, const Vector v2);
 bool vEquals(const Vector v1, const Vector v2, const float epsilon);
 bool vEquals2D(const Vector v1, const Vector v2, const float epsilon);
 bool vIsZero(const Vector v1);
+bool vIsNearlyZero(const Vector v1, const float epsilon);
 bool vIsValid(const Vector& v1);
 char* vToString(const Vector& v1);
 

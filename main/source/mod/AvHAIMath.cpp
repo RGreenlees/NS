@@ -407,6 +407,11 @@ bool vIsZero(const Vector v1)
 	return (fabsf(v1.x) < 0.0001f && fabsf(v1.y) < 0.0001f && fabsf(v1.z) < 0.0001f);
 }
 
+bool vIsNearlyZero(const Vector v1, const float epsilon)
+{
+	return (fabsf(v1.x) <= epsilon && fabsf(v1.y) <= epsilon && fabsf(v1.z) <= epsilon);
+}
+
 bool vIsValid(const Vector& v1)
 {
 	return (!isnan(v1.x) && !isnan(v1.y) && !isnan(v1.z));
@@ -414,7 +419,7 @@ bool vIsValid(const Vector& v1)
 
 char* vToString(const Vector& v1)
 {
-	char Result[64];
+	static char Result[64];
 
 	sprintf(Result, "(%3.2f, %3.2f, %3.2f)\0", v1.x, v1.y, v1.z);
 

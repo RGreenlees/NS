@@ -1227,7 +1227,9 @@ bool AINAV_IsPathPointComplete(const NavAgentProfile* NavProfile, const edict_t*
 		return vPointOverlaps3D(MoveTo, AIPlayer->v.absmin, AIPlayer->v.absmax) || bAtOrPastDestination;
 	}
 
-	if (NextPathNode && NextPathNode->IsValidMove())
+	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
+
+	if (bHasNextPathNode)
 	{
 		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
 			|| NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2)
@@ -1281,7 +1283,9 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 
 	if (vPointOverlaps3D(CurrentPathNode->ToLocation, PlayerFloorBBMin, PlayerFloorBBMax)) { return true; }
 
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	const bool bHasNextPathNode = (NextPathNode && NextPathNode->IsValidMove());
+
+	if (bHasNextPathNode && !NextPathNode->IsPrecisionMove())
 	{
 		const bool bNextPointDirectlyReachable = AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, 5.0f);
 
@@ -1314,7 +1318,9 @@ bool AINAV_IsFallMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 {
 	if (!NavProfile || !UTIL_IsEdictActive(AIPlayer) || !CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
 
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	const bool bHasNextPathNode = (NextPathNode && NextPathNode->IsValidMove());
+
+	if (bHasNextPathNode && !NextPathNode->IsPrecisionMove())
 	{
 		Vector ThisMoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
 		Vector NextMoveDir = UTIL_GetVectorNormal2D(NextPathNode->ToLocation - NextPathNode->FromLocation);
@@ -1349,7 +1355,9 @@ bool AINAV_IsJumpMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 
 	if (!vEquals2D(PositionInMove, CurrentPathNode->ToLocation, 2.0f)) { return false; }
 
-	if (NextPathNode && !NextPathNode->IsPrecisionMove())
+	const bool bHasNextPathNode = (NextPathNode && NextPathNode->IsValidMove());
+
+	if (bHasNextPathNode && !NextPathNode->IsPrecisionMove())
 	{
 		Vector ThisMoveDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
 		Vector NextMoveDir = UTIL_GetVectorNormal2D(NextPathNode->ToLocation - NextPathNode->FromLocation);

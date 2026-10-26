@@ -316,6 +316,11 @@ bool AvHAIPlayer::IsOnGround() const
 
 bool AvHAIPlayer::IsOnLadder() const
 {
+	if (IsPlayerSkulk(Edict))
+	{
+		return IsPlayerOnLadder(Edict);
+	}
+
 	return (!FNullEnt(Edict) && Edict->v.movetype == MOVETYPE_FLY);
 }
 
@@ -808,18 +813,14 @@ Vector AvHAIPlayer::GetBottomOfHitbox() const
 {
 	if (FNullEnt(Edict)) { return ZERO_VECTOR; }
 
-	const float Height = GetPlayerHeight();
-
-	return GetLocation() - Vector(0.0f, 0.0f, Height * 0.5f);
+	return Vector(Edict->v.origin.x, Edict->v.origin.y, Edict->v.absmin.z);
 }
 
 Vector AvHAIPlayer::GetTopOfHitbox() const
 {
 	if (FNullEnt(Edict)) { return ZERO_VECTOR; }
 
-	const float Height = GetPlayerHeight();
-
-	return GetLocation() + Vector(0.0f, 0.0f, Height * 0.5f);
+	return Vector(Edict->v.origin.x, Edict->v.origin.y, Edict->v.absmax.z);
 }
 
 void AvHAIPlayer::Think(float DeltaTime)
@@ -1324,10 +1325,12 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
 
+	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
+
 	if (AINAV_IsPathPointComplete(GetNavProfile(), Edict, CurrentPathNode, NextPathNode))
 	{
 		// We have reached the end of our path. Job done.
-		if (!NextPathNode)
+		if (!bHasNextPathNode)
 		{
 			return EAINavMoveResult::NAV_MOVE_PATH_COMPLETE;
 		}
@@ -1460,10 +1463,221 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 void AvHAIPlayer::HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
 {
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return; }
 
+	PlayerListType ActivePlayerList = AIMGR_GetAllActivePlayers();
+
+	if (ActivePlayerList.empty()) { return; }
+
+	switch (CurrentPathNode->MovementFlag)
+	{
+		case EAINavMovementFlag::NAV_FLAG_LADDER:
+			HandleLadderPlayerAvoidance(CurrentPathNode);
+			break;
+		case EAINavMovementFlag::NAV_FLAG_WALK:
+		case EAINavMovementFlag::NAV_FLAG_CROUCH:
+			HandleGroundPlayerAvoidance(CurrentPathNode);
+			break;
+		default:
+			break;
+	}
 }
 
-bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace)
+void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
+{
+	PlayerListType ActivePlayerList = AIMGR_GetAllActivePlayers();
+
+	if (ActivePlayerList.empty()) { return; }
+
+	const Vector BotLocation = GetLocation();
+
+	for (AvHPlayer* OtherPlayer : ActivePlayerList)
+	{
+		if (OtherPlayer == Player) { continue; }
+
+		const edict_t* OtherPlayerEdict = OtherPlayer->edict();
+
+		if (FNullEnt(OtherPlayerEdict)) { continue; }
+
+		// Other player is not too close to us, we're good
+		if (vDist2DSq(UTIL_GetClosestPointOnEntityToLocation(BotLocation, OtherPlayerEdict), BotLocation) > sqrf(GetPlayerRadius() * 2.0f))
+		{
+			continue;
+		}
+
+		// Player is above or below us
+		if (OtherPlayerEdict->v.absmax.z < GetBottomOfHitbox().z || OtherPlayerEdict->v.absmin.z > GetTopOfHitbox().z) { continue; }
+
+		// Other player is further away from our destination than us, probably not in the way
+		if (vDist2DSq(OtherPlayerEdict->v.origin, CurrentPathNode->ToLocation) > vDist2DSq(BotLocation, CurrentPathNode->ToLocation))
+		{
+			continue;
+		}
+
+		// Other player is definitely not in our way
+		if (!vlineIntersectsAABB(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, OtherPlayerEdict->v.absmin, OtherPlayerEdict->v.absmax))
+		{
+			continue;
+		}
+
+		const Vector DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+		const Vector OtherPlayerMoveDirection = UTIL_GetVectorNormal2D(OtherPlayerEdict->v.velocity);
+		const float OtherPlayerMoveDot = UTIL_GetDotProduct2D(OtherPlayerMoveDirection, DesiredMoveDirection);
+
+		// Player is trying to move away from us
+		if (OtherPlayerMoveDot > 0.0f) { continue; }
+
+		const Vector OtherPlayerDesiredDirection = GetPlayerAttemptedMoveDirection(OtherPlayerEdict);
+
+		if (!vIsZero(OtherPlayerDesiredDirection))
+		{
+			const float OtherPlayerDesiredMoveDot = UTIL_GetDotProduct2D(OtherPlayerDesiredDirection, DesiredMoveDirection);
+
+			// Player is wants to move away from us
+			if (OtherPlayerMoveDot > 0.0f) { continue; }
+		}
+
+		// Ok, player is trying to move in the other direction to us.
+
+		const Vector RightMoveDir = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(DesiredMoveDirection, UP_VECTOR));
+		const float MoveTraceDistance = GetPlayerRadius() * 2.0f;
+
+		const bool bPreferMoveLeft = (UTIL_GetDotProduct2D(OtherPlayerMoveDirection, RightMoveDir) >= 0.0f);
+
+		const bool bCanMoveLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, -RightMoveDir, false, MoveTraceDistance);
+		const bool bCanMoveRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, RightMoveDir, false, MoveTraceDistance);
+
+		if (bCanMoveLeft && (bPreferMoveLeft || !bCanMoveRight))
+		{
+			NextFrameMovementInput.DesiredMoveDirection = -RightMoveDir;
+			return;
+		}
+
+		if (bCanMoveRight)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = RightMoveDir;
+			return;
+		}
+
+		if (!IsOnGround()) { return; }
+
+		// We have little room for manoeuvre here...
+
+		if (!IsPlayerOnGround(OtherPlayerEdict))
+		{
+			NextFrameMovementInput.bShouldCrouch;
+			return;
+		}
+
+		if (IsOnGround())
+		{
+			const Vector CheckPoint = BotLocation + Vector(0.0f, 0.0f, 50.0f);
+			if (AvHSUGetIsEnoughRoomForHull(CheckPoint, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Jump(true);
+				return;
+			}
+		}
+
+		// We have nowhere to move, goal now is to go to the last space where we had some room to manoeuvre.
+		if (!vIsZero(LastOpenSpace))
+		{
+			AvHAIMoveTask NewBackUpTask;
+			if (AINAV_AddMoveMovementTask(GetNavProfile(), BotLocation, LastOpenSpace, nullptr, NewBackUpTask, CurrentPathNode))
+			{
+				UTIL_DrawLine(INDEXENT(1), BotLocation, LastOpenSpace, 10.0f, 0, 0, 128);
+				AddMovementTask(NewBackUpTask);
+				return;
+			}
+		}
+	}
+}
+
+void AvHAIPlayer::HandleLadderPlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
+{
+	PlayerListType ActivePlayerList = AIMGR_GetAllActivePlayers();
+
+	if (ActivePlayerList.empty()) { return; }
+
+	const edict_t* MyLadder = UTIL_GetNearestLadderAtPoint(CurrentPathNode->FromLocation);
+
+	if (FNullEnt(MyLadder)) { return; }
+
+	for (AvHPlayer* OtherPlayer : ActivePlayerList)
+	{
+		if (OtherPlayer == Player) { continue; }
+
+		const edict_t* OtherPlayerEdict = OtherPlayer->edict();
+
+		if (FNullEnt(OtherPlayerEdict)) { continue; }
+
+		if (!IsPlayerOnLadder(OtherPlayerEdict)) { continue; }
+
+		edict_t* OtherPlayerLadder = UTIL_GetNearestLadderAtPoint(OtherPlayerEdict->v.origin);
+
+		if (FNullEnt(OtherPlayerLadder) || OtherPlayerLadder != MyLadder) { continue; }
+
+		const bool bIsGoingUpLadder = (CurrentPathNode->FromLocation.z < CurrentPathNode->ToLocation.z);
+
+		const bool bIsOtherPlayerInWay = (bIsGoingUpLadder)
+			? OtherPlayerEdict->v.origin.z > Edict->v.origin.z
+			: OtherPlayerEdict->v.origin.z < Edict->v.origin.z;
+
+		if (!bIsOtherPlayerInWay) { continue; }
+
+		// Check if the player is trying to climb in the opposite direction to us, ignore if they're going in the same direction
+		if (!vIsNearlyZero(OtherPlayerEdict->v.velocity, 5.0f))
+		{
+			const Vector OtherClimbDirectionNormal = UTIL_GetVectorNormal(OtherPlayerEdict->v.velocity);
+
+			const float ClimbDot = UTIL_GetDotProduct(OtherClimbDirectionNormal, (bIsGoingUpLadder) ? UP_VECTOR : DOWN_VECTOR);
+
+			// Other player is not trying to climb in the opposite direction as us if their climb angle is not acute enough
+			if (ClimbDot > -0.5f) { continue; }
+		}
+
+		if (!bIsGoingUpLadder && Edict->v.origin.z - CurrentPathNode->ToLocation.z < 200.0f)
+		{
+			if (IsOnLadder())
+			{
+				Jump(true);
+			}
+
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - UTIL_GetCentreOfEntity(MyLadder));
+
+			return;
+		}
+
+		const NavAgentProfile* NavProfile = GetNavProfile();
+
+		if (!IsOnLadder())
+		{
+			if (AINAV_IsPointDirectlyReachable(NavProfile, Edict->v.origin, CurrentPathNode->ToLocation))
+			{
+				return;
+			}
+		}
+		else
+		{
+			if (AINAV_IsPointDirectlyReachable(NavProfile, Edict->v.origin, CurrentPathNode->FromLocation))
+			{
+				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->FromLocation - Edict->v.origin);
+				return;
+			}
+		}
+
+		AvHAIMoveTask NewMoveTask;
+		const bool bAddedMoveTask = AINAV_AddMoveMovementTask(NavProfile, GetBottomOfHitbox(), CurrentPathNode->FromLocation, nullptr, NewMoveTask, CurrentPathNode);
+
+		if (bAddedMoveTask)
+		{
+			AddMovementTask(NewMoveTask);
+			return;
+		}
+	}
+}
+
+bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace, float TraceDistance)
 {
 	if (vIsZero(MoveDir)) { return true; }
 
@@ -1511,7 +1725,7 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 	// Point probes represent the left/right leading edges of the player's hull.
 	if (bPointTrace) { StartTrace = StartTrace + (MoveDirNormal * GetPlayerRadius()); }
 
-	Vector EndTrace = StartTrace + (MoveDirNormal * 5.0f);
+	Vector EndTrace = StartTrace + (MoveDirNormal * TraceDistance);
 
 	TraceResult HitResult;
 	bool bHitMovementStructure = false;
@@ -1813,35 +2027,285 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 		NextFrameMovementInput.bShouldCrouch = true;
 	}
 
+	bool bMadeMove = false;
+
 	switch (CurrentPathNode->MovementFlag)
 	{
 		case EAINavMovementFlag::NAV_FLAG_WALK:
-			return NewGroundMove(Path);
+			bMadeMove = NewGroundMove(Path);
+			CheckGroundMoveStuckAndReact(Path);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_FALL:
 		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
-			return NewFallMove(Path);
+			bMadeMove = NewFallMove(Path);
+			CheckFallMoveStuckAndReact(Path);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_JUMP:
 		case EAINavMovementFlag::NAV_FLAG_FATALJUMP:
-			return NewJumpMove(Path);
+			bMadeMove = NewJumpMove(Path);
+			CheckJumpMoveStuckAndReact(Path);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_LADDER:
-			return NewLadderMove(Path);
+			bMadeMove = NewLadderMove(Path);
+			CheckLadderMoveStuckAndReact(Path);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
-			return NewWallClimbMove(Path);
+			bMadeMove = NewWallClimbMove(Path);
+			CheckWallClimbMoveStuckAndReact(Path);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 			return NewPlatformMove(Path);
-			break;
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
 			return NewPhaseGateMove(Path);
 		default:
-			return NewGroundMove(Path);
+			bMadeMove = NewGroundMove(Path);
+			CheckGroundMoveStuckAndReact(Path);
 			break;
 	}
+
+	return bMadeMove;
+}
+
+void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
+{
+	if (!Path || !Path->IsValidPath()) { return; }
+
+	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return; }
+
+	// We are hopelessly stuck
+	if (CurrentPathNode->TimeSinceMovement > 10.0f)
+	{
+		Suicide();
+		return;
+	}
+
+	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
+
+	const Vector BotLocation = GetLocation();
+
+	if (!IsOnGround())
+	{
+		// Failing that, try and snap the bot back onto the path
+		if (CurrentPathNode->TimeSinceMovement > 4.0f)
+		{
+			const Vector FloorPosition = UTIL_GetFloorUnderEntity(Edict) + Vector(0.0f, 0.0f, (GetPlayerHeight() + 1.0f));
+			Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, FloorPosition);
+
+			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = PointOnPath;
+				return;
+			}
+
+			const Vector TravelDir = UTIL_GetVectorNormal(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+			const float TeleportDistance = (Edict->v.absmax - Edict->v.absmin).Length2D();
+
+			PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
+
+			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = PointOnPath;
+				return;
+			}
+
+			PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
+
+			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = PointOnPath;
+				return;
+			}
+
+			return;
+		}
+
+		// First, stop movement to see if we
+		if (CurrentPathNode->TimeSinceMovement > 2.0f)
+		{
+			NextFrameMovementInput.Clear();
+			NextFrameMovementInput.bShouldCrouch = true;
+
+			const Vector CheckPoint = BotLocation + Vector(0.0f, 0.0f, 50.0f);
+			if (AvHSUGetIsEnoughRoomForHull(CheckPoint, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = CheckPoint;
+			}
+
+			return;
+		}
+
+		return;
+	}
+
+	// We are on the ground, check if we're stuck
+	if (CurrentPathNode->TimeSinceMovement > 4.0f)
+	{
+		Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
+		PointOnPath.z = Edict->v.origin.z;
+
+		const Vector TravelDir = UTIL_GetVectorNormal(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+		const float TeleportDistance = (Edict->v.absmax - Edict->v.absmin).Length2D();
+
+		PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
+		float HeightOffset = 0.0f;
+
+		while (HeightOffset < 20.0f)
+		{
+			const Vector CheckPointOnPath = PointOnPath + Vector(0.0f, 0.0f, HeightOffset);
+			if (AvHSUGetIsEnoughRoomForHull(CheckPointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = CheckPointOnPath;
+				return;
+			}
+
+			HeightOffset += 2.0f;
+		}
+
+		HeightOffset = 0.0f;
+
+		PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
+
+		while (HeightOffset < 20.0f)
+		{
+			const Vector CheckPointOnPath = PointOnPath + Vector(0.0f, 0.0f, HeightOffset);
+			if (AvHSUGetIsEnoughRoomForHull(CheckPointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = CheckPointOnPath;
+				return;
+			}
+
+			HeightOffset += 2.0f;
+		}
+
+		HeightOffset = 0.0f;
+
+		PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
+
+		while (HeightOffset < 20.0f)
+		{
+			const Vector CheckPointOnPath = PointOnPath + Vector(0.0f, 0.0f, HeightOffset);
+			if (AvHSUGetIsEnoughRoomForHull(CheckPointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+			{
+				Edict->v.origin = CheckPointOnPath;
+				return;
+			}
+
+			HeightOffset += 2.0f;
+		}
+
+		return;
+	}
+}
+
+void AvHAIPlayer::CheckFallMoveStuckAndReact(AvHAIPath* Path)
+{
+
+}
+
+void AvHAIPlayer::CheckJumpMoveStuckAndReact(AvHAIPath* Path)
+{
+
+}
+
+void AvHAIPlayer::CheckLadderMoveStuckAndReact(AvHAIPath* Path)
+{
+	if (!Path || !Path->IsValidPath()) { return; }
+
+	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return; }
+
+	// We are hopelessly stuck
+	if (CurrentPathNode->TimeSinceMovement > 10.0f)
+	{
+		Suicide();
+		return;
+	}
+
+	const Vector BotLocation = GetLocation();
+
+	if (CurrentPathNode->TimeSinceMovement > 4.0f)
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+
+		const bool bGoingUpLadder = (CurrentPathNode->ToLocation.z > CurrentPathNode->FromLocation.z);
+
+		const float ClimbedHeight = (bGoingUpLadder)
+			? fmaxf(BotLocation.z - CurrentPathNode->FromLocation.z, 0.0f)
+			: fmaxf(CurrentPathNode->FromLocation.z - BotLocation.z, 0.0f);
+
+		const float DesiredClimbHeight = (bGoingUpLadder)
+			? CurrentPathNode->ToLocation.z - CurrentPathNode->FromLocation.z
+			: CurrentPathNode->FromLocation.z - CurrentPathNode->ToLocation.z;
+
+		const float ClimbProgress = (ClimbedHeight / DesiredClimbHeight);
+
+		if (ClimbProgress < 0.25f)
+		{
+			const edict_t* MountLadder = UTIL_GetNearestLadderAtPoint(CurrentPathNode->FromLocation);
+			const Vector LadderNormal = UTIL_GetLadderNormal(CurrentPathNode->FromLocation, MountLadder);
+
+			if (UTIL_IsEdictActive(MountLadder))
+			{
+				const Vector LadderMount = AINAV_GetLadderMountPoint(MountLadder, CurrentPathNode->FromLocation);
+
+				if (!vIsZero(LadderMount))
+				{
+					float Offset = 0.0f;
+
+					while (Offset < 20.0f)
+					{
+						const Vector CheckPointOnLadder = (bGoingUpLadder)
+							? LadderMount + ((LadderNormal * Offset) + Vector(0.0f, 0.0f, Offset))
+							: LadderMount + ((LadderNormal * Offset) - Vector(0.0f, 0.0f, Offset));
+
+						if (AvHSUGetIsEnoughRoomForHull(CheckPointOnLadder, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+						{
+							Edict->v.origin = CheckPointOnLadder;
+							return;
+						}
+
+						Offset += 2.0f;
+					}
+				}
+			}
+		}
+		else if (ClimbProgress > 0.75f)
+		{
+			if (vDist3DSq(BotLocation, CurrentPathNode->ToLocation) < sqrf(100.0f))
+			{
+				float Offset = 0.0f;
+
+				while (Offset < 20.0f)
+				{
+					const Vector Checkpoint = CurrentPathNode->ToLocation + Vector(0.0f, 0.0f, Offset);
+
+					if (AvHSUGetIsEnoughRoomForHull(Checkpoint, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
+					{
+						Edict->v.origin = Checkpoint;
+						return;
+					}
+
+					Offset += 2.0f;
+				}
+			}
+		}
+		else
+		{
+			if (IsOnLadder())
+			{
+				Jump(true);
+			}
+		}
+	}
+}
+
+void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
+{
+
 }
 
 bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
@@ -1856,20 +2320,22 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
 	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
 
-	if (!IsOnGround() && CurrentPathNode->TimeSinceMovement > 3.0f)
-	{
-		const Vector CheckPoint = GetLocation() + Vector(0.0f, 0.0f, 50.0f);
-		if (AvHSUGetIsEnoughRoomForHull(CheckPoint, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-		{
-			Edict->v.origin = CheckPoint;
-		}
-	}
-
 	const Vector CurrentPos = GetBottomOfHitbox();
 
 	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPos);
 	// Same goes for the right vector, might not be the same as the bot's right
 	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
+
+	if (IsOnGround())
+	{
+		const bool bCanMoveRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vRight, false, GetPlayerRadius() * 2.0f);
+		const bool bCanMoveLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, -vRight, false, GetPlayerRadius() * 2.0f);
+
+		if (bCanMoveRight || bCanMoveLeft)
+		{
+			LastOpenSpace = GetLocation();
+		}
+	}
 
 	bool bAdjustingForCollision = false;
 
@@ -2058,6 +2524,8 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
+	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
+
 	const Vector BotLocation = GetLocation();
 	const Vector CollisionTopLocation = GetTopOfHitbox();
 	const Vector CollisionBottomLocation = GetBottomOfHitbox();
@@ -2085,7 +2553,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 			{
 				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 
-				if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+				if (bHasNextPathNode && NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
 				{
 					NextFrameMovementInput.bShouldCrouch = true;
 				}
@@ -2101,7 +2569,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 			NextFrameMovementInput.DesiredLookLocation = CurrentPathNode->ToLocation;
 
-			if (CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+			if (bHasNextPathNode && CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
 				NextFrameMovementInput.bShouldCrouch = true;
 			}
@@ -2151,7 +2619,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 	// We've reached the end of the ladder, try and make it to the disembark point if we can
 	if (LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z >= DesiredClimbHeight)
 	{
-		if (CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+		if (bHasNextPathNode && CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 		{
 			NextFrameMovementInput.bShouldCrouch = true;
 		}
@@ -2223,6 +2691,7 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 
 	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
 
+	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
 	const Vector BotLocation = GetLocation();
 	const Vector CollisionTopLocation = GetTopOfHitbox();
 	const Vector CollisionBottomLocation = GetBottomOfHitbox();
@@ -2245,7 +2714,7 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 			{
 				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 
-				if (NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+				if (bHasNextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 				{
 					NextFrameMovementInput.bShouldCrouch = true;
 				}
@@ -2260,7 +2729,7 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 		{
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 
-			if (NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+			if (bHasNextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
 				NextFrameMovementInput.bShouldCrouch = true;
 			}
@@ -2307,14 +2776,17 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 		DesiredClimbHeight = fmaxf((CurrentPathNode->RequiredClimbZ + ExtraClimbHeight), LadderBottom.z + GetPlayerOriginOffsetFromFloor(Edict, true).z);
 	}
 
-	if (BotLocation.z <= DesiredClimbHeight || CollisionBottomLocation.z - NextPathNode->ToLocation.z < 100.0f || fabsf(CollisionBottomLocation.z - LadderBottom.z) <= 2.0f)
+	if (bHasNextPathNode)
 	{
-		// We're close enough to the end that we can jump off the ladder
-		if (UTIL_QuickTrace(Edict, CollisionTopLocation, NextPathNode->ToLocation))
+		if (BotLocation.z <= DesiredClimbHeight || (CollisionBottomLocation.z - NextPathNode->ToLocation.z < 100.0f) || fabsf(CollisionBottomLocation.z - LadderBottom.z) <= 2.0f)
 		{
-			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
-			Jump(true);
-			return true;
+			// We're close enough to the end that we can jump off the ladder
+			if (UTIL_QuickTrace(Edict, CollisionTopLocation, NextPathNode->ToLocation))
+			{
+				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
+				Jump(true);
+				return true;
+			}
 		}
 	}
 

@@ -1051,7 +1051,7 @@ bool UTIL_QuickMovementTrace(edict_t* MoverEdict, Vector StartTrace, Vector EndT
 	return Hit.vecEndPos.z - GetPlayerBottomOfCollisionHull(MoverEdict).z < 18.0f;
 }
 
-Vector UTIL_GetLadderNormal(Vector SearchLocation, edict_t* Ladder)
+Vector UTIL_GetLadderNormal(Vector SearchLocation, const edict_t* Ladder)
 {
 	if (FNullEnt(Ladder)) { return ZERO_VECTOR; }
 

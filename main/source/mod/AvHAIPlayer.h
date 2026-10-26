@@ -185,8 +185,6 @@ struct AvHAIStuckTracker
 	}
 };
 
-
-
 struct AvHAIPlayer
 {
 	AvHPlayer* Player = nullptr;
@@ -260,6 +258,7 @@ struct AvHAIPlayer
 
 	Vector ViewForwardVector = g_vecZero; // Bot's current forward unit vector
 	Vector LastSafeLocation = g_vecZero;
+	Vector LastOpenSpace = g_vecZero;
 
 	int ExperiencePointsAvailable = 0; // How much experience the bot has to spend
 	AvHMessageID NextCombatModeUpgrade = MESSAGE_NULL;
@@ -336,6 +335,12 @@ struct AvHAIPlayer
 	bool NextMove(AvHAIPath* Path);
 	bool NextSwimMove(AvHAIPath* Path);
 
+	void CheckGroundMoveStuckAndReact(AvHAIPath* Path);
+	void CheckFallMoveStuckAndReact(AvHAIPath* Path);
+	void CheckJumpMoveStuckAndReact(AvHAIPath* Path);
+	void CheckLadderMoveStuckAndReact(AvHAIPath* Path);
+	void CheckWallClimbMoveStuckAndReact(AvHAIPath* Path);
+
 	bool NewGroundMove(AvHAIPath* Path);
 	bool NewFallMove(AvHAIPath* Path);
 	bool NewJumpMove(AvHAIPath* Path);
@@ -363,11 +368,13 @@ struct AvHAIPlayer
 	void ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon);
 
 	void HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
+	void HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
+	void HandleLadderPlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
 
 	void DEBUG_DrawPath();
 
 	// Returns true if trace completed without hitting anything
-	bool QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace);
+	bool QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace, float TraceDistance = 5.0f);
 
 	EAINavMoveResult ProgressMoveTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressBreakTask(AvHAIMoveTask* MoveTask);

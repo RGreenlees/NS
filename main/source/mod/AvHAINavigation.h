@@ -56,6 +56,7 @@ struct AvHAIPathNode
 	Vector LastRecordedPosition = ZERO_VECTOR;
 	float TimeSinceMovement = 0.0f; // How long the bot has been frozen in place during this move
 	float TimeSinceProgressMade = 0.0f; // How long since the bot managed to make meaningful progress along this path node
+	float MovementProgress = 0.0f; // How far along the path node has the bot managed to reach
 
 	void Clear()
 	{
