@@ -382,7 +382,7 @@ struct AvHAIPlayer
 	EAINavMoveResult ProgressWeldTask(AvHAIMoveTask* MoveTask);
 };
 
-
+bool TestQuickMovementTrace(const Vector Origin, const Vector MoveDir, bool bPointTrace, float TraceDistance);
 Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer);
 
 #endif

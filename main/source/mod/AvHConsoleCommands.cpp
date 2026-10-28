@@ -1462,45 +1462,15 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	{
 		edict_t* ListenEdict = INDEXENT(1);
 
-		enum_hull PlayerHull = human_hull;
+		Vector HitboxBottom = GetPlayerBottomOfCollisionHull(ListenEdict);
+		HitboxBottom.z += 18.0f;
 
-		Vector vForward = UTIL_GetForwardVector(ListenEdict->v.v_angle);
-		const Vector RightDir = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(vForward, UP_VECTOR));
+		const Vector TestMoveDir = UTIL_GetVectorNormal2D(UTIL_GetForwardVector(ListenEdict->v.v_angle));
 
-		const float PlayerRadius = GetPlayerRadius(ListenEdict);
+		const bool bSucceed = TestQuickMovementTrace(HitboxBottom, TestMoveDir, false, 50.0f);
 
-		const Vector BottomOfHitbox = GetPlayerBottomOfCollisionHull(ListenEdict);
+		ClientPrint(&ListenEdict->v, HUD_PRINTNOTIFY, (bSucceed) ? "YES" : "NO");
 
-		Vector StartTraceLeft = ListenEdict->v.origin - (RightDir * PlayerRadius);
-		Vector EndTraceLeft = StartTraceLeft + (vForward * (PlayerRadius * 1.2f));
-		Vector StartTraceRight = ListenEdict->v.origin + (RightDir * PlayerRadius);
-		Vector EndTraceRight = StartTraceRight + (vForward * (PlayerRadius * 1.2f));
-
-		TraceResult HitResult;
-
-		const bool bHitLeft = !UTIL_QuickMovementTrace(ListenEdict, StartTraceLeft, EndTraceLeft, point_hull);
-		const bool bHitRight = !UTIL_QuickMovementTrace(ListenEdict, StartTraceLeft, EndTraceRight, point_hull);
-
-		if (bHitLeft && !bHitRight)
-		{
-			ClientPrint(&ListenEdict->v, HUD_PRINTNOTIFY, "GO RIGHT");
-		}
-		else if (!bHitLeft && bHitRight)
-		{
-			ClientPrint(&ListenEdict->v, HUD_PRINTNOTIFY, "GO LEFT");
-		}
-		else if (!bHitLeft && !bHitRight)
-		{
-			Vector StartTrace = ListenEdict->v.origin;
-			StartTrace.z = BottomOfHitbox.z + UTIL_GetHullOffsetFromFloor(head_hull).z;
-
-			const bool bOtherHit = !UTIL_QuickMovementTrace(ListenEdict, ListenEdict->v.origin, ListenEdict->v.origin + (vForward * (PlayerRadius * 1.2f)), head_hull);
-
-			if (bOtherHit)
-			{
-				ClientPrint(&ListenEdict->v, HUD_PRINTNOTIFY, "JUMP");
-			}
-		}
 
 		theSuccess = true;
 	}

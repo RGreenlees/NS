@@ -144,7 +144,7 @@ namespace
 
 		if (StructureCollisions.capacity() == 0) { StructureCollisions.reserve(64); }
 
-		for (int i = 1; i < gpGlobals->maxEntities; ++i)
+		for (int32 i = 1; i < gpGlobals->maxEntities; ++i)
 		{
 			edict_t* StructureEdict = INDEXENT(i);
 
@@ -300,6 +300,75 @@ namespace
 		UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, Hull, IgnoreEdict, &HitResult);
 
 		return HitResult.flFraction < 1.0f || HitResult.fStartSolid || HitResult.fAllSolid;
+	}
+
+	bool AITraceMovementSegment(const Vector MoveOrigin, const Vector Direction, float TraceDistance, const enum_hull Hull, edict_t* IgnoreEdict)
+	{
+		const Vector DirectionNormal = UTIL_GetVectorNormal2D(Direction);
+
+		if (vIsZero(DirectionNormal)) { return true; }
+
+		float DistanceRemaining = TraceDistance;
+
+		Vector StartTrace = MoveOrigin;
+		Vector TraceDirection = DirectionNormal;
+
+		while (DistanceRemaining > 0.1f)
+		{
+			const Vector EndTrace = StartTrace + (TraceDirection * DistanceRemaining);
+
+			if (AITraceHitsMovementStructure(StartTrace, EndTrace, Hull, IgnoreEdict))
+			{
+				return false;
+			}
+
+			TraceResult HitResult;
+
+			UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, Hull, IgnoreEdict, &HitResult);
+
+			if (HitResult.flFraction >= 1.0f) { return true; }
+			if (HitResult.fAllSolid || HitResult.fStartSolid) { return false; }
+
+			const float HitSlopeAngle = UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal);
+
+			DistanceRemaining -= DistanceRemaining * HitResult.flFraction;
+
+			if (HitSlopeAngle <= 45.0f)
+			{
+				StartTrace = HitResult.vecEndPos;
+				StartTrace.z += 5.0f;
+				continue;
+			}
+
+			float StepHeight = 1.0f;
+			const float PreviousFraction = HitResult.flFraction;
+
+			while (StepHeight < 16.0f)
+			{
+				const Vector StepTraceStart = StartTrace + Vector(0.0f, 0.0f, StepHeight);
+				const Vector StepTraceEnd = EndTrace + Vector(0.0f, 0.0f, StepHeight);
+
+				UTIL_TraceHull(StepTraceStart, StepTraceEnd, ignore_monsters, Hull, IgnoreEdict, &HitResult);
+
+				if (HitResult.fAllSolid || HitResult.fStartSolid) { return false; }
+
+				if (HitResult.flFraction >= 1.0f) { return true; }
+
+				if (HitResult.flFraction > PreviousFraction)
+				{
+					DistanceRemaining -= DistanceRemaining * HitResult.flFraction;
+					StartTrace = HitResult.vecEndPos;
+					break;
+				}
+
+				StepHeight += 1.0f;
+			}
+
+			return false;
+
+		}
+
+		return true;
 	}
 }
 
@@ -1585,7 +1654,6 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 			AvHAIMoveTask NewBackUpTask;
 			if (AINAV_AddMoveMovementTask(GetNavProfile(), BotLocation, LastOpenSpace, nullptr, NewBackUpTask, CurrentPathNode))
 			{
-				UTIL_DrawLine(INDEXENT(1), BotLocation, LastOpenSpace, 10.0f, 0, 0, 128);
 				AddMovementTask(NewBackUpTask);
 				return;
 			}
@@ -1675,6 +1743,11 @@ void AvHAIPlayer::HandleLadderPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 			return;
 		}
 	}
+}
+
+bool TestQuickMovementTrace(const Vector Origin, const Vector MoveDir, bool bPointTrace, float TraceDistance)
+{
+	return AITraceMovementSegment(Origin, MoveDir, TraceDistance, head_hull, INDEXENT(1));
 }
 
 bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace, float TraceDistance)
