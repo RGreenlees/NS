@@ -1462,16 +1462,6 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	{
 		edict_t* ListenEdict = INDEXENT(1);
 
-		Vector HitboxBottom = GetPlayerBottomOfCollisionHull(ListenEdict);
-		HitboxBottom.z += 18.0f;
-
-		const Vector TestMoveDir = UTIL_GetVectorNormal2D(UTIL_GetForwardVector(ListenEdict->v.v_angle));
-
-		const bool bSucceed = TestQuickMovementTrace(HitboxBottom, TestMoveDir, false, 50.0f);
-
-		ClientPrint(&ListenEdict->v, HUD_PRINTNOTIFY, (bSucceed) ? "YES" : "NO");
-
-
 		theSuccess = true;
 	}
 	else if (FStrEq(pcmd, "bot_debugobject"))

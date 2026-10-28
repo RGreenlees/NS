@@ -16,7 +16,7 @@
 
 double last_think_time = 0.0;
 
-vector<AvHAIPlayer> ActiveAIPlayers;
+std::list<AvHAIPlayer> ActiveAIPlayers;
 vector<EAINavMeshIndex> RecentlyModifiedNavMeshes;
 
 extern cvar_t avh_botautomode;
@@ -278,7 +278,7 @@ void AIMGR_RemoveAIPlayerFromTeam(int Team)
 
 	if (AIMGR_HasMatchEnded() && Team == 0)
 	{
-		vector<AvHAIPlayer>::iterator ItemToRemove = ActiveAIPlayers.end(); // Current bot to be kicked
+		std::list<AvHAIPlayer>::iterator ItemToRemove = ActiveAIPlayers.end(); // Current bot to be kicked
 
 		for (auto it = ActiveAIPlayers.begin(); it != ActiveAIPlayers.end(); it++)
 		{
@@ -318,7 +318,7 @@ void AIMGR_RemoveAIPlayerFromTeam(int Team)
 	// resources tied up in them or are commanding, which could cause big disruption to the team they're leaving
 
 	int MinValue = 0; // Track the least valuable bot on the desired team.
-	vector<AvHAIPlayer>::iterator ItemToRemove = ActiveAIPlayers.end(); // Current bot to be kicked
+	std::list<AvHAIPlayer>::iterator ItemToRemove = ActiveAIPlayers.end(); // Current bot to be kicked
 
 	for (auto it = ActiveAIPlayers.begin(); it != ActiveAIPlayers.end(); it++)
 	{
@@ -375,14 +375,12 @@ void AIMGR_RemoveAIPlayerFromTeam(int Team)
 		}
 	}
 
-
 	if (ItemToRemove != ActiveAIPlayers.end())
 	{
 		ItemToRemove->Player->Kick();
 
 		ActiveAIPlayers.erase(ItemToRemove);
 	}
-
 }
 
 void AIMGR_AddAIPlayerToTeam(int Team)

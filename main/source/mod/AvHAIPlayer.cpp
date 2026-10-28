@@ -514,9 +514,10 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 		}
 	}
 
+	// This is a brand new destination
+
 	const NavAgentProfile* NavProfile = GetNavProfile();
 
-	// This is a brand new destination
 	BotNavInfo.ClearPath();
 
 	AvHAIMoveTask NewDestinationTask;
@@ -542,95 +543,63 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 
 EAINavMoveResult AvHAIPlayer::MoveToWithoutNav(const Vector& DesiredLocation)
 {
-	const Vector CurrentFloorPosition = UTIL_GetFloorUnderEntity(Edict);
-
-	Vector CurrentPos = (IsOnGround()) ? GetLocation() : CurrentFloorPosition + GetPlayerOriginOffsetFromFloor(Edict, false);
-	CurrentPos.z += 18.0f;
-
-	const Vector vForward = UTIL_GetVectorNormal2D(DesiredLocation - CurrentPos);
+	const Vector CurrentLocation = GetLocation();
+	const Vector vForward = UTIL_GetVectorNormal2D(DesiredLocation - CurrentLocation);
 	// Same goes for the right vector, might not be the same as the bot's right
 	const Vector vRight = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(vForward, UP_VECTOR));
 
 	const float PlayerRadius = GetPlayerRadius();
 
-	Vector stTrcLft = CurrentPos - (vRight * PlayerRadius);
-	Vector stTrcRt = CurrentPos + (vRight * PlayerRadius);
-	Vector endTrcLft = stTrcLft + (vForward * (PlayerRadius * 1.5f));
-	Vector endTrcRt = stTrcRt + (vForward * (PlayerRadius * 1.5f));
-
-	TraceResult hit;
-
-	UTIL_TraceHull(stTrcLft, endTrcLft, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
-
-	const bool bumpLeft = (hit.flFraction < 1.0f || hit.fAllSolid > 0 || hit.fStartSolid > 0);
-
-	UTIL_TraceHull(stTrcRt, endTrcRt, ignore_monsters, head_hull, Edict->v.pContainingEntity, &hit);
-
-	const bool bumpRight = (hit.flFraction < 1.0f || hit.fAllSolid > 0 || hit.fStartSolid > 0);
+	const bool bBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, vForward, true, PlayerRadius);
+	const bool bBumpRight = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_RIGHT, vForward, true, PlayerRadius);
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 
-	if (bumpRight && !bumpLeft)
+	if (bBumpRight && !bBumpLeft)
 	{
 		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
 	}
-	else if (bumpLeft && !bumpRight)
+	else if (bBumpLeft && !bBumpRight)
 	{
 		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
 	}
-	else if (bumpLeft && bumpRight)
+	else if (bBumpLeft && bBumpRight)
 	{
-		float MaxScaleHeight = GetPlayerMaxJumpHeight(Edict);
+		const bool bSecondBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, -vRight, true, PlayerRadius);
 
-		float JumpHeight = 0.0f;
-
-		bool bFoundJumpHeight = false;
-
-		Vector StartTrace = CurrentFloorPosition;
-		Vector EndTrace = StartTrace + (vForward * 50.0f);
-		EndTrace.z = StartTrace.z;
-
-		TraceResult JumpTestHit;
-
-		while (JumpHeight < MaxScaleHeight && !bFoundJumpHeight)
+		if (bSecondBumpLeft)
 		{
-			UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, head_hull, Edict->v.pContainingEntity, &JumpTestHit);
-
-			if (JumpTestHit.flFraction >= 1.0f && !JumpTestHit.fAllSolid)
-			{
-				bFoundJumpHeight = true;
-				break;
-			}
-
-			JumpHeight += 5.0f;
-
-			StartTrace.z += 5.0f;
-			EndTrace.z += 5.0f;
-		}
-
-		if (JumpHeight <= MaxScaleHeight)
-		{
-			Jump(true);
+			NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
 		}
 		else
 		{
-			stTrcLft.z = Edict->v.origin.z;
-			stTrcRt.z = Edict->v.origin.z;
-			endTrcLft.z = Edict->v.origin.z;
-			endTrcRt.z = Edict->v.origin.z;
-
-			if (!UTIL_QuickTrace(Edict, stTrcLft, endTrcLft))
-			{
-				NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
-			}
-			else
-			{
-				NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
-			}
+			NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
 		}
 	}
 
-	const float DistFromDestination = vDist2DSq(Edict->v.origin, DesiredLocation);
+	const float DistFromDestination = vDist2DSq(CurrentLocation, DesiredLocation);
+
+	if (vIsZero(NextFrameMovementInput.DesiredLookLocation))
+	{
+		Vector LookTarget = DesiredLocation;
+
+		if (DistFromDestination < sqrf(200.0f))
+		{
+			Vector LookNormal = UTIL_GetVectorNormal2D(LookTarget - GetEyePosition());
+
+			LookTarget = LookTarget + (LookNormal * 1000.0f);
+		}
+
+		NextFrameMovementInput.DesiredLookLocation = LookTarget;
+	}
+
+	AvHAIPathNode TempNode;
+	TempNode.FromLocation = GetLocation();
+	TempNode.ToLocation = DesiredLocation;
+	TempNode.MovementArea = EAINavArea::NAV_AREA_WALK;
+	TempNode.MovementFlag = EAINavMovementFlag::NAV_FLAG_WALK;
+
+	HandlePlayerAvoidance(&TempNode);
 
 	return EAINavMoveResult::NAV_MOVE_SUCCESS;
 }
@@ -905,6 +874,11 @@ void AvHAIPlayer::Think(float DeltaTime)
 			MoveTo(DebugDestination);
 			DEBUG_DrawPath();
 		}
+
+		if (!vIsZero(LastOpenSpace))
+		{
+			UTIL_DrawLine(INDEXENT(1), GetLocation(), LastOpenSpace, 0, 0, 128);
+		}
 	}
 }
 
@@ -1052,6 +1026,8 @@ void AvHAIPlayer::BotUpdateDesiredViewRotation()
 
 void AvHAIPlayer::InterpolateView(float DeltaTime)
 {
+	if (vIsZero(ViewInfo.InterpolatingViewTarget)) { return; }
+
 	Vector ViewDelta = ViewInfo.InterpolatingViewTarget - ViewInfo.CurrentInterpolatedView;
 
 	vClampViewAngles(ViewDelta);
@@ -1745,11 +1721,6 @@ void AvHAIPlayer::HandleLadderPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 	}
 }
 
-bool TestQuickMovementTrace(const Vector Origin, const Vector MoveDir, bool bPointTrace, float TraceDistance)
-{
-	return AITraceMovementSegment(Origin, MoveDir, TraceDistance, head_hull, INDEXENT(1));
-}
-
 bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace, float TraceDistance)
 {
 	if (vIsZero(MoveDir)) { return true; }
@@ -1800,37 +1771,17 @@ bool AvHAIPlayer::QuickMovementTrace(EAIMovementTraceType TraceType, const Vecto
 
 	Vector EndTrace = StartTrace + (MoveDirNormal * TraceDistance);
 
-	TraceResult HitResult;
-	bool bHitMovementStructure = false;
 	const enum_hull TraceHull = (bPointTrace) ? point_hull : head_hull;
 
-	if (!AITraceMovementSegment(StartTrace, EndTrace, TraceHull, Edict->v.pContainingEntity, HitResult, bHitMovementStructure)) { return true; }
-
-	if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
-
-	if (TraceType != EAIMovementTraceType::LOWER_LEFT && TraceType != EAIMovementTraceType::LOWER_CENTER && TraceType != EAIMovementTraceType::LOWER_RIGHT) { return false; }
-
-	if (!bHitMovementStructure && UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal) <= 45.0f) { return true; }
-
-	float HeightOffset = 1.0f;
-
-	Vector JumpTraceStart = StartTrace;
-	Vector JumpTraceEnd = EndTrace;
-
-	// Keep tracing upwards until we determine the blockage is above step height or not
-	while (HeightOffset < 16.0f)
+	if (TraceType == EAIMovementTraceType::LOWER_RIGHT || TraceType == EAIMovementTraceType::LOWER_CENTER || TraceType == EAIMovementTraceType::LOWER_LEFT)
 	{
-		StartTrace.z = JumpTraceStart.z + HeightOffset;
-		EndTrace.z = JumpTraceEnd.z + HeightOffset;
-
-		if (!AITraceMovementSegment(StartTrace, EndTrace, TraceHull, Edict->v.pContainingEntity, HitResult, bHitMovementStructure)) { return true; }
-
-		if (HitResult.fStartSolid || HitResult.fAllSolid) { return false; }
-
-		if (!bHitMovementStructure && UTIL_GetWalkableSlopeAngle(HitResult.vecPlaneNormal) <= 45.0f) { return true; }
-
-		HeightOffset += 1.0f;
+		return AITraceMovementSegment(StartTrace, MoveDirNormal, TraceDistance, TraceHull, Edict->v.pContainingEntity);
 	}
+
+	TraceResult HitResult;
+	bool bHitMovementStructure = false;
+
+	if (!AITraceMovementSegment(StartTrace, EndTrace, TraceHull, Edict->v.pContainingEntity, HitResult, bHitMovementStructure)) { return true; }
 
 	return false;
 }
@@ -1868,7 +1819,7 @@ bool AvHAIPlayer::HasWeapon(EAIWeaponId DesiredWeapon)
 
 void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
 {
-	if (!UTIL_IsEdictActive(Target) || !PlayerHasWeapon(Player, DesiredWeapon)) { return; }
+	if (!UTIL_IsEdictActive(Target) || !HasWeapon(DesiredWeapon)) { return; }
 
 	const EAIWeaponId CurrentWeapon = GetCurrentWeapon();
 
@@ -1908,14 +1859,14 @@ void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
 		return;
 	}
 
-	Vector AimDir = UTIL_GetForwardVector(Edict->v.v_angle);
+	const Vector AimDir = UTIL_GetForwardVector(Edict->v.v_angle);
 
 	bool bWillHit = false;
 
-	float AimDot = UTIL_GetDotProduct(AimDir, TargetAimDir);
+	const float AimDot = UTIL_GetDotProduct(AimDir, TargetAimDir);
 
 	// We can be less accurate with spores and umbra since they have AoE effects
-	float MinAcceptableAccuracy = 0.9f;
+	const float MinAcceptableAccuracy = 0.9f;
 
 	bWillHit = (AimDot >= MinAcceptableAccuracy);
 
@@ -1928,13 +1879,12 @@ void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
 
 	if (bWillHit)
 	{
-		// TODO: Refire timing
+		const AvHBasePlayerWeapon* WeaponRef = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_pActiveItem);
 
-		//if ((gpGlobals->time - weapon.LastFireTime) >= pBot->current_weapon.MinRefireTime)
-		//{
+		if (!WeaponRef->GetMustPressTriggerForEachShot() || WeaponRef->m_flNextPrimaryAttack <= 0.0f)
+		{
 			NextFrameMovementInput.Button |= IN_ATTACK;
-			//pBot->current_weapon.LastFireTime = gpGlobals->time;
-		//}
+		}
 	}
 }
 
@@ -2404,7 +2354,7 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 		const bool bCanMoveRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vRight, false, GetPlayerRadius() * 2.0f);
 		const bool bCanMoveLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, -vRight, false, GetPlayerRadius() * 2.0f);
 
-		if (bCanMoveRight || bCanMoveLeft)
+		if (bCanMoveRight && bCanMoveLeft)
 		{
 			LastOpenSpace = GetLocation();
 		}
@@ -3502,51 +3452,4 @@ void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles
 		Button |= IN_FORWARD;
 		Button |= IN_MOVELEFT;
 	}
-}
-
-Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer)
-{
-	Vector TargetCentre = UTIL_GetCentreOfEntity(TargetPlayer);
-
-	TraceResult hit;
-	UTIL_TraceLine(GetPlayerEyePosition(Observer), TargetCentre, ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
-
-	if (hit.flFraction >= 1.0f) { return TargetCentre; }
-
-	AvHUser3 TargetClass = (AvHUser3)TargetPlayer->v.iuser3;
-
-	// Only check the head and feet if we're not a short-arse (i.e. marine, fade or onos)
-	if (TargetClass == AVH_USER3_MARINE_PLAYER || TargetClass == AVH_USER3_ALIEN_PLAYER4 || TargetClass == AVH_USER3_ALIEN_PLAYER5)
-	{
-
-		UTIL_TraceLine(GetPlayerEyePosition(Observer), GetPlayerEyePosition(TargetPlayer), ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
-
-		if (hit.flFraction >= 1.0f) { return GetPlayerEyePosition(TargetPlayer); }
-
-		UTIL_TraceLine(GetPlayerEyePosition(Observer), GetPlayerBottomOfCollisionHull(TargetPlayer) + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
-
-		if (hit.flFraction >= 1.0f) { return GetPlayerBottomOfCollisionHull(TargetPlayer) + Vector(0.0f, 0.0f, 5.0f); }
-	}
-
-	// Skulks and Onos are long bois, so check to make sure they don't have their boots or snoots poking out round a corner...
-	if (TargetClass == AVH_USER3_ALIEN_PLAYER1 || TargetClass == AVH_USER3_ALIEN_PLAYER5)
-	{
-		float Length = (TargetClass == AVH_USER3_ALIEN_PLAYER1) ? 55.0f : 110.0f;
-
-		Vector ForwardVector = UTIL_GetForwardVector(TargetPlayer->v.angles);
-
-		Vector MinLoc = TargetCentre - (ForwardVector * Length);
-
-		UTIL_TraceLine(GetPlayerEyePosition(Observer), MinLoc, ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
-
-		if (hit.flFraction >= 1.0f) { return MinLoc; }
-
-		Vector MaxLoc = TargetCentre + (ForwardVector * Length);
-
-		UTIL_TraceLine(GetPlayerEyePosition(Observer), MaxLoc, ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
-
-		return (hit.flFraction >= 1.0f) ? MaxLoc : ZERO_VECTOR;
-	}
-
-	return ZERO_VECTOR;
 }

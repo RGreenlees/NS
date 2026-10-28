@@ -232,6 +232,53 @@ bool UTIL_IsCloakedPlayerInvisible(const edict_t* Observer, const AvHPlayer* Pla
 	return false;
 }
 
+Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer)
+{
+	Vector TargetCentre = UTIL_GetCentreOfEntity(TargetPlayer);
+
+	TraceResult hit;
+	UTIL_TraceLine(GetPlayerEyePosition(Observer), TargetCentre, ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
+
+	if (hit.flFraction >= 1.0f) { return TargetCentre; }
+
+	AvHUser3 TargetClass = (AvHUser3)TargetPlayer->v.iuser3;
+
+	// Only check the head and feet if we're not a short-arse (i.e. marine, fade or onos)
+	if (TargetClass == AVH_USER3_MARINE_PLAYER || TargetClass == AVH_USER3_ALIEN_PLAYER4 || TargetClass == AVH_USER3_ALIEN_PLAYER5)
+	{
+
+		UTIL_TraceLine(GetPlayerEyePosition(Observer), GetPlayerEyePosition(TargetPlayer), ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
+
+		if (hit.flFraction >= 1.0f) { return GetPlayerEyePosition(TargetPlayer); }
+
+		UTIL_TraceLine(GetPlayerEyePosition(Observer), GetPlayerBottomOfCollisionHull(TargetPlayer) + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
+
+		if (hit.flFraction >= 1.0f) { return GetPlayerBottomOfCollisionHull(TargetPlayer) + Vector(0.0f, 0.0f, 5.0f); }
+	}
+
+	// Skulks and Onos are long bois, so check to make sure they don't have their boots or snoots poking out round a corner...
+	if (TargetClass == AVH_USER3_ALIEN_PLAYER1 || TargetClass == AVH_USER3_ALIEN_PLAYER5)
+	{
+		float Length = (TargetClass == AVH_USER3_ALIEN_PLAYER1) ? 55.0f : 110.0f;
+
+		Vector ForwardVector = UTIL_GetForwardVector(TargetPlayer->v.angles);
+
+		Vector MinLoc = TargetCentre - (ForwardVector * Length);
+
+		UTIL_TraceLine(GetPlayerEyePosition(Observer), MinLoc, ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
+
+		if (hit.flFraction >= 1.0f) { return MinLoc; }
+
+		Vector MaxLoc = TargetCentre + (ForwardVector * Length);
+
+		UTIL_TraceLine(GetPlayerEyePosition(Observer), MaxLoc, ignore_monsters, ignore_glass, Observer->v.pContainingEntity, &hit);
+
+		return (hit.flFraction >= 1.0f) ? MaxLoc : ZERO_VECTOR;
+	}
+
+	return ZERO_VECTOR;
+}
+
 AvHMessageID UTIL_GetEvolveUpgradeImpulse(EAIAlienUpgrade DesiredUpgrade)
 {
 	switch (DesiredUpgrade)

@@ -31,6 +31,7 @@ string UTIL_GetLocationName(Vector Location);
 Vector UTIL_GetClosestPointOnEntityToLocation(const Vector UserLocation, const edict_t* Entity);
 Vector UTIL_GetClosestPointOnEntityToLocation(const Vector Location, const edict_t* Entity, const Vector EntityLocation);
 
+Vector GetVisiblePointOnPlayerFromObserver(edict_t* Observer, edict_t* TargetPlayer);
 
 bool IsEdictHive(const edict_t* edict);
 
