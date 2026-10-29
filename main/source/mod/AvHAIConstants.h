@@ -136,6 +136,14 @@ enum class EAIMoveStyle
 	MOVESTYLE_HIDE // Prefer crouched areas like vents
 };
 
+// Affects the bot's pathfinding choices
+enum class EAIDebugMode : uint8
+{
+	NONE, // Regular play
+	DRONE, // Does nothing unless ordered to
+	TESTNAV // Will pick random points to navigate to. Will also evolve to a even spread of alien types (if alien)
+};
+
 // The list of potential task types for the bot_task structure
 enum class EAITaskType
 {

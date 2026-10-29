@@ -1462,6 +1462,8 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	{
 		edict_t* ListenEdict = INDEXENT(1);
 
+
+
 		theSuccess = true;
 	}
 	else if (FStrEq(pcmd, "bot_debugobject"))

@@ -62,7 +62,6 @@ struct AvHAIMovementInput
 	EAIWeaponId		DesiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
 	Vector			DesiredMoveDirection = g_vecZero;
 	Vector			VelocityOverride = g_vecZero; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
-	bool			bHasAttemptedJump = false;
 	bool			bShouldWalk = false;
 	bool			bShouldCrouch = false;
 
@@ -79,7 +78,6 @@ struct AvHAIMovementInput
 		DesiredWeapon = EAIWeaponId::WEAPON_INVALID;
 		DesiredMoveDirection = g_vecZero;
 		VelocityOverride = g_vecZero;
-		bHasAttemptedJump = false;
 		bShouldWalk = false;
 		bShouldCrouch = false;
 	}
@@ -275,15 +273,15 @@ struct AvHAIPlayer
 
 	Vector DebugDestination = g_vecZero;
 
-	bool IsValid() const { return Player != nullptr && !FNullEnt(Edict) && !Edict->free; }
+	inline bool IsValid() const { return Player != nullptr && !FNullEnt(Edict) && !Edict->free; }
 	bool HasValidPath() const;
-	const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
+	inline const NavAgentProfile* GetNavProfile() const { return &BotNavInfo.NavProfile; }
 	bool IsOnGround() const;
 	bool IsOnLadder() const;
 	bool IsWallSticking() const;
-	bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
+	inline bool IsInWater() const { return (Edict->v.flags & FL_INWATER); }
 	bool CanCrouch() const;
-	bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
+	inline bool IsCrouching() const { return (Edict->v.flags & FL_DUCKING); }
 	enum_hull GetPlayerHull(bool bIsCrouching) const;
 	float GetPlayerRadius() const;
 	float GetPlayerHeight() const;
@@ -292,8 +290,8 @@ struct AvHAIPlayer
 	EAINavMoveResult MoveToWithoutNav(const Vector& DesiredLocation);
 	EAINavMoveResult ProgressMovementTasks();
 	AvHAIMoveTask* GetCurrentMoveTask();
-	Vector GetLocation() const { return Edict->v.origin; }
-	Vector GetVelocity() const { return Edict->v.velocity; }
+	inline Vector GetLocation() const { return Edict->v.origin; }
+	inline Vector GetVelocity() const { return Edict->v.velocity; }
 	Vector GetEyePosition() const;
 	void Jump(bool bDuckJump);
 	void Suicide();
@@ -303,6 +301,8 @@ struct AvHAIPlayer
 	Vector GetTopOfHitbox() const;
 	void CheckAndSendMessages();
 	void Think(float DeltaTime);
+	void DroneThink(float DeltaTime);
+	void TestNavThink(float DeltaTime);
 	void StartThink(float DeltaTime);
 	void EndThink(float DeltaTime);
 	void UpdateView(float DeltaTime);

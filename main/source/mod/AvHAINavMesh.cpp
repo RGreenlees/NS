@@ -428,7 +428,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 				NewNavMesh.TileCacheRef->buildNavMeshTile(tile, NewNavMesh.NavMeshRef);
 		}
 
-		dtStatus QueryInitStatus = NewNavMesh.NavQueryRef->init(NewNavMesh.NavMeshRef, 2048);
+		dtStatus QueryInitStatus = NewNavMesh.NavQueryRef->init(NewNavMesh.NavMeshRef, MAX_NAV_QUERY_NODES);
 
 		if (dtStatusFailed(QueryInitStatus))
 		{
@@ -653,7 +653,7 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 
 	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
-	float dtLocation[3];
+	float dtLocation[3] = { 0.0f, 0.0f, 0.0f };
 	UTIL_VecGoldSrcToDetour(Location, dtLocation);
 
 	float HitDist = 0.0f;
@@ -664,7 +664,7 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 
 	dtStatus Result = FoundMesh->NavQueryRef->findDistanceToWall(StartPoly, dtLocation, MaxDistanceFromWall, m_navFilter, &HitDist, HitPos, HitNorm);
 
-	if (dtStatusSucceed(Result))
+	if (dtStatusSucceed(Result) && HitDist < MaxDistanceFromWall)
 	{
 		const float AdjustDistance = MaxDistanceFromWall - HitDist;
 
@@ -949,21 +949,23 @@ Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vec
 	return ZERO_VECTOR;
 }
 
-Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const Vector& SearchPoint, bool bIgnoreReachability)
+Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile* NavProfile, const Vector& SearchPoint, bool bIgnoreReachability)
 {
-	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile.MeshIndex);
+	if (!NavProfile || !NavProfile->IsValid()) { return ZERO_VECTOR; }
+
+	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!QueriedMesh) { return g_vecZero; }
 
 	const dtNavMeshQuery* m_navQuery = QueriedMesh->NavQueryRef;
-	const dtQueryFilter* m_navFilter = &NavProfile.Filters;
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
 	if (!m_navQuery) { return g_vecZero; }
 
 	float DetourResult[3];
 	memset(DetourResult, 0, sizeof(DetourResult));
 
-	dtStatus FindStatus;
+	dtStatus FindStatus = 0;
 
 	if (bIgnoreReachability)
 	{
@@ -983,24 +985,21 @@ Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const V
 
 		if (dtStatusFailed(FoundPolyResult))
 		{
-			return g_vecZero;
+			return ZERO_VECTOR;
 		}
 
 		dtPolyRef RandomPoly;
-		float RandomPoint[3];
 		const float DefaultSearchRadius = 8192.0f;
 
-		dtStatus FindStatus = m_navQuery->findRandomPointAroundCircle(RefPoly, NavNearest, DefaultSearchRadius, m_navFilter, frand, &RandomPoly, RandomPoint);
+		dtStatus FindStatus = m_navQuery->findRandomPointAroundCircle(RefPoly, NavNearest, DefaultSearchRadius, m_navFilter, frand, &RandomPoly, DetourResult);
 	}
 
 	if (dtStatusFailed(FindStatus))
 	{
-		return g_vecZero;
+		return ZERO_VECTOR;
 	}
 
-	const Vector ReturnValue = UTIL_VecDetourToGoldSrc(DetourResult);
-
-	return ReturnValue;
+	return UTIL_VecDetourToGoldSrc(DetourResult);
 }
 
 Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter)

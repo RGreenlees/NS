@@ -29,6 +29,7 @@ constexpr float max_ai_jump_height = 62.0f;
 
 // Max nav mesh polys that can be traversed in a path. This should be sufficient for any sized map.
 constexpr auto MAX_PATH_POLY = 512;
+constexpr auto MAX_NAV_QUERY_NODES = 65535;
 
 constexpr int TILECACHESET_MAGIC = 'N' << 24 | 'S' << 16 | 'T' << 8 | 'C';
 constexpr int TILECACHESET_VERSION = 1;
@@ -175,7 +176,7 @@ struct NavAgentProfile
 		Filters.setIncludeFlags(static_cast<unsigned int>(InFlags));
 	}
 
-	bool IsValid() const
+	inline bool IsValid() const
 	{
 		return MeshIndex != EAINavMeshIndex::NAV_MESH_INVALID;
 	}

@@ -112,7 +112,7 @@ struct AvHAIPath
 
 	Vector DesiredDestination = ZERO_VECTOR;
 	EAINavMovementFlag RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
-	uint32 CurrentNodeIndex = 0;
+	int32 CurrentNodeIndex = 0;
 	EAINavMeshIndex UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
 
 	void Clear()
@@ -126,7 +126,7 @@ struct AvHAIPath
 
 	bool IsValidPath() const
 	{
-		return UsedNavMesh != EAINavMeshIndex::NAV_MESH_INVALID && !vIsZero(DesiredDestination) && CurrentNodeIndex < PathNodes.size();
+		return UsedNavMesh != EAINavMeshIndex::NAV_MESH_INVALID && !vIsZero(DesiredDestination) && CurrentNodeIndex < PathNodes.size() && CurrentNodeIndex >= 0;
 	}
 
 	const AvHAIPathNode* GetCurrentPathNode() const
@@ -305,6 +305,7 @@ struct AvHAINavStatus
 	unsigned int CurrentPoly = 0; // Which nav mesh poly the bot is currently on
 
 	float LandedTime = 0.0f; // When the bot last landed after a fall/jump.
+	float AirTime = 0.0f; // How long the bot has been in the air
 	bool bHasAttemptedJump = false; // Last frame, the bot tried a jump. If the bot is still on the ground, it probably tried to jump in a vent or something
 
 	NavAgentProfile NavProfile;

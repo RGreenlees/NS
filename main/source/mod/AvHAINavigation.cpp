@@ -1525,7 +1525,7 @@ Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const V
 {
 	if (!Path || !Path->IsValidPath()) { return ZERO_VECTOR; }
 
-	const int32 MaxScanAhead = imini(static_cast<int32>(Path->CurrentNodeIndex) + 10, Path->GetPathSize() - 1);
+	const int32 MaxScanAhead = imini(Path->CurrentNodeIndex + 10, Path->GetPathSize() - 1);
 
 	for (int32 i = MaxScanAhead; i >= Path->CurrentNodeIndex; i--)
 	{

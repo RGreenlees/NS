@@ -228,7 +228,7 @@ NavHint* AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location,
 Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
 
 // Finds any random point on the navmesh that is relevant for the bot. Returns ZERO_VECTOR if none found
-Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile& NavProfile, const Vector& SearchPoint = ZERO_VECTOR, bool bIgnoreReachability = true);
+Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile* NavProfile, const Vector& SearchPoint = ZERO_VECTOR, bool bIgnoreReachability = true);
 
 /*	Finds any random point on the navmesh that is relevant for the bot within a given radius of the origin point,
 	taking reachability into account(will not return impossible to reach location).
