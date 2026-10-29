@@ -659,8 +659,17 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 	float HitDist = 0.0f;
 	float HitPos[3] = { 0.0f, 0.0f, 0.0f };
 	float HitNorm[3] = { 0.0f, 0.0f, 0.0f };
+	float dtSearchExtents[3] = { 16.0f, 16.0f, 16.0f };
+	float dtNearestPoint[3] = { 0.0f, 0.0f, 0.0f };
 
-	dtPolyRef StartPoly = AIMESH_GetNearestPolyRefForLocation(NavProfile, Location);
+	dtPolyRef StartPoly = 0;
+
+	dtStatus FindResult = FoundMesh->NavQueryRef->findNearestPoly(dtLocation, dtSearchExtents, m_navFilter, &StartPoly, dtNearestPoint);
+
+	if (!dtStatusSucceed(FindResult))
+	{
+		return Location;
+	}
 
 	dtStatus Result = FoundMesh->NavQueryRef->findDistanceToWall(StartPoly, dtLocation, MaxDistanceFromWall, m_navFilter, &HitDist, HitPos, HitNorm);
 
@@ -1102,6 +1111,10 @@ void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTi
 
 	if (!FoundMesh) { return; }
 
+	const edict_t* ListenServerEdict = INDEXENT(1);
+
+	if (!UTIL_IsEdictActive(ListenServerEdict)) { return; }
+
 	int NumDrawn = 0;
 
 	for (int i = 0; i < FoundMesh->TileCacheRef->getOffMeshCount(); i++)
@@ -1112,6 +1125,10 @@ void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTi
 
 		Vector StartLine = Vector(con->pos[0], -con->pos[2], con->pos[1]);
 		Vector EndLine = Vector(con->pos[3], -con->pos[5], con->pos[4]);
+
+		const float Distance = fminf(vDist3DSq(StartLine, ListenServerEdict->v.origin), vDist3DSq(EndLine, ListenServerEdict->v.origin));
+
+		if (Distance > sqrf(UTIL_MetresToGoldSrcUnits(20.0f))) { continue; }
 
 		unsigned char r, g, b;
 
