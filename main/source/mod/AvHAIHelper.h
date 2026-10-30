@@ -37,10 +37,6 @@ bool IsEdictHive(const edict_t* edict);
 
 AvHMessageID UTIL_GetVoicelineId(EAIVoiceLine RequiredVoiceLine);
 
-
-
-
-
 bool UTIL_IsCloakedPlayerInvisible(const edict_t* Observer, const AvHPlayer* Player);
 
 AvHMessageID UTIL_GetEvolveUpgradeImpulse(EAIAlienUpgrade DesiredUpgrade);

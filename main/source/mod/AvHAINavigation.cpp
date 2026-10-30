@@ -1279,8 +1279,6 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 	const Vector PlayerFloorBBMin = CurrentPosition + Vector(AIPlayer->v.mins.x, AIPlayer->v.mins.y, 0.0f);
 	const Vector PlayerFloorBBMax = CurrentPosition + Vector(AIPlayer->v.maxs.x, AIPlayer->v.maxs.y, AIPlayer->v.maxs.z - AIPlayer->v.mins.z);
 
-	UTIL_DrawLine(INDEXENT(1), PlayerFloorBBMin, PlayerFloorBBMax);
-
 	if (vPointOverlaps3D(CurrentPathNode->ToLocation, PlayerFloorBBMin, PlayerFloorBBMax)) { return true; }
 
 	const bool bHasNextPathNode = (NextPathNode && NextPathNode->IsValidMove());

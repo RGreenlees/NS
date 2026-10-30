@@ -1462,7 +1462,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	{
 		edict_t* ListenEdict = INDEXENT(1);
 
-
+		const Vector TestMoveDir = UTIL_GetForwardVector2D(ListenEdict->v.v_angle);
 
 		theSuccess = true;
 	}

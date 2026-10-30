@@ -273,9 +273,9 @@ namespace
 		{
 			UTIL_TraceHull(EngineTraceStart, EndTrace, ignore_monsters, Hull, IgnoreEdict, &HitResult);
 
-			if (HitResult.flFraction >= 1.0f && !HitResult.fStartSolid && !HitResult.fAllSolid) { return false; }
+			if (HitResult.flFraction >= 0.99f && !HitResult.fStartSolid && !HitResult.fAllSolid) { return false; }
 
-			if (!HitResult.pHit) { return true; }
+			if (FNullEnt(HitResult.pHit)) { return true; }
 
 			vec3_t CustomMins;
 			vec3_t CustomMaxs;
@@ -301,7 +301,7 @@ namespace
 		// if there was no remaining segment beyond that bbox.
 		UTIL_TraceHull(StartTrace, EndTrace, ignore_monsters, Hull, IgnoreEdict, &HitResult);
 
-		return HitResult.flFraction < 1.0f || HitResult.fStartSolid || HitResult.fAllSolid;
+		return HitResult.flFraction < 0.99f || HitResult.fStartSolid || HitResult.fAllSolid;
 	}
 
 	bool AITraceMovementSegment(const Vector MoveOrigin, const Vector Direction, float TraceDistance, const enum_hull Hull, edict_t* IgnoreEdict)
@@ -2133,18 +2133,6 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 
 	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
 
-	const Vector CurrentPosition = GetLocation();
-
-	if (vEquals(CurrentPosition, CurrentPathNode->LastRecordedPosition, 1.0f))
-	{
-		CurrentPathNode->TimeSinceMovement += gpGlobals->frametime;
-	}
-	else
-	{
-		CurrentPathNode->LastRecordedPosition = CurrentPosition;
-		CurrentPathNode->TimeSinceMovement = 0.0f;
-	}
-
 	bool bMoveSuccess = false;
 
 	if (IsPlayerSkulk(Edict))
@@ -2180,14 +2168,28 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 			CheckWallClimbMoveStuckAndReact(Path);
 			break;
 		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
-			return NewPlatformMove(Path);
+			bMadeMove = NewPlatformMove(Path);
+			break;
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
-			return NewPhaseGateMove(Path);
+			bMadeMove = NewPhaseGateMove(Path);
+			break;
 		default:
 			bMadeMove = NewGroundMove(Path);
 			CheckGroundMoveStuckAndReact(Path);
 			break;
+	}
+
+	const Vector CurrentPosition = GetLocation();
+
+	if (vEquals(CurrentPosition, CurrentPathNode->LastRecordedPosition, 1.0f))
+	{
+		CurrentPathNode->LastRecordedPosition = CurrentPosition;
+		CurrentPathNode->TimeSinceMovement += gpGlobals->frametime;
+	}
+	else
+	{
+		CurrentPathNode->TimeSinceMovement = 0.0f;
 	}
 
 	return bMadeMove;
@@ -2201,7 +2203,39 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return; }
 
-	if (CurrentPathNode->TimeSinceMovement < 2.0f) { return; }
+	const Vector BotLocation = GetLocation();
+
+	const Vector NewProgress = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
+
+	const float NewProgressPct = vDist2DSq(CurrentPathNode->FromLocation, NewProgress) / vDist2DSq(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+
+	if (NewProgressPct > CurrentPathNode->MovementProgress)
+	{
+		CurrentPathNode->MovementProgress = NewProgressPct;
+		CurrentPathNode->TimeSinceProgressMade = 0.0f;
+	}
+	else
+	{
+		CurrentPathNode->TimeSinceProgressMade += gpGlobals->frametime;
+	}
+
+	if (CurrentPathNode->TimeSinceProgressMade > 0.33f)
+	{
+		// Onos always get stuck on stuff because of its massive hitbox. Crouching reverts to regular human size, might help
+		if (IsPlayerOnos(Edict))
+		{
+			NextFrameMovementInput.bShouldCrouch = true;
+
+			if (CurrentPathNode->TimeSinceProgressMade > 0.5f)
+			{
+				Jump(true);
+			}
+		}
+		else
+		{
+			Jump(true);
+		}
+	}
 
 	// We are hopelessly stuck
 	if (CurrentPathNode->TimeSinceMovement > 10.0f)
@@ -2210,20 +2244,12 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 		return;
 	}
 
-	// Onos always get stuck on stuff because of its massive hitbox. Crouching reverts to regular human size, might help
-	if (IsPlayerOnos(Edict))
-	{
-		NextFrameMovementInput.bShouldCrouch = true;
-	}
-
 	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
-
-	const Vector BotLocation = GetLocation();
 
 	if (!IsOnGround())
 	{
 		// Failing that, try and snap the bot back onto the path
-		if (CurrentPathNode->TimeSinceMovement > 4.0f)
+		if (CurrentPathNode->TimeSinceProgressMade > 4.0f)
 		{
 			const Vector FloorPosition = UTIL_GetFloorUnderEntity(Edict) + Vector(0.0f, 0.0f, (GetPlayerHeight() + 1.0f));
 			Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, FloorPosition);
@@ -2257,7 +2283,7 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 		}
 
 		// First, stop movement to see if we can unstick that way
-		if (CurrentPathNode->TimeSinceMovement > 2.0f)
+		if (CurrentPathNode->TimeSinceProgressMade > 2.0f)
 		{
 			NextFrameMovementInput.Clear();
 			NextFrameMovementInput.bShouldCrouch = true;
@@ -2275,7 +2301,7 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 	}
 
 	// We are on the ground, check if we're stuck
-	if (CurrentPathNode->TimeSinceMovement > 4.0f)
+	if (CurrentPathNode->TimeSinceProgressMade > 4.0f)
 	{
 		Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
 		PointOnPath.z = Edict->v.origin.z;
@@ -2713,52 +2739,22 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
 	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
 
-	const Vector CurrentPos = GetBottomOfHitbox();
+	const Vector CurrentPos = GetLocation();
 
 	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPos);
-	// Same goes for the right vector, might not be the same as the bot's right
-	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
-
-	if (IsOnGround())
-	{
-		const bool bCanMoveRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vRight, false, GetPlayerRadius() * 2.0f);
-		const bool bCanMoveLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, -vRight, false, GetPlayerRadius() * 2.0f);
-
-		if (bCanMoveRight && bCanMoveLeft)
-		{
-			LastOpenSpace = GetLocation();
-		}
-	}
-
-	bool bAdjustingForCollision = false;
-
-	const bool bBumpLeft = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_LEFT, vForward, /* Point trace? */ true);
-	const bool bBumpRight = !QuickMovementTrace(EAIMovementTraceType::ORIGIN_RIGHT, vForward, /* Point trace? */ true);
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 
-	if (bBumpRight && !bBumpLeft)
-	{
-		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
-	}
-	else if (bBumpLeft && !bBumpRight)
-	{
-		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
-	}
-	else
-	{
-		if (CanCrouch() && !QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Point trace? */ false))
-		{
-			NextFrameMovementInput.bShouldCrouch = true;
-		}
+	// Same goes for the right vector, might not be the same as the bot's right
+	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
 
-		if (!QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Point trace? */ false))
-		{
-			Jump(true);
-		}
-	}
+	const bool bCanMoveRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vRight, false, GetPlayerRadius() * 2.0f);
+	const bool bCanMoveLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, -vRight, false, GetPlayerRadius() * 2.0f);
 
-	NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection);
+	if (bCanMoveRight && bCanMoveLeft)
+	{
+		LastOpenSpace = UTIL_GetFloorUnderEntity(Edict);
+	}
 
 	if (CanCrouch())
 	{
@@ -2771,17 +2767,89 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 			if (NextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
 				NextFrameMovementInput.bShouldCrouch = true;
-				return true;
 			}
-
-			Vector HeadLocation = GetPlayerTopOfCollisionHull(Edict, false);
-
-			// Crouch if we have something in our way at head height
-			if (!UTIL_QuickTrace(Edict, HeadLocation, (HeadLocation + (NextFrameMovementInput.DesiredMoveDirection * 50.0f))))
+			else
 			{
-				NextFrameMovementInput.bShouldCrouch = true;
+				const bool bHeadBlocked = !QuickMovementTrace(EAIMovementTraceType::HEAD_CENTER, vForward, /* Point trace? */ true);
+
+				if (bHeadBlocked)
+				{
+					NextFrameMovementInput.bShouldCrouch = true;
+				}
 			}
 		}
+	}
+
+	const bool bMovementBlocked = !QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vForward, /* Point trace? */ false);
+
+	if (!bMovementBlocked) { return true; }
+
+	const float PlayerRadius = GetPlayerRadius();
+
+	Vector LeftStartTrace = ((GetBottomOfHitbox() + Vector(0.0f, 0.0f, 20.0f)) - (vRight * PlayerRadius));
+	Vector LeftEndTrace = LeftStartTrace + (vForward * (PlayerRadius * 2.0f));
+
+	bool bBumpLeft = AITraceHitsMovementStructure(LeftStartTrace, LeftEndTrace, point_hull, Edict->v.pContainingEntity);
+
+	if (bBumpLeft)
+	{
+		Jump(true);
+		return true;
+	}
+
+	Vector RightStartTrace = ((GetBottomOfHitbox() + Vector(0.0f, 0.0f, 20.0f)) + (vRight * PlayerRadius));
+	Vector RightEndTrace = RightStartTrace + (vForward * (PlayerRadius * 2.0f));
+
+	bool bBumpRight = AITraceHitsMovementStructure(RightStartTrace, RightEndTrace, point_hull, Edict->v.pContainingEntity);
+
+	if (bBumpRight)
+	{
+		Jump(true);
+		return true;
+	}
+
+	TraceResult HitResult;
+
+	UTIL_TraceHull(LeftStartTrace, LeftEndTrace, ignore_monsters, point_hull, Edict->v.pContainingEntity, &HitResult);
+
+	if (HitResult.fStartSolid || HitResult.fAllSolid)
+	{
+		bBumpLeft = true;
+	}
+	else if (HitResult.flFraction < 0.99f)
+	{
+		if (UTIL_GetDotProduct2D(vForward, HitResult.vecPlaneNormal) < -0.5f)
+		{
+			bBumpLeft = true;
+		}
+	}
+
+	UTIL_TraceHull(RightStartTrace, RightEndTrace, ignore_monsters, point_hull, Edict->v.pContainingEntity, &HitResult);
+
+	if (HitResult.fStartSolid || HitResult.fAllSolid)
+	{
+		bBumpLeft = true;
+	}
+	else if (HitResult.flFraction < 0.99f)
+	{
+		if (UTIL_GetDotProduct2D(vForward, HitResult.vecPlaneNormal) < -0.5f)
+		{
+			bBumpRight = true;
+		}
+	}
+
+	if (bBumpRight && !bBumpLeft)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection - vRight;
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection);
+		return true;
+	}
+
+	if (bBumpLeft && !bBumpRight)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = NextFrameMovementInput.DesiredMoveDirection + vRight;
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection);
+		return true;
 	}
 
 	return true;
