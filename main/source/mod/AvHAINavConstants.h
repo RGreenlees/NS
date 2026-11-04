@@ -57,9 +57,9 @@ enum class EAINavMovementFlag : uint32
 	NAV_FLAG_WELD = 1u << 11,		// Weld
 	NAV_FLAG_PHASEGATE_TEAM1 = 1u << 12,		// Team 1 Phase Gate
 	NAV_FLAG_PHASEGATE_TEAM2 = 1u << 13,		// Team 2 Phase Gate
-	NAV_FLAG_FLY = 1u << 14,		// Fly
-	NAV_FLAG_FATALFALL = 1 << 15,		// A fall that would kill player types not immune to fall damage
-	NAV_FLAG_FATALJUMP = 1 << 16,		// A jump that would kill player types not immune to fall damage
+	NAV_FLAG_FATALFALL = 1 << 14,		// A fall that would kill player types not immune to fall damage
+	NAV_FLAG_FATALJUMP = 1 << 15,		// A jump that would kill player types not immune to fall damage
+	NAV_FLAG_FLY = 1u << 16,		// Fly
 	NAV_FLAG_ALL = 0xFFFFFFFF		// All flags
 };
 
@@ -132,7 +132,8 @@ enum class EAINavMoveResult : uint8
 	NAV_MOVE_NOTASK,       // No task to pursue
 	NAV_MOVE_INVALIDTASK,       // No task to pursue
 	NAV_MOVE_AVOID_PLAYER, // Is trying to avoid a player in their way
-	NAV_MOVE_PATH_COMPLETE // Path is fully completed, no more to do
+	NAV_MOVE_PATH_COMPLETE, // Current path is fully completed
+	NAV_MOVE_CORE_PATH_COMPLETE // The core movement destination is reached, all tasks done!
 };
 
 // Profile indices. Use these when retrieving base agent profile information
@@ -441,8 +442,8 @@ inline void GetDebugColorForFlag(EAINavMovementFlag Flag, unsigned char& R, unsi
 			B = 80;
 			break;
 		case EAINavMovementFlag::NAV_FLAG_FLY:
-			R = 0;
-			G = 156;
+			R = 172;
+			G = 170;
 			B = 255;
 			break;
 		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
@@ -606,7 +607,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile0;
 	NewProfile0.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile0.Filters.setIncludeFlags(2175);
+	NewProfile0.Filters.setIncludeFlags(14463);
 	NewProfile0.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile0.Filters.setAreaCost(0, 0.0);
 	NewProfile0.Filters.setAreaCost(1, 1.0);
@@ -625,7 +626,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile1;
 	NewProfile1.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile1.Filters.setIncludeFlags(255);
+	NewProfile1.Filters.setIncludeFlags(49407);
 	NewProfile1.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile1.Filters.setAreaCost(0, 0.0);
 	NewProfile1.Filters.setAreaCost(1, 1.0);
@@ -663,7 +664,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile3;
 	NewProfile3.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile3.Filters.setIncludeFlags(16895);
+	NewProfile3.Filters.setIncludeFlags(115199);
 	NewProfile3.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile3.Filters.setAreaCost(0, 0.0);
 	NewProfile3.Filters.setAreaCost(1, 1.0);
@@ -682,7 +683,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile4;
 	NewProfile4.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile4.Filters.setIncludeFlags(16767);
+	NewProfile4.Filters.setIncludeFlags(49663);
 	NewProfile4.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile4.Filters.setAreaCost(0, 0.0);
 	NewProfile4.Filters.setAreaCost(1, 1.0);

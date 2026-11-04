@@ -39,8 +39,13 @@
 
 std::vector<NavAgentProfile> BaseAgentProfiles;
 
-bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance)
+bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance, Vector* ClosestPoint)
 {
+	if (ClosestPoint)
+	{
+		*ClosestPoint = ZERO_VECTOR;
+	}
+
 	if (!NavProfile) { return false; }
 
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
@@ -54,7 +59,15 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 
 	if (bStartInWater && bEndInWater)
 	{
-		if (UTIL_QuickHullTrace(nullptr, FromLocation, ToLocation)) { return true; }
+		if (UTIL_QuickHullTrace(nullptr, FromLocation, ToLocation))
+		{
+			if (ClosestPoint)
+			{
+				*ClosestPoint = ToLocation;
+			}
+
+			return true;
+		}
 	}
 
 	float dtStartPos[3];
@@ -85,11 +98,11 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 		}
 	}
 
-	dtStatus status;
-	dtPolyRef StartPoly;
-	float dtStartNearest[3];
-	dtPolyRef EndPoly;
-	float dtEndNearest[3];
+	dtStatus status = 0;
+	dtPolyRef StartPoly = 0;
+	float dtStartNearest[3] = { 0.0f, 0.0f, 0.0f };
+	dtPolyRef EndPoly = 0;
+	float dtEndNearest[3] = { 0.0f, 0.0f, 0.0f };
 	dtPolyRef PolyPath[MAX_PATH_POLY];
 	int nPathCount = 0;
 
@@ -97,14 +110,14 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 
 	// find the start polygon
 	status = FoundMesh->NavQueryRef->findNearestPoly(dtStartPos, searchExtents, m_navFilter, &StartPoly, dtStartNearest);
-	if (!dtStatusSucceed(status))
+	if (dtStatusFailed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	// find the end polygon
 	status = FoundMesh->NavQueryRef->findNearestPoly(dtEndPos, searchExtents, m_navFilter, &EndPoly, dtEndNearest);
-	if (!dtStatusSucceed(status))
+	if (dtStatusFailed(status))
 	{
 		return false; // couldn't find a polygon
 	}
@@ -121,10 +134,15 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 		float dtEndPoint[3];
 		dtVcopy(dtEndPoint, dtEndNearest);
 
-		FoundMesh->NavQueryRef->closestPointOnPoly(PolyPath[nPathCount - 1], dtEndNearest, dtEndPoint, 0);
+		FoundMesh->NavQueryRef->closestPointOnPoly(PolyPath[nPathCount - 1], dtEndPoint, dtEndNearest, 0);
 
 		if (dtVdistSqr(dtEndNearest, dtEndPoint) <= sqrf(MaxAcceptableDistance))
 		{
+			if (ClosestPoint)
+			{
+				*ClosestPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
+			}
+
 			return true;
 		}
 		else
@@ -133,9 +151,24 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 
 			if (UTIL_IsPointInSwimArea(FinalEndPosition) && UTIL_IsPointInSwimArea(ToLocation))
 			{
-				return UTIL_QuickHullTrace(nullptr, FinalEndPosition, ToLocation);
+				if (UTIL_QuickHullTrace(nullptr, FinalEndPosition, ToLocation))
+				{
+					if (ClosestPoint)
+					{
+						*ClosestPoint = ToLocation;
+					}
+
+					return true;
+				}
 			}
 		}
+
+		return false;
+	}
+
+	if (ClosestPoint)
+	{
+		*ClosestPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
 	}
 
 	return true;
@@ -915,40 +948,6 @@ bool AINAV_IsOffPhaseGateNode(const NavAgentProfile* NavProfile, const edict_t* 
 	return StartingPhaseGate->IsRecycling() || !StartingPhaseGate->IsCompleted();
 }
 
-bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPath* Path, AvHAIMoveTask& NewMoveTask)
-{
-	if (!NavProfile || !NavProfile->IsValid() || !Path->IsValidPath()) { return false; }
-
-	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
-
-	// If we are currently navigating a platform, don't run the checks in case we screw up our current move
-	if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM) { return false; }
-
-	AvHAIPathNodeList FuturePathNodes = Path->GetFuturePathNodeList();
-
-	for (const AvHAIPathNode* FutureNode : FuturePathNodes)
-	{
-		if (!FutureNode || !FutureNode->IsValidMove()) { return false; }
-
-		if (FutureNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
-		{
-			const DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->MovementObject);
-
-			if (!PlatformObject || !PlatformObject->IsValid()) { return false; }
-
-			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject->Edict, NewMoveTask);
-		}
-
-		const DynamicMapObject* BlockingObject = AIMAP_FindObjectBlockingPathPoint(FutureNode, nullptr);
-
-		if (!BlockingObject || !BlockingObject->IsValid()) { continue; }
-
-		return AINAV_CheckMapObjectForMovementTasks(NavProfile, FutureNode, BlockingObject->Edict, NewMoveTask);
-	}
-
-	return false;
-}
-
 bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* ImpactingObject, AvHAIMoveTask& NewMoveTask)
 {
 	if (!NavProfile || !NavProfile->IsValid()) { return false; }
@@ -1021,8 +1020,6 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 
 bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& DesiredEndPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask)
 {
-	NewTask.Clear();
-
 	if (!NavProfile || !NavProfile->IsValid()) { return false; }
 	if (!UTIL_IsEdictActive(Trigger)) { return false; }
 	if (!UTIL_IsEdictActive(TriggerTarget)) { return false; }
@@ -1071,6 +1068,9 @@ bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vecto
 		case EAIDynamicMapObjectType::TRIGGER_USE:
 			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, &RelevantMoveInfo);
 			break;
+		case EAIDynamicMapObjectType::TRIGGER_WELD:
+			return AINAV_AddWeldMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, &RelevantMoveInfo);
+			break;
 		default:
 			return AINAV_AddUseMovementTask(NavProfile, StartPoint, Trigger, TriggerTarget, NewTask, &RelevantMoveInfo);
 			break;
@@ -1079,9 +1079,9 @@ bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vecto
 
 bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
-	NewTask.Clear();
-
 	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(ThingToPickup)) { return false; }
+
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_PICKUP;
 	NewTask.NavProfile = NavProfile;
@@ -1100,21 +1100,20 @@ bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector
 
 bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToTouch, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
-	NewTask.Clear();
-
 	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToTouch)) { return false; }
 
-	AvHAIPath TestPath;
-	bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartPoint, UTIL_GetCentreOfEntity(EntityToTouch), &TestPath, 200.0f);
+	Vector PathEndPoint = ZERO_VECTOR;
 
-	if (!bFoundPath) { return false; }
+	if (!AINAV_IsPointReachable(NavProfile, StartPoint, UTIL_GetCentreOfEntity(EntityToTouch), 200.0f, &PathEndPoint)) { return false; }
+
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_TOUCH;
 	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = EntityToTouch;
 	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
 	NewTask.TaskStartLocation = StartPoint;
-	NewTask.TaskLocation = TestPath.GetFinalDestination();
+	NewTask.TaskLocation = PathEndPoint;
 
 	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
 	{
@@ -1126,9 +1125,9 @@ bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector&
 
 bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
-	NewTask.Clear();
-
 	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToBreak)) { return false; }
+
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
 	NewTask.NavProfile = NavProfile;
@@ -1145,13 +1144,38 @@ bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector&
 	return true;
 }
 
-bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
+bool AINAV_AddObtainWeaponMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ArmoryEdict, EAIWeaponId DesiredWeaponType, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
+	if (!NavProfile || !NavProfile->IsValid() || DesiredWeaponType == EAIWeaponId::WEAPON_INVALID) { return false; }
+
+	if (!UTIL_IsEdictActive(ArmoryEdict)) { return false; }
+
 	NewTask.Clear();
 
+	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_OBTAIN_WEAPON;
+	NewTask.NavProfile = NavProfile;
+	NewTask.TaskTarget = ArmoryEdict;
+	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
+	NewTask.TaskStartLocation = StartPoint;
+	NewTask.TaskLocation = ArmoryEdict->v.origin;
+
+	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
+	{
+		NewTask.RelatedPathData = *RelevantMoveInfo;
+	}
+
+	return true;
+}
+
+bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
+{
 	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToWeld)) { return false; }
 
-	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_BREAK;
+	const DynamicMapObject* WeldableObject = AIMAP_GetDynamicObjectByEdict(EntityToWeld);
+
+	NewTask.Clear();
+
+	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_WELD;
 	NewTask.NavProfile = NavProfile;
 	NewTask.TaskTarget = EntityToWeld;
 	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
@@ -1168,9 +1192,9 @@ bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& 
 
 bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
-	NewTask.Clear();
-
 	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToUse)) { return false; }
+
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_USE;
 	NewTask.NavProfile = NavProfile;
@@ -1189,19 +1213,18 @@ bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& S
 
 bool AINAV_AddMoveMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& MoveLocation, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo)
 {
-	NewTask.Clear();
-
 	if (!NavProfile || !NavProfile->IsValid()) { return false; }
 
-	AvHAIPath TestPath;
-	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartPoint, MoveLocation, &TestPath, 200.0f);
+	Vector PathEndPoint = ZERO_VECTOR;
 
-	if (!bFoundPath) { return false; }
+	if (!AINAV_IsPointReachable(NavProfile, StartPoint, MoveLocation, 55.0f, &PathEndPoint)) { return false; }
+
+	NewTask.Clear();
 
 	NewTask.TaskType = EAIMovementTaskType::MOVE_TASK_MOVE;
 	NewTask.NavProfile = NavProfile;
 	NewTask.TaskStartLocation = StartPoint;
-	NewTask.TaskLocation = MoveLocation;
+	NewTask.TaskLocation = PathEndPoint;
 
 	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
 	{
@@ -1602,4 +1625,29 @@ void AINAV_DrawPath(const AvHAIPath* Path, float DrawTime)
 
 		if (NumDrawCalls > 20) { return; }
 	}
+}
+
+char* UTIL_MovementTaskTypeToChar(const EAIMovementTaskType TaskType)
+{
+	switch (TaskType)
+	{
+	case EAIMovementTaskType::MOVE_TASK_MOVE:
+		return "Move";
+	case EAIMovementTaskType::MOVE_TASK_BREAK:
+		return "Break";
+	case EAIMovementTaskType::MOVE_TASK_OBTAIN_WEAPON:
+		return "Obtain Weapon";
+	case EAIMovementTaskType::MOVE_TASK_PICKUP:
+		return "Pick Up Item";
+	case EAIMovementTaskType::MOVE_TASK_TOUCH:
+		return "Touch";
+	case EAIMovementTaskType::MOVE_TASK_USE:
+		return "Use";
+	case EAIMovementTaskType::MOVE_TASK_WELD:
+		return "Weld";
+	default:
+		return "None";
+	}
+
+	return "None";
 }

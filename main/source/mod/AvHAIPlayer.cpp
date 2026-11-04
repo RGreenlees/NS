@@ -509,10 +509,15 @@ void AvHAIPlayer::AddMovementTask(AvHAIMoveTask& NewTask)
 
 EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 {
-	// Already there
-	if (vPointOverlaps3D(DesiredLocation, Edict->v.absmin, Edict->v.absmax))
+	const float PlayerHalfRadius = GetPlayerRadius() * 0.5f;
+	const float PlayerHalfHeight = GetPlayerHeight() * 0.5f;
+
+	const Vector BotTouchingOffset = Vector(PlayerHalfRadius, PlayerHalfHeight, PlayerHalfRadius);
+
+	// Give ourselves a little extra "reach" when determining if we're at the destination, in case we're on a slope or something
+	if (vPointOverlaps3D(DesiredLocation, Edict->v.absmin - BotTouchingOffset, Edict->v.absmax + BotTouchingOffset))
 	{
-		return EAINavMoveResult::NAV_MOVE_PATH_COMPLETE;
+		return EAINavMoveResult::NAV_MOVE_CORE_PATH_COMPLETE;
 	}
 
 	// If the destination is close enough to our core movement task, then we are continuing with our existing movement tasks
@@ -520,7 +525,7 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 	{
 		AvHAIMoveTask& CoreTask = BotNavInfo.MovementTasks.at(0);
 
-		if (vEquals(CoreTask.TaskLocation, DesiredLocation, 18.0f))
+		if (vEquals(CoreTask.CoreTaskDestination, DesiredLocation, 18.0f))
 		{
 			return ProgressMovementTasks();
 		}
@@ -540,6 +545,7 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 
 	if (bAddedCoreMovementTask)
 	{
+		NewDestinationTask.CoreTaskDestination = DesiredLocation;
 		BotNavInfo.MovementTasks.push_back(NewDestinationTask);
 		return EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
@@ -673,6 +679,9 @@ EAINavMoveResult AvHAIPlayer::ProgressMovementTasks()
 		case EAIMovementTaskType::MOVE_TASK_WELD:
 			MoveResult = ProgressWeldTask(CurrentMoveTask);
 			break;
+		case EAIMovementTaskType::MOVE_TASK_OBTAIN_WEAPON:
+			MoveResult = ProgressObtainWeaponTask(CurrentMoveTask);
+			break;
 		default:
 			MoveResult = EAINavMoveResult::NAV_MOVE_NOPATH;
 			break;
@@ -690,6 +699,22 @@ bool AvHAIPlayer::IsMovementTaskComplete(const AvHAIMoveTask* Task)
 {
 	if (!Task || !Task->IsValid() || Task->bTaskComplete) { return true; }
 
+	if (Task->RelatedPathData.IsValidMove())
+	{
+		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
+
+			if (PlatformRef)
+			{
+				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
+				{
+					return true;
+				}
+			}
+		}
+	}
+
 	switch (Task->TaskType)
 	{
 		case EAIMovementTaskType::MOVE_TASK_MOVE:
@@ -704,6 +729,8 @@ bool AvHAIPlayer::IsMovementTaskComplete(const AvHAIMoveTask* Task)
 			return IsTouchMovementTaskComplete(Task);
 		case EAIMovementTaskType::MOVE_TASK_BREAK:
 			return IsBreakMovementTaskComplete(Task);
+		case EAIMovementTaskType::MOVE_TASK_OBTAIN_WEAPON:
+			return IsObtainWeaponMovementTaskComplete(Task);
 		default:
 			return true;
 	}
@@ -729,22 +756,6 @@ bool AvHAIPlayer::IsTouchMovementTaskComplete(const AvHAIMoveTask* Task)
 
 	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
 
-	if (Task->RelatedPathData.IsValidMove())
-	{
-		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
-		{
-			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
-
-			if (PlatformRef)
-			{
-				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
-				{
-					return true;
-				}
-			}
-		}
-	}
-
 	return vBBOverlaps(Edict->v.absmin, Edict->v.absmax, Task->TaskTarget->v.absmin, Task->TaskTarget->v.absmax);
 }
 
@@ -753,19 +764,6 @@ bool AvHAIPlayer::IsUseMovementTaskComplete(const AvHAIMoveTask* Task)
 	if (!Task || !Task->IsValid()) { return true; }
 
 	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
-
-	if (Task->RelatedPathData.IsValidMove())
-	{
-		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
-		{
-			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
-
-			if (PlatformRef)
-			{
-				return !AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation);
-			}
-		}
-	}
 
 	const DynamicMapObject* TriggerObject = AIMAP_GetDynamicObjectByEdict(Task->TaskTarget);
 
@@ -788,23 +786,25 @@ bool AvHAIPlayer::IsBreakMovementTaskComplete(const AvHAIMoveTask* Task)
 {
 	if (!Task || !Task->IsValid()) { return true; }
 
-	if (Task->RelatedPathData.IsValidMove())
-	{
-		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
-		{
-			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
-
-			if (PlatformRef)
-			{
-				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
-				{
-					return true;
-				}
-			}
-		}
-	}
 
 	return !UTIL_IsEdictActive(Task->TaskTarget);
+}
+
+bool AvHAIPlayer::IsObtainWeaponMovementTaskComplete(const AvHAIMoveTask* Task)
+{
+	if (!Task || !Task->IsValid()) { return true; }
+
+	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	if (Task->WeaponToObtain == EAIWeaponId::WEAPON_INVALID) { return true; }
+
+	if (PlayerHasWeapon(Player, Task->WeaponToObtain)) { return true; }
+
+	const AvHAIBuildableStructure* ArmoryRef = AITAC_GetStructureFromEdict(Task->TaskTarget);
+
+	if (!ArmoryRef || !ArmoryRef->IsValid() || !ArmoryRef->IsCompleted() || ArmoryRef->IsRecycling()) { return true; }
+
+	return false;
 }
 
 bool AvHAIPlayer::IsWeldMovementTaskComplete(const AvHAIMoveTask* Task)
@@ -813,23 +813,14 @@ bool AvHAIPlayer::IsWeldMovementTaskComplete(const AvHAIMoveTask* Task)
 
 	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
 
-	if (Task->RelatedPathData.IsValidMove())
+	const AvHWeldable* WeldableRef = dynamic_cast<const AvHWeldable*>((const CBaseEntity*)Task->TaskTarget->pvPrivateData);
+
+	const bool bIsCompleted = (!WeldableRef || WeldableRef->GetIsWelded());
+
+	if (bIsCompleted)
 	{
-		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
-		{
-			const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
-
-			if (PlatformRef)
-			{
-				if (!AIMAP_PlatformNeedsActivating(Task->NavProfile, PlatformRef, Task->RelatedPathData.FromLocation, Task->RelatedPathData.ToLocation))
-				{
-					return true;
-				}
-			}
-		}
+		const bool bBoop = true;
 	}
-
-	AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(CBaseEntity::Instance(ENTINDEX(Task->TaskTarget)));
 
 	return (!WeldableRef || WeldableRef->GetIsWelded());
 }
@@ -891,8 +882,14 @@ void AvHAIPlayer::DroneThink(float DeltaTime)
 {
 	if (!vIsZero(DebugDestination))
 	{
-		MoveTo(DebugDestination);
+		EAINavMoveResult MoveResult = MoveTo(DebugDestination);
 		DEBUG_DrawPath();
+		PrintDebugInfo();
+
+		if (MoveResult == EAINavMoveResult::NAV_MOVE_CORE_PATH_COMPLETE)
+		{
+			DebugDestination = ZERO_VECTOR;
+		}
 	}
 }
 
@@ -904,7 +901,7 @@ void AvHAIPlayer::TestNavThink(float DeltaTime)
 
 		EAINavMoveResult Result = MoveTo(DebugDestination);
 
-		if (Result == EAINavMoveResult::NAV_MOVE_PATH_COMPLETE)
+		if (Result == EAINavMoveResult::NAV_MOVE_CORE_PATH_COMPLETE)
 		{
 			DebugDestination = ZERO_VECTOR;
 		}
@@ -1147,7 +1144,7 @@ void AvHAIPlayer::LookAt(const edict_t* Target)
 {
 	if (FNullEnt(Target)) { return; }
 
-	ViewInfo.LookTargetLocation = Target->v.origin;
+	ViewInfo.LookTargetLocation = UTIL_GetCentreOfEntity(Target);
 }
 
 void AvHAIPlayer::UpdateViewFrustum()
@@ -1436,6 +1433,79 @@ void AvHAIPlayer::UpdateNavProfile()
 	}
 }
 
+bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIMoveTask& Task)
+{
+	if (!Path || !Path->IsValidPath()) { return false; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
+	// If we are currently navigating a platform, don't run the checks in case we screw up our current move
+	if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM) { return false; }
+
+	if (EnumHasAnyFlags(Path->RequiredMoveFlags, EAINavMovementFlag::NAV_FLAG_WELD))
+	{
+		if (!PlayerHasWeapon(Player, EAIWeaponId::WEAPON_MARINE_WELDER))
+		{
+			// Obviously, it's no good searching for an armoury that needs a welder to access if we don't have one...
+			NavAgentProfile WelderCheckNavProfile = *GetNavProfile();
+			WelderCheckNavProfile.Filters.removeIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
+			WelderCheckNavProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
+
+			DroppedItemSearchFilter WelderSearchFilter;
+			WelderSearchFilter.DeployableTeam = Team;
+			WelderSearchFilter.DeployableTypes = EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER;
+			WelderSearchFilter.AgentProfile = &WelderCheckNavProfile;
+
+			const AvHAIDroppedItem* FoundItem = AITAC_FindClosestItemToLocation(GetLocation(), &WelderSearchFilter);
+
+			if (FoundItem)
+			{
+				return AINAV_AddPickupMovementTask(GetNavProfile(), GetLocation(), FoundItem->Edict, nullptr, Task);
+			}
+
+			StructureSearchFilter WelderArmorySearchFilter;
+			WelderArmorySearchFilter.DeployableTeam = Team;
+			WelderArmorySearchFilter.DeployableTypes = EAIStructureType::ANY_MARINE_ARMORY;
+			WelderArmorySearchFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+			WelderArmorySearchFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
+			WelderArmorySearchFilter.AgentProfile = &WelderCheckNavProfile;
+
+			const AvHAIBuildableStructure* FoundArmory = AITAC_FindSingleMatchingStructure(GetLocation(), &WelderArmorySearchFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
+
+			if (FoundArmory)
+			{
+				return AINAV_AddObtainWeaponMovementTask(GetNavProfile(), GetLocation(), FoundArmory->Edict, EAIWeaponId::WEAPON_MARINE_WELDER, nullptr, Task);
+			}
+		}
+	}
+
+	AvHAIPathNodeList FuturePathNodes = Path->GetFuturePathNodeList();
+
+	const NavAgentProfile* NavProfile = GetNavProfile();
+
+	for (const AvHAIPathNode* FutureNode : FuturePathNodes)
+	{
+		if (!FutureNode || !FutureNode->IsValidMove()) { return false; }
+
+		if (FutureNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		{
+			const DynamicMapObject* PlatformObject = AIMAP_GetDynamicObjectByEdict(FutureNode->MovementObject);
+
+			if (!PlatformObject || !PlatformObject->IsValid()) { return false; }
+
+			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject->Edict, Task);
+		}
+
+		const DynamicMapObject* BlockingObject = AIMAP_FindObjectBlockingPathPoint(FutureNode, nullptr);
+
+		if (!BlockingObject || !BlockingObject->IsValid()) { continue; }
+
+		return AINAV_CheckMapObjectForMovementTasks(NavProfile, FutureNode, BlockingObject->Edict, Task);
+	}
+
+	return false;
+}
+
 EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
@@ -1496,14 +1566,6 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 		return EAINavMoveResult::NAV_MOVE_AVOID_PLAYER;
 	}
 
-	AvHPlayer* RidingPlayer = AINAV_GetPlayerRidingOnBot(Edict);
-
-	if (RidingPlayer)
-	{
-		// TODO: Something here
-		// return EAINavMoveResult::NAV_MOVE_AVOID_PLAYER;
-	}
-
 	if (AINAV_IsOffPathNode(GetNavProfile(), Edict, CurrentPathNode))
 	{
 		const bool bSucceededRegen = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), Path->GetFinalDestination(), Path, GetPlayerRadius());
@@ -1516,7 +1578,7 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	AvHAIMoveTask NewMoveTask;
 
-	if (AINAV_CheckAndAddRequiredMovementTasks(GetNavProfile(), Path, NewMoveTask))
+	if (CheckAndAddRequiredMovementTasks(Path, NewMoveTask))
 	{
 		bool bHasExistingTask = false;
 
@@ -1900,6 +1962,12 @@ void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
 
 	const EAIWeaponId CurrentWeapon = GetCurrentWeapon();
 
+	if (CurrentWeapon != DesiredWeapon)
+	{
+		NextFrameMovementInput.DesiredWeapon = DesiredWeapon;
+		return;
+	}
+
 	if (IsMeleeWeapon(CurrentWeapon))
 	{
 		LookAt(Target);
@@ -1928,12 +1996,6 @@ void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
 	{
 		LookAt(Target);
 		TargetAimDir = UTIL_GetVectorNormal(UTIL_GetCentreOfEntity(Target) - EyePosition);
-	}
-
-	if (CurrentWeapon != DesiredWeapon)
-	{
-		NextFrameMovementInput.DesiredWeapon = DesiredWeapon;
-		return;
 	}
 
 	const Vector AimDir = UTIL_GetForwardVector(Edict->v.v_angle);
@@ -1972,6 +2034,18 @@ void AvHAIPlayer::DEBUG_DrawPath()
 	if (!CurrentMoveTask || !CurrentMoveTask->HasPath()) { return; }
 
 	AINAV_DrawPath(&CurrentMoveTask->TaskPath);
+}
+
+Vector AvHAIPlayer::GetCurrentMoveDestination() const
+{
+	if (BotNavInfo.MovementTasks.size() > 0)
+	{
+		const AvHAIMoveTask& CoreTask = BotNavInfo.MovementTasks.at(0);
+
+		return CoreTask.CoreTaskDestination;
+	}
+
+	return ZERO_VECTOR;
 }
 
 EAINavMoveResult AvHAIPlayer::ProgressMoveTask(AvHAIMoveTask* MoveTask)
@@ -2059,35 +2133,124 @@ EAINavMoveResult AvHAIPlayer::ProgressWeldTask(AvHAIMoveTask* MoveTask)
 
 	if (!UTIL_IsEdictActive(MoveTask->TaskTarget)) { return EAINavMoveResult::NAV_MOVE_INVALIDTASK; }
 
-	if (HasWeapon(EAIWeaponId::WEAPON_MARINE_WELDER))
+	if (!PlayerHasWeapon(Player, EAIWeaponId::WEAPON_MARINE_WELDER))
 	{
-		EAIAttackResult WeldResult = PerformAttackLOSCheck(GetEyePosition(), EAIWeaponId::WEAPON_MARINE_WELDER, MoveTask->TaskTarget);
+		AvHAIMoveTask NewMoveTask;
 
-		if (WeldResult == EAIAttackResult::ATTACK_SUCCESS)
+		// Obviously, it's no good searching for an armoury that needs a welder to access if we don't have one...
+		NavAgentProfile WelderCheckNavProfile = *GetNavProfile();
+		WelderCheckNavProfile.Filters.removeIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
+		WelderCheckNavProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
+
+		DroppedItemSearchFilter WelderSearchFilter;
+		WelderSearchFilter.DeployableTeam = Team;
+		WelderSearchFilter.DeployableTypes = EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER;
+		WelderSearchFilter.AgentProfile = &WelderCheckNavProfile;
+
+		const AvHAIDroppedItem* FoundItem = AITAC_FindClosestItemToLocation(GetLocation(), &WelderSearchFilter);
+
+		if (FoundItem)
 		{
-			ShootTarget(MoveTask->TaskTarget, EAIWeaponId::WEAPON_MARINE_WELDER);
+			const bool bAddedTask = AINAV_AddPickupMovementTask(GetNavProfile(), GetLocation(), FoundItem->Edict, nullptr, NewMoveTask);
 
-			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+			return (bAddedTask) ? EAINavMoveResult::NAV_MOVE_SUCCESS : EAINavMoveResult::NAV_MOVE_NOTASK;
 		}
 
-		if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != GetNavProfile()->MeshIndex)
+		StructureSearchFilter WelderArmorySearchFilter;
+		WelderArmorySearchFilter.DeployableTeam = Team;
+		WelderArmorySearchFilter.DeployableTypes = EAIStructureType::ANY_MARINE_ARMORY;
+		WelderArmorySearchFilter.IncludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_COMPLETED;
+		WelderArmorySearchFilter.ExcludeStatusFlags = EAIStructureStatus::STRUCTURE_STATUS_RECYCLING;
+		WelderArmorySearchFilter.AgentProfile = &WelderCheckNavProfile;
+
+		const AvHAIBuildableStructure* FoundArmory = AITAC_FindSingleMatchingStructure(GetLocation(), &WelderArmorySearchFilter, EAIStructureSortType::FIND_STRUCTURE_NEAREST);
+
+		if (FoundArmory)
 		{
-			const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetEyePosition(), MoveTask->TaskTarget);
+			const bool bAddedTask = AINAV_AddObtainWeaponMovementTask(GetNavProfile(), GetLocation(), FoundArmory->Edict, EAIWeaponId::WEAPON_MARINE_WELDER, nullptr, NewMoveTask);
 
-			const bool bSuccess = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, max_ai_use_reach);
-
-			if (!bSuccess)
-			{
-				return EAINavMoveResult::NAV_MOVE_NOPATH;
-			}
+			return (bAddedTask) ? EAINavMoveResult::NAV_MOVE_SUCCESS : EAINavMoveResult::NAV_MOVE_NOTASK;
 		}
-
-		return FollowPath(&MoveTask->TaskPath);
 	}
 
-	// TODO: Need to get a welder from somewhere
+	EAIAttackResult WeldResult = PerformAttackLOSCheck(GetEyePosition(), EAIWeaponId::WEAPON_MARINE_WELDER, MoveTask->TaskTarget);
 
-	return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	if (WeldResult == EAIAttackResult::ATTACK_SUCCESS)
+	{
+		ShootTarget(MoveTask->TaskTarget, EAIWeaponId::WEAPON_MARINE_WELDER);
+
+		return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
+	if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != GetNavProfile()->MeshIndex)
+	{
+		const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetEyePosition(), MoveTask->TaskTarget);
+
+		const bool bSuccess = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, max_ai_use_reach);
+
+		if (!bSuccess)
+		{
+			return EAINavMoveResult::NAV_MOVE_NOPATH;
+		}
+	}
+
+	return FollowPath(&MoveTask->TaskPath);
+}
+
+EAINavMoveResult AvHAIPlayer::ProgressObtainWeaponTask(AvHAIMoveTask* MoveTask)
+{
+	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
+
+	const AvHAIBuildableStructure* Armory = AITAC_GetStructureFromEdict(MoveTask->TaskTarget);
+
+	if (!Armory || !Armory->IsValid()) { return EAINavMoveResult::NAV_MOVE_INVALIDTASK; }
+
+	NavAgentProfile CheckNavProfile = *GetNavProfile();
+
+	// If we are trying to obtain a welder, we obviously don't want to use a path that requires welding to get there.
+	if (MoveTask->WeaponToObtain == EAIWeaponId::WEAPON_MARINE_WELDER)
+	{
+		CheckNavProfile.Filters.removeIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
+		CheckNavProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
+	}
+
+	const EAIDeployableItemType WeaponDeployableType = UTIL_GetDeployableTypeFromWeaponId(MoveTask->WeaponToObtain);
+
+	DroppedItemSearchFilter ItemSearchFilter;
+	ItemSearchFilter.DeployableTypes = WeaponDeployableType;
+	ItemSearchFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+	ItemSearchFilter.bConsiderPhaseDistance = false;
+	ItemSearchFilter.AgentProfile = &CheckNavProfile;
+
+	const AvHAIDroppedItem* NearbyWelder = AITAC_FindClosestItemToLocation(GetLocation(), &ItemSearchFilter);
+
+	// Replace this task with a pickup task if there is a welder nearby. This will allow the bot to pick up the welder instead of going all the way to the armory.
+	if (NearbyWelder)
+	{
+		if (AINAV_AddPickupMovementTask(&CheckNavProfile, GetLocation(), NearbyWelder->Edict, MoveTask->TriggerToActivate, *MoveTask))
+		{
+			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
+	}
+
+	if (vDist2DSq(GetLocation(), Armory->Location) < sqrf(kArmoryBuildDistance))
+	{
+		return EAINavMoveResult::NAV_MOVE_SUCCESS;
+	}
+
+	if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != CheckNavProfile.MeshIndex)
+	{
+		const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetLocation(), MoveTask->TaskTarget);
+
+		const bool bSuccess = AINAV_FindPathClosestToPoint(&CheckNavProfile, UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, kArmoryBuildDistance);
+
+		if (!bSuccess)
+		{
+			return EAINavMoveResult::NAV_MOVE_NOPATH;
+		}
+	}
+
+	return FollowPath(&MoveTask->TaskPath);
 }
 
 EAINavMoveResult AvHAIPlayer::ProgressBreakTask(AvHAIMoveTask* MoveTask)
@@ -3911,4 +4074,47 @@ void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles
 		Button |= IN_FORWARD;
 		Button |= IN_MOVELEFT;
 	}
+}
+
+void AvHAIPlayer::PrintDebugInfo()
+{
+	char buf[511];
+	char interbuf[164];
+
+	sprintf(buf, "Bot: %s\n\n", Player->GetPlayerName().c_str());
+
+	const Vector DestinationLocation = GetCurrentMoveDestination();
+
+	const bool bHasDestination = !vIsZero(DestinationLocation);
+
+	sprintf(interbuf, "Move Destination: %s\n", (bHasDestination) ? vToString(DestinationLocation) : "None");
+	strcat(buf, interbuf);
+
+	if (!bHasDestination)
+	{
+		UTIL_DrawHUDText(INDEXENT(1), 0, 0.1f, 0.1f, 255, 255, 255, buf);
+		return;
+	}
+
+	const AvHAIMoveTask* CurrentMoveTask = GetCurrentMoveTask();
+
+
+	sprintf(interbuf, "Current Move Task Type: %s\n", (CurrentMoveTask) ? UTIL_MovementTaskTypeToChar(CurrentMoveTask->TaskType) : "None");
+	strcat(buf, interbuf);
+
+	if (CurrentMoveTask && CurrentMoveTask->HasPath())
+	{
+		const AvHAIPathNode* CurrentPathNode = CurrentMoveTask->TaskPath.GetCurrentPathNode();
+
+		if (CurrentPathNode)
+		{
+			char FlagName[64];
+			GetFlagName(CurrentPathNode->MovementFlag, FlagName);
+
+			sprintf(interbuf, "Current Path Node Type: %s\n", FlagName);
+			strcat(buf, interbuf);
+		}
+	}
+
+	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1f, 0.1f, 255, 255, 255, buf);
 }

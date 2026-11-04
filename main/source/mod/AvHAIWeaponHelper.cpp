@@ -1067,10 +1067,12 @@ EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId W
 
 	float MaxWeaponRange = GetMaxIdealWeaponRange(Weapon);
 
+	const Vector EntityLocation = UTIL_GetCentreOfEntity(Target);
+
 	// Don't need aiming or special LOS checks for Xenocide as it's an AOE attack, just make sure we're close enough and don't have a wall in the way
 	if (Weapon == EAIWeaponId::WEAPON_SKULK_XENOCIDE)
 	{
-		if (vDist3DSq(Location, Target->v.origin) <= sqrf(MaxWeaponRange) && UTIL_QuickTrace(nullptr, Location, Target->v.origin))
+		if (vDist3DSq(Location, EntityLocation) <= sqrf(MaxWeaponRange) && UTIL_QuickTrace(nullptr, Location, EntityLocation))
 		{
 			return EAIAttackResult::ATTACK_SUCCESS;
 		}
@@ -1083,9 +1085,9 @@ EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId W
 	// For charge and stomp, we can go through stuff so don't need to check for being blocked
 	if (Weapon == EAIWeaponId::WEAPON_ONOS_CHARGE || Weapon == EAIWeaponId::WEAPON_ONOS_STOMP)
 	{
-		if (vDist3DSq(Location, Target->v.origin) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+		if (vDist3DSq(Location, EntityLocation) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
 
-		if (!UTIL_QuickTrace(nullptr, Location, Target->v.origin) || fabsf(Target->v.origin.z - Target->v.origin.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+		if (!UTIL_QuickTrace(nullptr, Location, EntityLocation) || fabsf(EntityLocation.z - Location.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
 
 		return EAIAttackResult::ATTACK_SUCCESS;
 	}
@@ -1096,7 +1098,7 @@ EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId W
 
 	Vector StartTrace = Location;
 
-	Vector AttackDir = UTIL_GetVectorNormal(UTIL_GetCentreOfEntity(Target) - StartTrace);
+	Vector AttackDir = UTIL_GetVectorNormal(EntityLocation - StartTrace);
 
 	Vector EndTrace = Location + (AttackDir * MaxWeaponRange);
 
@@ -1106,7 +1108,7 @@ EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId W
 
 	if (hit.pHit != Target)
 	{
-		if (vDist3DSq(Location, Target->v.origin) > sqrf(MaxWeaponRange))
+		if (vDist3DSq(Location, EntityLocation) > sqrf(MaxWeaponRange))
 		{
 			return EAIAttackResult::ATTACK_OUTOFRANGE;
 		}

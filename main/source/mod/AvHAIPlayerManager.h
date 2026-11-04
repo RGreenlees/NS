@@ -53,6 +53,9 @@ int		AIMGR_AIPlayerExistsOnTeam(AvHTeamNumber Team);
 
 void AIMGR_RegenBotIni();
 
+void AIMGR_SetDrawConnections(bool bShouldDraw);
+void AIMGR_DrawConnections();
+
 void	AIMGR_UpdateAIMapData();
 bool AIMGR_ShouldStartPlayerBalancing();
 

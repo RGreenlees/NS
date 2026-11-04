@@ -14,8 +14,6 @@
 #include "../dlls/client.h"
 #include <time.h>
 
-double last_think_time = 0.0;
-
 std::list<AvHAIPlayer> ActiveAIPlayers;
 vector<EAINavMeshIndex> RecentlyModifiedNavMeshes;
 
@@ -28,26 +26,21 @@ extern cvar_t avh_botdebugmode;
 extern cvar_t avh_botskill;
 extern cvar_t avh_limitteams;
 
-float LastAIPlayerCountUpdate = 0.0f;
-
-int BotNameIndex = 0;
-
-float AIStartedTime = 0.0f; // Used to give 5-second grace period before adding bots
-
+bool bBotsEnabled = false;
+bool bDrawConnections = false;
+bool bPlayerSpawned = false;
 bool bHasRoundStarted = false;
 
+double last_think_time = 0.0;
+float LastAIPlayerCountUpdate = 0.0f;
+float AIStartedTime = 0.0f; // Used to give 5-second grace period before adding bots
 float NextCommanderAllowedTimeTeamA = 0.0f;
 float NextCommanderAllowedTimeTeamB = 0.0f;
-
-extern int m_spriteTexture;
-
-bool bPlayerSpawned = false;
-
 float CountdownStartedTime = 0.0f;
-
-bool bBotsEnabled = false;
-
 float CurrentFrameDelta = 0.01f;
+
+int BotNameIndex = 0;
+extern int m_spriteTexture;
 
 #ifdef BOTDEBUG
 AvHAIPlayer* DebugAIPlayer = nullptr;
@@ -1199,6 +1192,16 @@ void AIMGR_RegenBotIni()
 	CONFIG_RegenerateIniFile();
 }
 
+void AIMGR_SetDrawConnections(bool bShouldDraw)
+{
+	bDrawConnections = bShouldDraw;
+}
+
+void AIMGR_DrawConnections()
+{
+	AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex::NAV_MESH_REGULAR, 1.0f);
+}
+
 void AIMGR_BotPrecache()
 {
 	m_spriteTexture = PRECACHE_MODEL("sprites/zbeam6.spr");
@@ -1265,7 +1268,7 @@ void AIDEBUG_DisplayTeamGoals()
 		strcat(buf, interbuf);
 	}
 
-	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1, 0.1f, 255, 255, 255, buf);
+	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1f, 0.1f, 255, 255, 255, buf);
 
 	sprintf(buf, "Team B (%s)\n\n", (AIMGR_GetTeamType(TeamBNumber) == AVH_CLASS_TYPE_MARINE) ? "Marines" : "Aliens");
 
@@ -1288,7 +1291,7 @@ void AIDEBUG_DisplayTeamGoals()
 		strcat(buf, interbuf);
 	}
 
-	UTIL_DrawHUDText(INDEXENT(1), 1, 0.6, 0.1f, 255, 255, 255, buf);
+	UTIL_DrawHUDText(INDEXENT(1), 1, 0.6f, 0.1f, 255, 255, 255, buf);
 }
 #endif
 
@@ -1425,6 +1428,11 @@ void AIMGR_UpdateAISystem()
 	}
 
 	AIMGR_UpdateAIPlayers();
+
+	if (bDrawConnections)
+	{
+		AIMGR_DrawConnections();
+	}
 
 	RecentlyModifiedNavMeshes.clear();
 }

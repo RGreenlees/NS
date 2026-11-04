@@ -426,6 +426,29 @@ AvHGamerules::AvHGamerules() : mTeamA(TEAM_ONE), mTeamB(TEAM_TWO)
 			AIMGR_RegenBotIni();
 		});
 
+	REGISTER_SERVER_FUNCTION("sv_drawconnections", []()
+		{
+			if (!AIMESH_IsNavMeshLoaded())
+			{
+				g_engfuncs.pfnServerPrint("Bots are disabled, or the navmesh could not be loaded\n");
+				return;
+			}
+
+			int NewValue = 0;
+
+			if (CMD_ARGC() >= 2)
+			{
+				const char* ToggleValue = CMD_ARGV(1);
+
+				if (ToggleValue != NULL)
+				{
+					NewValue = atoi(ToggleValue);
+				}
+			}
+
+			AIMGR_SetDrawConnections(NewValue > 0);
+		});
+
 	g_VoiceGameMgr.Init(&gVoiceHelper, gpGlobals->maxClients);
 
 	#ifdef DEBUG

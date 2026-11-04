@@ -39,7 +39,8 @@ enum class EAIMovementTaskType
 	MOVE_TASK_BREAK,
 	MOVE_TASK_TOUCH,
 	MOVE_TASK_PICKUP,
-	MOVE_TASK_WELD
+	MOVE_TASK_WELD,
+	MOVE_TASK_OBTAIN_WEAPON
 };
 
 // Bot path node. A path will be several of these strung together to lead the bot to its destination
@@ -250,12 +251,15 @@ struct AvHAIMoveTask
 	EAIMovementTaskType TaskType = EAIMovementTaskType::MOVE_TASK_NONE;
 	Vector TaskStartLocation = ZERO_VECTOR;
 	Vector TaskLocation = ZERO_VECTOR;
+	Vector CoreTaskDestination = ZERO_VECTOR;
 	const NavAgentProfile* NavProfile = nullptr;
 	AvHAIPathNode RelatedPathData;
 	const edict_t* TaskTarget = NULL;
+	const edict_t* SecondaryTarget = NULL;
 	const edict_t* TriggerToActivate = NULL;
 	AvHAIPath TaskPath;
 	bool bTaskComplete = false;
+	EAIWeaponId WeaponToObtain = EAIWeaponId::WEAPON_INVALID;
 
 	void Clear()
 	{
@@ -266,8 +270,10 @@ struct AvHAIMoveTask
 		TaskStartLocation = ZERO_VECTOR;
 		TaskLocation = ZERO_VECTOR;
 		TaskTarget = NULL;
+		SecondaryTarget = NULL;
 		TriggerToActivate = NULL;
 		bTaskComplete = false;
+		WeaponToObtain = EAIWeaponId::WEAPON_INVALID;
 	}
 
 	void ClearPath()
@@ -323,17 +329,11 @@ struct AvHAINavStatus
 	}
 };
 
-
-
 bool AINAV_IsPointDirectlyReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach);
-bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach);
+bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach, Vector* ClosestPoint = nullptr);
 Vector AINAV_FindClosestNavigablePointTo(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation);
 
 AvHPlayer* AINAV_GetPlayerRidingOnBot(const edict_t* AIPlayer);
-
-// Checks the bot's current path and sees if there are any necessary movement tasks to progress (e.g. press button, break something)
-// Returns true if a movement task was required and added.
-bool AINAV_CheckAndAddRequiredMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPath* Path, AvHAIMoveTask& NewMoveTask);
 
 bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* ImpactingObject, AvHAIMoveTask& NewMoveTask);
 bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* Platform, AvHAIMoveTask& NewMoveTask);
@@ -357,6 +357,7 @@ bool AINAV_AddTouchMovementTask(const NavAgentProfile* NavProfile, const Vector&
 bool AINAV_AddUseMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToUse, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
 bool AINAV_AddBreakMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToBreak, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
 bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* EntityToWeld, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
+bool AINAV_AddObtainWeaponMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ArmoryEdict, EAIWeaponId DesiredWeaponType, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);
 
 bool AINAV_IsPathPointComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
 bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* CurrentPathNode, const AvHAIPathNode* NextPathNode);
@@ -383,6 +384,8 @@ Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const V
 float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, const int HullNum);
 
 void AINAV_DrawPath(const AvHAIPath* Path, float DrawTime = 0.0f);
+
+char* UTIL_MovementTaskTypeToChar(const EAIMovementTaskType TaskType);
 
 
 #endif // BOT_NAVIGATION_H

@@ -354,6 +354,10 @@ struct AvHAIPlayer
 	bool NewPhaseGateMove(AvHAIPath* Path);
 	bool NewWallClimbMove(AvHAIPath* Path);
 
+	// Checks the bot's current path and sees if there are any necessary movement tasks to progress (e.g. press button, break something)
+	// Returns true if a movement task was required and added.
+	bool CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIMoveTask& Task);
+
 	bool IsMovementTaskComplete(const AvHAIMoveTask* Task);
 	bool IsMoveMovementTaskComplete(const AvHAIMoveTask* Task);
 	bool IsPickupMovementTaskComplete(const AvHAIMoveTask* Task);
@@ -361,6 +365,7 @@ struct AvHAIPlayer
 	bool IsUseMovementTaskComplete(const AvHAIMoveTask* Task);
 	bool IsBreakMovementTaskComplete(const AvHAIMoveTask* Task);
 	bool IsWeldMovementTaskComplete(const AvHAIMoveTask* Task);
+	bool IsObtainWeaponMovementTaskComplete(const AvHAIMoveTask* Task);
 
 	void RemoveTask(const AvHAIMoveTask* Task);
 
@@ -373,6 +378,8 @@ struct AvHAIPlayer
 
 	void DEBUG_DrawPath();
 
+	Vector GetCurrentMoveDestination() const;
+
 	// Returns true if trace completed without hitting anything
 	bool QuickMovementTrace(EAIMovementTraceType TraceType, const Vector MoveDir, bool bPointTrace, float TraceDistance = 5.0f);
 
@@ -380,6 +387,9 @@ struct AvHAIPlayer
 	EAINavMoveResult ProgressBreakTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressUseTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressWeldTask(AvHAIMoveTask* MoveTask);
+	EAINavMoveResult ProgressObtainWeaponTask(AvHAIMoveTask* MoveTask);
+
+	void PrintDebugInfo();
 };
 
 #endif

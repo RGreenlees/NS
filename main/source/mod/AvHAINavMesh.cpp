@@ -25,6 +25,8 @@ EAINavMeshStatus CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_UNLOADE
 
 std::vector<NavMesh> ActiveNavMeshes;
 
+int ConnectionDrawIndex = 0;
+
 struct FastLZCompressor : public dtTileCacheCompressor
 {
 	virtual int maxCompressedSize(const int bufferSize)
@@ -130,6 +132,7 @@ void AIMESH_UnloadNavMesh()
 	ActiveNavMeshes.clear();
 
 	CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_UNLOADED;
+	ConnectionDrawIndex = 0;
 }
 
 bool AIMESH_IsNavMeshLoaded()
@@ -1113,35 +1116,42 @@ void AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex MeshIndex, float DrawTi
 
 	const edict_t* ListenServerEdict = INDEXENT(1);
 
-	if (!UTIL_IsEdictActive(ListenServerEdict)) { return; }
+	if (FNullEnt(ListenServerEdict)) { return; }
 
 	int NumDrawn = 0;
 
-	for (int i = 0; i < FoundMesh->TileCacheRef->getOffMeshCount(); i++)
+	const int32 TotalConnections = FoundMesh->TileCacheRef->getOffMeshCount();
+
+	if (TotalConnections == 0) { return; }
+
+	const int32 StartingConnectionIndex = ConnectionDrawIndex;
+
+	while (NumDrawn < 10)
 	{
-		const dtOffMeshConnection* con = FoundMesh->TileCacheRef->getOffMeshConnection(i);
+		const dtOffMeshConnection* con = FoundMesh->TileCacheRef->getOffMeshConnection(ConnectionDrawIndex);
 
-		if (con->state == DT_OFFMESH_EMPTY || con->state == DT_OFFMESH_REMOVING) { continue; }
-
-		Vector StartLine = Vector(con->pos[0], -con->pos[2], con->pos[1]);
-		Vector EndLine = Vector(con->pos[3], -con->pos[5], con->pos[4]);
-
-		const float Distance = fminf(vDist3DSq(StartLine, ListenServerEdict->v.origin), vDist3DSq(EndLine, ListenServerEdict->v.origin));
-
-		if (Distance > sqrf(UTIL_MetresToGoldSrcUnits(20.0f))) { continue; }
-
-		unsigned char r, g, b;
-
-		GetDebugColorForFlag(static_cast<EAINavMovementFlag>(con->flags), r, g, b);
-
-		UTIL_DrawLine(INDEXENT(1), StartLine, EndLine, DrawTime, r, g, b);
-
-		NumDrawn++;
-
-		if (NumDrawn > 30)
+		if (con->state != DT_OFFMESH_EMPTY && con->state != DT_OFFMESH_REMOVING)
 		{
-			break;
+			Vector StartLine = UTIL_VecDetourToGoldSrc(con->pos);
+			Vector EndLine = UTIL_VecDetourToGoldSrc(&con->pos[3]);
+
+			unsigned char r, g, b;
+
+			GetDebugColorForFlag(static_cast<EAINavMovementFlag>(con->flags), r, g, b);
+
+			UTIL_DrawLine(INDEXENT(1), StartLine, EndLine, DrawTime, r, g, b);
+
+			NumDrawn++;
 		}
+
+		ConnectionDrawIndex++;
+
+		if (ConnectionDrawIndex > TotalConnections - 1)
+		{
+			ConnectionDrawIndex = 0;
+		}
+
+		if (ConnectionDrawIndex == StartingConnectionIndex) { break; }
 	}
 }
 

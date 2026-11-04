@@ -77,6 +77,7 @@ enum class EAIStructureType : uint32
 	STRUCTURE_ALIEN_MOVEMENTCHAMBER = 1u << 18,
 	STRUCTURE_ALIEN_OFFENSECHAMBER = 1u << 19,
 
+	ANY_MARINE_ARMORY = (STRUCTURE_MARINE_ARMORY | STRUCTURE_MARINE_ADVARMORY),
 	ALL_MARINE_STRUCTURES = 0xFFF,
 	ALL_ALIEN_STRUCTURES = (STRUCTURE_ALIEN_HIVE | STRUCTURE_ALIEN_RESTOWER | STRUCTURE_ALIEN_DEFENSECHAMBER | STRUCTURE_ALIEN_SENSORYCHAMBER | STRUCTURE_ALIEN_MOVEMENTCHAMBER | STRUCTURE_ALIEN_OFFENSECHAMBER),
 	ANY_RES_TOWER = (STRUCTURE_MARINE_RESTOWER | STRUCTURE_ALIEN_RESTOWER),
@@ -299,8 +300,7 @@ struct StructureSearchFilter
 	float MaxSearchRadius = 0.0f;
 	bool bConsiderPhaseDistance = false;
 	AvHTeamNumber DeployableTeam = TEAM_IND;
-	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	const AvHAITeamStartingLocation* ReachabilityCheckLocation = nullptr;
+	NavAgentProfile* AgentProfile = nullptr;
 };
 
 struct DroppedItemSearchFilter
@@ -312,8 +312,7 @@ struct DroppedItemSearchFilter
 	float MaxSearchRadius = 0.0f;
 	bool bConsiderPhaseDistance = false;
 	AvHTeamNumber DeployableTeam = TEAM_IND;
-	EAIReachabilityFlags ReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
-	const AvHAITeamStartingLocation* ReachabilityCheckLocation = nullptr;
+	const NavAgentProfile* AgentProfile = nullptr;
 };
 
 enum class EAIStructureSortType
@@ -440,6 +439,7 @@ bool AITAC_TeamHiveWithTechExists(const AvHTeamNumber Team, const EAIHiveTechSta
 EAIDeployableItemType UTIL_GetItemTypeFromEdict(const edict_t* ItemEdict);
 
 EAIWeaponId UTIL_GetWeaponTypeFromDroppedItem(const EAIDeployableItemType ItemType);
+EAIDeployableItemType UTIL_GetDeployableTypeFromWeaponId(const EAIWeaponId ItemType);
 
 
 bool AITAC_MarineResearchIsAvailable(const AvHTeamNumber Team, const AvHMessageID Research);

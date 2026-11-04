@@ -65,37 +65,33 @@ bool AITAC_DoesStructureMatchFilter(const AvHAIBuildableStructure* Structure, co
 	if (EnumHasAnyFlags(Structure->StructureStatusFlags, Filter->ExcludeStatusFlags)) { return false; }
 	if (!EnumHasAllFlags(Structure->StructureStatusFlags, Filter->IncludeStatusFlags)) { return false; }
 
-	const AvHAITeamStartingLocation* ReachabilityCheck = Filter->ReachabilityCheckLocation;
-
-	if (ReachabilityCheck && Filter->ReachabilityFlags != EAIReachabilityFlags::AI_REACHABILITY_NONE)
+	if (!vIsZero(SearchLocation) && Filter->MaxSearchRadius > 0.0f)
 	{
-		AIStructureReachabilityMap::const_iterator FoundEntry = ReachabilityCheck->StructureReachabilityMap.find(Structure);
+		const float MinDistValidated = clampf(Filter->MinSearchRadius, 0.0f, Filter->MaxSearchRadius);
+		const float MinDistSq = sqrf(MinDistValidated);
+		const float MaxDistSq = sqrf(Filter->MaxSearchRadius);
 
-		// No reachability flags for this structure, fail the check
-		if (FoundEntry == ReachabilityCheck->StructureReachabilityMap.end()) { return false; }
+		const float DistSq = (Filter->bConsiderPhaseDistance)
+			? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, SearchLocation))
+			: vDist2DSq(Structure->Location, SearchLocation);
 
-		const EAIReachabilityFlags StructureReachabilityFlags = FoundEntry->second;
+		if (Filter->MaxSearchRadius > 0.0f)
+		{
+			if (DistSq > MaxDistSq) { return false; }
+		}
 
-		if (!EnumHasAnyFlags(StructureReachabilityFlags, Filter->ReachabilityFlags)) { return false; }
+		if (MinDistValidated > 0.0f)
+		{
+			if (DistSq < MinDistSq) { return false; }
+		}
 	}
 
-	if (vIsZero(SearchLocation) || (Filter->MaxSearchRadius <= 0.0f && Filter->MinSearchRadius <= 0.0f)) { return true; }
-
-	const float MinDistSq = sqrf(Filter->MinSearchRadius);
-	const float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	const float DistSq = (Filter->bConsiderPhaseDistance)
-		? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Structure->Location, SearchLocation))
-		: vDist2DSq(Structure->Location, SearchLocation);
-
-	if (Filter->MaxSearchRadius > 0.0f)
+	if (Filter->AgentProfile)
 	{
-		if (DistSq > MaxDistSq) { return false; }
-	}
-
-	if (Filter->MinSearchRadius > 0.0f)
-	{
-		if (DistSq < MinDistSq) { return false; }
+		if (!AINAV_IsPointReachable(Filter->AgentProfile, SearchLocation, Structure->Location))
+		{
+			return false;
+		}
 	}
 
 	return true;
@@ -107,37 +103,33 @@ bool AITAC_DoesDroppedItemMatchFilter(const AvHAIDroppedItem* Item, const Droppe
 
 	if (!EnumHasAnyFlags(Item->ItemType, Filter->DeployableTypes)) { return false; }
 
-	const AvHAITeamStartingLocation* ReachabilityCheck = Filter->ReachabilityCheckLocation;
-
-	if (ReachabilityCheck && Filter->ReachabilityFlags != EAIReachabilityFlags::AI_REACHABILITY_NONE)
+	if (!vIsZero(SearchLocation) && Filter->MaxSearchRadius > 0.0f)
 	{
-		AIDroppedItemReachabilityMap::const_iterator FoundEntry = ReachabilityCheck->DroppedItemReachabilityMap.find(Item);
+		const float MinDistValidated = clampf(Filter->MinSearchRadius, 0.0f, Filter->MaxSearchRadius);
+		const float MinDistSq = sqrf(MinDistValidated);
+		const float MaxDistSq = sqrf(Filter->MaxSearchRadius);
 
-		// No reachability flags for this structure, fail the check
-		if (FoundEntry == ReachabilityCheck->DroppedItemReachabilityMap.end()) { return false; }
+		const float DistSq = (Filter->bConsiderPhaseDistance)
+			? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Item->Location, SearchLocation))
+			: vDist2DSq(Item->Location, SearchLocation);
 
-		const EAIReachabilityFlags ItemReachabilityFlags = FoundEntry->second;
+		if (Filter->MaxSearchRadius > 0.0f)
+		{
+			if (DistSq > MaxDistSq) { return false; }
+		}
 
-		if (!EnumHasAnyFlags(ItemReachabilityFlags, Filter->ReachabilityFlags)) { return false; }
+		if (MinDistValidated > 0.0f)
+		{
+			if (DistSq < MinDistSq) { return false; }
+		}
 	}
 
-	if (vIsZero(SearchLocation) || (Filter->MaxSearchRadius <= 0.0f && Filter->MinSearchRadius <= 0.0f)) { return true; }
-
-	const float MinDistSq = sqrf(Filter->MinSearchRadius);
-	const float MaxDistSq = sqrf(Filter->MaxSearchRadius);
-
-	const float DistSq = (Filter->bConsiderPhaseDistance)
-		? sqrf(AITAC_GetPhaseDistanceBetweenPoints(Item->Location, SearchLocation))
-		: vDist2DSq(Item->Location, SearchLocation);
-
-	if (Filter->MaxSearchRadius > 0.0f)
+	if (Filter->AgentProfile)
 	{
-		if (DistSq > MaxDistSq) { return false; }
-	}
-
-	if (Filter->MinSearchRadius > 0.0f)
-	{
-		if (DistSq < MinDistSq) { return false; }
+		if (!AINAV_IsPointReachable(Filter->AgentProfile, SearchLocation, Item->Location))
+		{
+			return false;
+		}
 	}
 
 	return true;
@@ -2175,6 +2167,25 @@ EAIWeaponId UTIL_GetWeaponTypeFromDroppedItem(const EAIDeployableItemType ItemTy
 	}
 
 	return EAIWeaponId::WEAPON_INVALID;
+}
+
+EAIDeployableItemType UTIL_GetDeployableTypeFromWeaponId(const EAIWeaponId ItemType)
+{
+	switch (ItemType)
+	{
+		case EAIWeaponId::WEAPON_MARINE_HMG:
+			return EAIDeployableItemType::DEPLOYABLE_ITEM_HMG;
+		case EAIWeaponId::WEAPON_MARINE_GL:
+			return EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER;
+		case EAIWeaponId::WEAPON_MARINE_SHOTGUN:
+			return EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN;
+		case EAIWeaponId::WEAPON_MARINE_WELDER:
+			return EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER;
+		case EAIWeaponId::WEAPON_MARINE_MINES:
+			return EAIDeployableItemType::DEPLOYABLE_ITEM_MINES;
+		default:
+			return EAIDeployableItemType::DEPLOYABLE_ITEM_NONE;
+	}
 }
 
 Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)

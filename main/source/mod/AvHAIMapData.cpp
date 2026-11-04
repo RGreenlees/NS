@@ -1057,6 +1057,13 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 		if (!ThisTrigger)
 		{
 			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_DISABLED);
+			return;
+		}
+
+		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD)
+		{
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_WELD);
+			return;
 		}
 	}
 }
@@ -1510,7 +1517,7 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 	TraceResult doorHit;
 
-	if (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_LADDER)
+	if (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_LADDER || PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_WALLCLIMB)
 	{
 		const Vector TargetLoc = (ToLoc.z > FromLoc.z) ? Vector(FromLoc.x, FromLoc.y, ToLoc.z) : Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
@@ -1562,7 +1569,8 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 		return nullptr;
 	}
 
-	Vector TargetLoc = ToLoc + Vector(0.0f, 0.0f, 10.0f);
+	Vector TargetLoc = FromLoc + (ToLoc - FromLoc) * 0.5f;
+	TargetLoc.z = fmaxf(FromLoc.z, ToLoc.z);
 
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
@@ -1573,6 +1581,11 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
 		if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+		{
+			return ThisObject;
+		}
+
+		if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
 		{
 			return ThisObject;
 		}
@@ -2360,7 +2373,12 @@ const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* Nav
 
 		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
 
-		if (ThisDist < MinDist)
+		// If we have an alternative trigger that doesn't require welding, then prefer that since it avoids locking out players without a welder
+		const bool bCanReplaceWeldTrigger = (WinningTrigger)
+			? (WinningTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD && ThisTrigger->Type != EAIDynamicMapObjectType::TRIGGER_WELD)
+			: true;
+
+		if (ThisDist < MinDist || bCanReplaceWeldTrigger)
 		{
 			WinningTrigger = ThisTrigger;
 		}
