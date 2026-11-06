@@ -275,6 +275,11 @@ Vector vClosestPointOnLine2D(const Vector lineFrom, const Vector lineTo, const V
 // Normalizes the supplied vector, overwriting it with the normalized value in the process
 void UTIL_NormalizeVector(Vector* vec)
 {
+	if (!vec || vIsZero(*vec))
+	{
+		return;
+	}
+
 	float len = sqrt((vec->x * vec->x) + (vec->y * vec->y) + (vec->z * vec->z));
 
 	float div = 1.0f / len;
@@ -547,6 +552,8 @@ float clampi(int input, int inMin, int inMax)
 
 Vector GetPitchForProjectile(Vector LaunchPoint, Vector TargetPoint, const float ProjectileSpeed, const float Gravity)
 {
+	const float SafeGravity = fmaxf(Gravity, 1.0f);
+
 	double start_x = LaunchPoint.x;
 	double start_y = LaunchPoint.y;
 	double start_z = LaunchPoint.z;
@@ -560,14 +567,14 @@ Vector GetPitchForProjectile(Vector LaunchPoint, Vector TargetPoint, const float
 
 	double range = sqrt(x * x + y * y);
 
-	double discriminant = pow(ProjectileSpeed, 4) - Gravity * (Gravity * pow(range, 2) + 2 * z * pow(ProjectileSpeed, 2));
+	double discriminant = pow(ProjectileSpeed, 4) - SafeGravity * (SafeGravity * pow(range, 2) + 2 * z * pow(ProjectileSpeed, 2));
 
 	if (discriminant < 0)
 	{
 		return ZERO_VECTOR;
 	}
 
-	double launch_angle = atan((pow(ProjectileSpeed, 2) - sqrt(discriminant)) / (Gravity * range));
+	double launch_angle = atan((pow(ProjectileSpeed, 2) - sqrt(discriminant)) / (SafeGravity * range));
 
 	// Calculate the components of the unit vector
 	double unit_vector_x = cos(launch_angle) * cos(atan2(y, x));
@@ -580,6 +587,8 @@ Vector GetPitchForProjectile(Vector LaunchPoint, Vector TargetPoint, const float
 
 Vector vGetLaunchAngleForProjectile(Vector LaunchPoint, Vector TargetPoint, const float ProjectileSpeed, const float Gravity)
 {
+	const float SafeGravity = fmaxf(Gravity, 1.0f);
+
 	double start_x = LaunchPoint.x;
 	double start_y = LaunchPoint.y;
 	double start_z = LaunchPoint.z;
@@ -593,14 +602,14 @@ Vector vGetLaunchAngleForProjectile(Vector LaunchPoint, Vector TargetPoint, cons
 
 	double range = sqrt(x * x + y * y);
 
-	double discriminant = pow(ProjectileSpeed, 4) - Gravity * (Gravity * pow(range, 2) + 2 * z * pow(ProjectileSpeed, 2));
+	double discriminant = pow(ProjectileSpeed, 4) - SafeGravity * (SafeGravity * pow(range, 2) + 2 * z * pow(ProjectileSpeed, 2));
 
 	if (discriminant < 0)
 	{
 		return ZERO_VECTOR;
 	}
 
-	double launch_angle = atan((pow(ProjectileSpeed, 2) - sqrt(discriminant)) / (Gravity * range));
+	double launch_angle = atan((pow(ProjectileSpeed, 2) - sqrt(discriminant)) / (SafeGravity * range));
 
 	// Calculate the components of the unit vector
 	double unit_vector_x = cos(launch_angle) * cos(atan2(y, x));
@@ -813,58 +822,61 @@ Vector UTIL_GetForwardVector2D(const Vector angles)
 	return UTIL_GetVectorNormal2D(fwd);
 }
 
-float UTIL_GetDistanceToPolygon2DSq(const Vector TestPoint, const Vector* Points, const int NumPoints)
-{
-	float minDist = -1.0f;
-
-	for (int i = 0; i < NumPoints; i++)
-	{
-		Vector destPoint = (i <= (NumPoints - 2)) ? Points[i + 1] : Points[0];
-		float thisDist = vDistanceFromLine2DSq(Points[i], destPoint, TestPoint);
-
-		if (minDist < 0.0f)
-		{
-			minDist = thisDist;
-		}
-		else
-		{
-			minDist = fminf(minDist, thisDist);
-		}
-	}
-
-	return minDist;
-}
-
 Vector UTIL_GetAimLocationToLeadTarget(const Vector ShooterLocation, const Vector TargetLocation, const Vector TargetVelocity, const float ProjectileVelocity)
 {
 	// We interpret a speed of 0.0f to mean hitscan, i.e. infinitely fast
 	if (ProjectileVelocity == 0.0f) { return TargetLocation; }
 
+	const Vector ToTarget = TargetLocation - ShooterLocation;
+	const float TargetDistanceSq = UTIL_GetDotProduct(ToTarget, ToTarget);
 
-	Vector totarget = TargetLocation - ShooterLocation;
+	if (TargetDistanceSq < 0.0001f) { return TargetLocation; }
 
+	const float A = UTIL_GetDotProduct(TargetVelocity, TargetVelocity) - (ProjectileVelocity * ProjectileVelocity);
+	const float B = 2.0f * UTIL_GetDotProduct(TargetVelocity, ToTarget);
+	const float C = TargetDistanceSq;
 
-	float a = UTIL_GetDotProduct(TargetVelocity, TargetVelocity) - (ProjectileVelocity * ProjectileVelocity);
-	float b = 2.0f * UTIL_GetDotProduct(TargetVelocity, totarget);
-	float c = UTIL_GetDotProduct(totarget, totarget);
+	const float Epsilon = 0.0001f;
+	float LeadTime = -1.0f;
 
-	float p = -b / (2.0f * a);
-	float q = (float)sqrt((b * b) - 4.0f * a * c) / (2.0f * a);
-
-	float t1 = p - q;
-	float t2 = p + q;
-	float t;
-
-	if (t1 > t2 && t2 > 0)
+	if (fabsf(A) < Epsilon)
 	{
-		t = t2;
+		// Linear case
+		if (fabsf(B) <= Epsilon) { return TargetLocation; }
+
+		LeadTime = -C / B;
 	}
 	else
 	{
-		t = t1;
+		float Discriminant = (B * B) - (4.0f * A * C);
+
+		if (Discriminant < -Epsilon) { return TargetLocation; }
+
+		Discriminant = fmaxf(Discriminant, 0.0f);
+
+		const float SqrtDiscriminant = sqrtf(Discriminant);
+		const float Denominator = 2.0f * A;
+
+		const float Time1 = (-B - SqrtDiscriminant) / Denominator;
+		const float Time2 = (-B + SqrtDiscriminant) / Denominator;
+
+		if (Time1 > 0.0f && Time2 > 0.0f)
+		{
+			LeadTime = fminf(Time1, Time2);
+		}
+		else if (Time1 > 0.0f)
+		{
+			LeadTime = Time1;
+		}
+		else if (Time2 > 0.0f)
+		{
+			LeadTime = Time2;
+		}
 	}
 
-	return (TargetLocation + TargetVelocity * t);
+	if (LeadTime < 0.0f || isnan(LeadTime) || isinf(LeadTime)) { return TargetLocation; }
+
+	return TargetLocation + (TargetVelocity * LeadTime);
 }
 
 float UTIL_GetVelocityRequiredToReachTarget(const Vector StartLocation, const Vector TargetLocation, float Gravity)
@@ -902,8 +914,10 @@ unsigned int UTIL_CountSetBitsInInteger(unsigned int n)
 
 float UTIL_CalculateSlopeAngleBetweenPoints(const Vector StartPoint, const Vector EndPoint)
 {
-	float Run = vDist2DSq(StartPoint, EndPoint);
-	float Rise = fabsf(StartPoint.z - EndPoint.z);
+	if (vEquals(StartPoint, EndPoint, 0.1f)) { return 0.0f; }
+
+	const float Run = vDist2DSq(StartPoint, EndPoint);
+	const float Rise = fabsf(StartPoint.z - EndPoint.z);
 
 	return atanf(Rise / Run);
 }

@@ -657,7 +657,7 @@ void UTIL_LocalizeText(const char* InputText, string& OutputText)
 		{
 			line.erase(std::remove_if(line.begin(), line.end(), ::isspace),
 				line.end());
-			if (line[0] == '/' || line.empty())
+			if (line.empty() || line[0] == '/')
 				continue;
 
 			if (line.compare(theInputString) == 0)

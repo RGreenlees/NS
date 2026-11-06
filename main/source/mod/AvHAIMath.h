@@ -201,10 +201,9 @@ Vector vGetLaunchAngleForProjectile(Vector LaunchPoint, Vector TargetPoint, cons
    top and bottom of the cylinder to be outside the plane if it is intersecting, therefore
    we only need to test the top and bottom cylinder at the closest point to the plane.*/
 bool UTIL_CylinderInsidePlane(const AvHBotViewFrustumPlane* plane, const Vector centre, float height, float radius);
+
 // Set the normal and position for the plane based on the 3 points defining it
 void UTIL_SetFrustumPlane(AvHBotViewFrustumPlane* plane, Vector v1, Vector v2, Vector v3);
-// Finds the closest point to the polygon, defined by segments (edges)
-float UTIL_GetDistanceToPolygon2DSq(const Vector TestPoint, const Vector* Segments, const int NumSegments);
 
 // Based on the target's motion and the weapon's projectile speed, where should the bot aim to lead the target and hit them?
 Vector UTIL_GetAimLocationToLeadTarget(const Vector ShooterLocation, const Vector TargetLocation, const Vector TargetVelocity, const float ProjectileVelocity);

@@ -72,6 +72,46 @@ extern cvar_t avh_botcommanderwait;
 extern cvar_t avh_botlerkcooldown;
 extern cvar_t avh_botmaxstucktime;
 
+bool CONFIG_TryParseInt(const string& Text, int& Result)
+{
+	char* End = nullptr;
+    errno = 0;
+
+	const long Parsed = strtol(Text.c_str(), &End, 10);
+
+    if (End == Text.c_str()
+        || *End != '\0'
+        || errno == ERANGE
+        || Parsed < INT_MIN
+        || Parsed > INT_MAX)
+    {
+        return false;
+	}
+
+    Result = static_cast<int>(Parsed);
+    return true;
+}
+
+bool CONFIG_TryParseFloat(const string& Text, float& Result)
+{
+    char* End = nullptr;
+    errno = 0;
+
+    const float Parsed = strtof(Text.c_str(), &End);
+
+    if (End == Text.c_str()
+        || *End != '\0'
+        || errno == ERANGE
+        || isnan(Parsed)
+        || isinf(Parsed))
+    {
+        return false;
+    }
+
+    Result = Parsed;
+    return true;
+}
+
 float CONFIG_GetCommanderWaitTime()
 {
     return avh_botcommanderwait.value;
@@ -185,7 +225,7 @@ void CONFIG_PopulateBotNames()
         std::string line;
         while (getline(cFile, line))
         {
-            if (line[0] == '/' || line.empty())
+            if (line.empty() || line[0] == '/' || line[0] == '#')
                 continue;
 
             BotNames.push_back(line);
@@ -352,41 +392,81 @@ void CONFIG_ParseConfigFile()
 
             if (!stricmp(keyChar, "RelocationChance"))
             {
-                float RelocationValue = std::stof(value.c_str());
-                RelocationChance = RelocationValue;
+                RelocationChance = 0.1f;
+                float ParsedRelocationChance = 0.0f;
+
+                if (!CONFIG_TryParseFloat(value, ParsedRelocationChance))
+                {
+                    ALERT(at_console, "Invalid value for RelocationChance in nsbots.ini. Using default value of 0.1");
+                    continue;
+				}
+
+                RelocationChance = clampf(ParsedRelocationChance, 0.0f, 1.0f);
 
                 continue;
             }
 
             if (!stricmp(keyChar, "BotFillRate"))
             {
-                float RelocationValue = std::stof(value.c_str());
-                BotFillRate = RelocationValue;
+                BotFillRate = 0.5f;
+                float ParsedBotFillRate = 0.0f;
+
+                if (!CONFIG_TryParseFloat(value, ParsedBotFillRate))
+                {
+                    ALERT(at_console, "Invalid value for BotFillRate in nsbots.ini. Using default value of 0.5");
+                    continue;
+                }
+
+                BotFillRate = clampf(ParsedBotFillRate, 0.0f, 1.0f);
 
                 continue;
             }
 
             if (!stricmp(keyChar, "MaxAIMatchTime"))
             {
-                float MaxMinutes = std::stof(value.c_str());
-                MaxAIMatchTimeMinutes = MaxMinutes;
+                MaxAIMatchTimeMinutes = 90.0f;
+                float ParsedAIMatchTime = 0.0f;
+
+                if (!CONFIG_TryParseFloat(value, ParsedAIMatchTime))
+                {
+                    ALERT(at_console, "Invalid value for MaxAIMatchTime in nsbots.ini. Using default value of 90.0");
+                    continue;
+                }
+
+                MaxAIMatchTimeMinutes = fminf(ParsedAIMatchTime, 0.0f);
 
                 continue;
             }
 
             if (!stricmp(keyChar, "BotFillTiming"))
             {
-                int FillSetting = atoi(value.c_str());
-                FillSetting = clampi(FillSetting, 0, 2);
-                CurrentBotFillTiming = static_cast<EAIFillTiming>(FillSetting);
+                CurrentBotFillTiming = EAIFillTiming::FILLTIMING_ALLHUMANS;
+                int ParsedBotFillTiming = 0;
+
+                if (!CONFIG_TryParseInt(value, ParsedBotFillTiming))
+                {
+                    ALERT(at_console, "Invalid value for BotFillTiming in nsbots.ini. Using default value of 1");
+                    continue;
+                }
+
+                ParsedBotFillTiming = clampi(ParsedBotFillTiming, 0, 2);
+
+                CurrentBotFillTiming = static_cast<EAIFillTiming>(ParsedBotFillTiming);
 
                 continue;
             }
 
             if (!stricmp(keyChar, "BotSkillLevel") || !stricmp(keyChar, "BotSkillName"))
             {
-                CurrSkillIndex = std::stoi(value.c_str());
-                CurrSkillIndex = clampi(CurrSkillIndex, 0, 3);
+                int ParsedSkillLevel = 0;
+
+                if (!CONFIG_TryParseInt(value, ParsedSkillLevel))
+                {
+                    ALERT(at_console, "Invalid value for BotSkillLevel or BotSkillName in nsbots.ini. Skipping this entry.");
+                    continue;
+                }
+
+                CurrSkillIndex = clampi(ParsedSkillLevel, 0, 3);
 
                 continue;
             }
@@ -395,9 +475,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedReactionTime = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].marine_bot_reaction_time = clampf(NewValue, 0.0f, 1.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedReactionTime))
+                    {
+                        ALERT(at_console, "Invalid value for MarineReactionTime in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].marine_bot_reaction_time = clampf(ParsedReactionTime, 0.0f, 1.0f);
                 }
                 else
                 {
@@ -414,9 +500,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedReactionTime = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].alien_bot_reaction_time = clampf(NewValue, 0.0f, 1.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedReactionTime))
+                    {
+                        ALERT(at_console, "Invalid value for AlienReactionTime in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].alien_bot_reaction_time = clampf(ParsedReactionTime, 0.0f, 1.0f);
                 }
                 else
                 {
@@ -434,9 +526,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedAimSkill = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].marine_bot_aim_skill = clampf(NewValue, 0.0f, 1.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedAimSkill))
+                    {
+                        ALERT(at_console, "Invalid value for MarineAimSkill in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].marine_bot_aim_skill = clampf(ParsedAimSkill, 0.0f, 1.0f);
                 }
                 else
                 {
@@ -454,9 +552,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedAimSkill = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].alien_bot_aim_skill = clampf(NewValue, 0.0f, 1.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedAimSkill))
+                    {
+                        ALERT(at_console, "Invalid value for AlienAimSkill in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].alien_bot_aim_skill = clampf(ParsedAimSkill, 0.0f, 1.0f);
                 }
                 else
                 {
@@ -474,9 +578,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedTrackingSkill = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].marine_bot_motion_tracking_skill = clampf(NewValue, 0.0f, 1.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedTrackingSkill))
+                    {
+                        ALERT(at_console, "Invalid value for MarineMovementTracking in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].marine_bot_motion_tracking_skill = clampf(ParsedTrackingSkill, 0.0f, 1.0f);
                 }
                 else
                 {
@@ -494,9 +604,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedTrackingSkill = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].alien_bot_motion_tracking_skill = clampf(NewValue, 0.0f, 1.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedTrackingSkill))
+                    {
+                        ALERT(at_console, "Invalid value for AlienMovementTracking in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].alien_bot_motion_tracking_skill = clampf(ParsedTrackingSkill, 0.0f, 1.0f);
                 }
                 else
                 {
@@ -514,9 +630,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedViewSpeed = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].marine_bot_view_speed = clampf(NewValue, 0.0f, 5.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedViewSpeed))
+                    {
+                        ALERT(at_console, "Invalid value for MarineViewSpeed in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].marine_bot_view_speed = clampf(ParsedViewSpeed, 0.0f, 5.0f);
                 }
                 else
                 {
@@ -534,9 +656,15 @@ void CONFIG_ParseConfigFile()
             {
                 if (CurrSkillIndex > -1)
                 {
-                    float NewValue = std::stof(value.c_str());
+                    float ParsedViewSpeed = 0.0f;
 
-                    BotSkillLevels[CurrSkillIndex].alien_bot_view_speed = clampf(NewValue, 0.0f, 5.0f);
+                    if (!CONFIG_TryParseFloat(value, ParsedViewSpeed))
+                    {
+                        ALERT(at_console, "Invalid value for AlienViewSpeed in nsbots.ini. Ignoring setting.");
+                        continue;
+                    }
+
+                    BotSkillLevels[CurrSkillIndex].alien_bot_view_speed = clampf(ParsedViewSpeed, 0.0f, 5.0f);
                 }
                 else
                 {

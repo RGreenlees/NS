@@ -334,22 +334,27 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 	Vector FromFloorLocation = AINAV_FindNewPathStartPoint(NavProfile, ResultPath, FromLocation, ToLocation);
 
-	const DynamicMapObject* CurrentPlatform = AIMAP_TraceForDynamicObject(FromLocation, FromLocation - Vector(0.0f, 0.0f, 1000.0f));
+	const DynamicMapObjectHandle CurrentPlatformHandle = AIMAP_TraceForDynamicObject(FromLocation, FromLocation - Vector(0.0f, 0.0f, 1000.0f));
+
+	const DynamicMapObject* CurrentPlatform = CurrentPlatformHandle.GetObjectRef();
+
 	bool bMustDisembarkLiftFirst = false;
 	Vector LiftStart = ZERO_VECTOR;
 	Vector LiftEnd = ZERO_VECTOR;
 
-	if (CurrentPlatform)
+	if (CurrentPlatform && CurrentPlatform->IsValid())
 	{
-		LiftEnd = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, FromLocation, CurrentPlatform);
+		LiftEnd = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, FromLocation, CurrentPlatformHandle);
 
 		if (!vIsZero(LiftEnd))
 		{
 			FromFloorLocation = LiftEnd;
 
-			const NavOffMeshConnection* LiftOffMesh = AIMAP_GetOffMeshConnectionForPlatform(NavProfile, CurrentPlatform);
+			OffMeshConnectionHandle LiftOffMeshHandle = AIMAP_GetOffMeshConnectionForPlatform(NavProfile, CurrentPlatformHandle);
 
-			if (LiftOffMesh)
+			const NavOffMeshConnection* LiftOffMesh = LiftOffMeshHandle.GetConnectionRef();
+
+			if (LiftOffMesh && LiftOffMesh->IsValid())
 			{
 				LiftStart = (vEquals(LiftEnd, LiftOffMesh->ToLocation, 5.0f)) ? LiftOffMesh->FromLocation : LiftOffMesh->ToLocation;
 				bMustDisembarkLiftFirst = true;
@@ -393,19 +398,24 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 	// find the start polygon
 	status = FoundMesh->NavQueryRef->findNearestPoly(dtStartPos, dtDefaultProjectionExtents, m_navFilter, &dtStartPoly, dtStartNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
+	if (dtStatusFailed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	// find the end polygon
 	status = FoundMesh->NavQueryRef->findNearestPoly(dtEndPos, dtDefaultProjectionExtents, m_navFilter, &dtEndPoly, dtEndNearest);
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
+	if (dtStatusFailed(status))
 	{
 		return false; // couldn't find a polygon
 	}
 
 	status = FoundMesh->NavQueryRef->findPath(dtStartPoly, dtEndPoly, dtStartNearest, dtEndNearest, m_navFilter, dtPolyPath, &nPathCount, MAX_PATH_POLY);
+
+	if (dtStatusFailed(status) || nPathCount == 0)
+	{
+		return false; // couldn't find a polygon
+	}
 
 	if (dtPolyPath[nPathCount - 1] != dtEndPoly)
 	{
@@ -444,7 +454,7 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 	status = FoundMesh->NavQueryRef->findStraightPath(dtStartNearest, dtEndNearest, dtPolyPath, nPathCount, dtStraightPath, dtStraightPathFlags, dtStraightPolyPath, &nVertCount, MAX_AI_PATH_SIZE, DT_STRAIGHTPATH_AREA_CROSSINGS);
 
-	if ((status & DT_FAILURE) || (status & DT_STATUS_DETAIL_MASK))
+	if (dtStatusFailed(status))
 	{
 		return false; // couldn't create a path
 	}
@@ -719,16 +729,20 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 {
 	if (!NavProfile || !UTIL_IsEdictActive(LiftReference) || !UTIL_IsEdictActive(Rider)) { return ZERO_VECTOR; }
 
-	const NavOffMeshConnection* NearestConnection = nullptr;
+	OffMeshConnectionHandle NearestConnectionHandle = OffMeshConnectionHandle();
 	float MinDist = 0.0f;
 
 	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!ChosenNavMesh) { return ZERO_VECTOR; }
 
-	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
+	for (auto it = ChosenNavMesh->MeshConnectionHandles.begin(); it != ChosenNavMesh->MeshConnectionHandles.end(); it++)
 	{
-		const NavOffMeshConnection* ThisConnection = &(*it);
+		const OffMeshConnectionHandle& ThisConnectionHandle = *it;
+
+		if (!ThisConnectionHandle.IsValid()) { continue; }
+
+		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
@@ -739,13 +753,15 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 			float ThisDist = fminf(vDist3DSq(ThisConnection->FromLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference)),
 				vDist3DSq(ThisConnection->ToLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference)));
 
-			if (ThisDist < sqrf(100.0f) && (!NearestConnection || ThisDist < MinDist))
+			if (ThisDist < sqrf(100.0f) && (!NearestConnectionHandle.IsValid() || ThisDist < MinDist))
 			{
-				NearestConnection = ThisConnection;
+				NearestConnectionHandle = ThisConnectionHandle;
 				MinDist = ThisDist;
 			}
 		}
 	}
+
+	const NavOffMeshConnection* NearestConnection = NearestConnectionHandle.GetConnectionRef();
 
 	if (NearestConnection)
 	{
@@ -954,7 +970,9 @@ bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, con
 	if (!ImpactedPathNode || !ImpactedPathNode->IsValidMove()) { return false; }
 	if (!UTIL_IsEdictActive(ImpactingObject)) { return false; }
 
-	const DynamicMapObject* ImpactingObjectRef = AIMAP_GetDynamicObjectByEdict(ImpactingObject);
+	const DynamicMapObjectHandle ImpactingObjectRefHandle = AIMAP_GetDynamicObjectByEdict(ImpactingObject);
+
+	const DynamicMapObject* ImpactingObjectRef = ImpactingObjectRefHandle.GetObjectRef();
 
 	if (!ImpactingObjectRef || !ImpactingObjectRef->IsValid()) { return false; }
 
@@ -974,7 +992,9 @@ bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, con
 
 	if (ImpactingObjectRef->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return false; }
 
-	const DynamicMapObject* Trigger = AIMAP_GetBestTriggerForObject(NavProfile, ImpactingObjectRef, ImpactedPathNode->FromLocation);
+	const DynamicMapObjectHandle TriggerHandle = AIMAP_GetBestTriggerForObject(NavProfile, ImpactingObjectRefHandle, ImpactedPathNode->FromLocation);
+
+	const DynamicMapObject* Trigger = TriggerHandle.GetObjectRef();
 
 	if (!Trigger || !Trigger->IsValid()) { return false; }
 
@@ -985,33 +1005,40 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 {
 	if (!NavProfile || !ImpactedPathNode || !UTIL_IsEdictActive(Platform)) { return false; }
 
-	const DynamicMapObject* PlatformRef = AIMAP_GetDynamicObjectByEdict(Platform);
+	const DynamicMapObjectHandle PlatformRefHandle = AIMAP_GetDynamicObjectByEdict(Platform);
 
-	if (!PlatformRef || !PlatformRef->IsValid()) { return false; }
+	const DynamicMapObject* PlatformRef = PlatformRefHandle.GetObjectRef();
 
-	if (!AIMAP_PlatformNeedsActivating(NavProfile, PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation)) { return false; }
+	if (!PlatformRef) { return false; }
+
+	if (!AIMAP_PlatformNeedsActivating(NavProfile, PlatformRefHandle, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation)) { return false; }
 
 	DynamicMapObjectStop DesiredEmbarkStop;
 	DynamicMapObjectStop DesiredDisembarkStop;
 
-	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(PlatformRef, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
+	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(PlatformRefHandle, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, DesiredEmbarkStop, DesiredDisembarkStop);
 
 	if (!bFoundStops) { return false; }
 
-	const DynamicMapObject* Trigger = nullptr;
+	DynamicMapObjectHandle TriggerHandle = DynamicMapObjectHandle();
 
 	if (vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop.StopLocation, 5.0f))
 	{
-		Trigger = AIMAP_GetTriggerReachableFromPlatform(PlatformRef, ImpactedPathNode->FromLocation.z + 32.0f);
+		TriggerHandle = AIMAP_GetTriggerReachableFromPlatform(PlatformRefHandle, ImpactedPathNode->FromLocation.z + 32.0f);
 	}
 
-	if (!Trigger)
+	if (!TriggerHandle.IsValid())
 	{
-		Trigger = AIMAP_GetBestTriggerForObject(NavProfile, PlatformRef, ImpactedPathNode->FromLocation);
+		TriggerHandle = AIMAP_GetBestTriggerForObject(NavProfile, PlatformRefHandle, ImpactedPathNode->FromLocation);
 
-		if (Trigger)
+		if (TriggerHandle.IsValid())
 		{
-			return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, Trigger->Edict, PlatformRef->Edict, NewMoveTask);
+			const DynamicMapObject* TriggerRef = TriggerHandle.GetObjectRef();
+
+			if (TriggerRef)
+			{
+				return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, TriggerRef->Edict, PlatformRef->Edict, NewMoveTask);
+			}
 		}
 	}
 
@@ -1024,11 +1051,17 @@ bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vecto
 	if (!UTIL_IsEdictActive(Trigger)) { return false; }
 	if (!UTIL_IsEdictActive(TriggerTarget)) { return false; }
 
-	const DynamicMapObject* TriggerRef = AIMAP_GetDynamicObjectByEdict(Trigger);
+	DynamicMapObjectHandle TriggerRefHandle = AIMAP_GetDynamicObjectByEdict(Trigger);
 
-	if (!TriggerRef || !TriggerRef->IsValid()) { return false; }
+	if (!TriggerRefHandle.IsValid()) { return false; }
 
-	const DynamicMapObject* TriggerTargetRef = AIMAP_GetDynamicObjectByEdict(TriggerTarget);
+	const DynamicMapObject* TriggerRef = TriggerRefHandle.GetObjectRef();
+
+	if (!TriggerRef) { return false; }
+
+	DynamicMapObjectHandle TriggerTargetRefHandle = AIMAP_GetDynamicObjectByEdict(TriggerTarget);
+
+	const DynamicMapObject* TriggerTargetRef = TriggerTargetRefHandle.GetObjectRef();
 
 	AvHAIPathNode RelevantMoveInfo;
 
@@ -1171,7 +1204,9 @@ bool AINAV_AddWeldMovementTask(const NavAgentProfile* NavProfile, const Vector& 
 {
 	if (!NavProfile || !NavProfile->IsValid() || !UTIL_IsEdictActive(EntityToWeld)) { return false; }
 
-	const DynamicMapObject* WeldableObject = AIMAP_GetDynamicObjectByEdict(EntityToWeld);
+	DynamicMapObjectHandle WeldableObjectHandle = AIMAP_GetDynamicObjectByEdict(EntityToWeld);
+
+	if (!WeldableObjectHandle.IsValid()) { return false; }
 
 	NewTask.Clear();
 
@@ -1388,8 +1423,6 @@ bool AINAV_IsJumpMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 		if (MoveDot >= 0.0f)
 		{
 			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer);
-			Vector HullTraceEnd = CurrentPathNode->ToLocation;
-			HullTraceEnd.z = AIPlayer->v.origin.z;
 
 			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f))
 			{

@@ -722,6 +722,8 @@ bool PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredCombatWea
 		{
 			AvHBasePlayerWeapon* Weapon = dynamic_cast<AvHBasePlayerWeapon*>(Player->m_rgpPlayerItems[5]);
 
+			if (!Weapon) { return false; }
+
 			return Weapon->m_iClip > 0;
 		}
 

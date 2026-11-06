@@ -157,8 +157,8 @@ struct AvHAIBuildableStructure
 	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	EAIReachabilityFlags TeamBReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;
 	int LastSeen = 0; // Which refresh cycle was this last seen on? Used to determine if the building has been removed from play
-	std::vector<NavTempObstacle*> TempObstacles;
-	vector<NavOffMeshConnection*> OffMeshConnections; // References to any off-mesh connections this structure is associated with
+	std::vector<NavTempObstacleHandle> TempObstacles;
+	vector<OffMeshConnectionHandle> OffMeshConnections; // References to any off-mesh connections this structure is associated with
 	bool bReachabilityMarkedDirty = true; // If true, reachability flags will be recalculated for this structure
 	AvHTeamNumber Team = TEAM_IND;
 
@@ -231,8 +231,8 @@ struct AvHAIHive
 	bool bIsUnderAttack = false;					// Is the hive currently under attack? Becomes false if not taken damage for more than 10 seconds
 	float HealthPercent = 0.0f;						// If the hive is built and active, what its health currently is
 	AvHAIResourceNode* HiveResNodeRef = nullptr;	// Which resource node (indexes into ResourceNodes array) belongs to this hive?
-	std::vector<NavTempObstacle*> TempObstacles;		// When in progress or built, will place an obstacle so bots don't try to walk through it
-	vector<NavOffMeshConnection*> OffMeshConnections; // References to any off-mesh connections this hive is associated with
+	std::vector<NavTempObstacleHandle> TempObstacles;		// When in progress or built, will place an obstacle so bots don't try to walk through it
+	vector<OffMeshConnectionHandle> OffMeshConnections; // References to any off-mesh connections this hive is associated with
 	float NextFloorLocationCheck = 0.0f;			// When should the closest navigable point to the hive be calculated? Used to delay the check after a hive is built
 	AvHTeamNumber OwningTeam = TEAM_IND;			// Which team owns this hive currently (TEAM_IND if empty)
 	EAIReachabilityFlags TeamAReachabilityFlags = EAIReachabilityFlags::AI_REACHABILITY_NONE;		// Who on team A can reach this node?

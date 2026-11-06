@@ -45,7 +45,7 @@ extern int m_spriteTexture;
 #ifdef BOTDEBUG
 AvHAIPlayer* DebugAIPlayer = nullptr;
 edict_t* DebugBots[MAX_PLAYERS];
-const DynamicMapObject* DebugDynamicMapObject = nullptr;
+DynamicMapObjectHandle DebugDynamicMapObject = DynamicMapObjectHandle();
 Vector DebugVector1 = ZERO_VECTOR;
 Vector DebugVector2 = ZERO_VECTOR;
 #endif
@@ -96,7 +96,7 @@ void AIMGR_UpdateAIPlayerCounts()
 	float MaxMinutes = CONFIG_GetMaxAIMatchTimeMinutes();
 	float MaxSeconds = MaxMinutes * 60.0f;
 
-	bool bMatchExceededMaxLength = (GetGameRules()->GetGameTime() > MaxSeconds);
+	bool bMatchExceededMaxLength = MaxSeconds > 0.0f && (GetGameRules()->GetGameTime() > MaxSeconds);
 
 	// If bots are disabled or we've exceeded max AI time and no humans are playing, ensure we've removed all bots from the game
 	// Max AI time is configurable in nsbots.ini, and helps prevent infinite stalemates
@@ -530,7 +530,7 @@ void AIDEBUG_TestFlightPathFind(Vector FromLoc, Vector ToLoc)
 
 const DynamicMapObject* AIDEBUG_GetDebugDynamicMapObject()
 {
-	return DebugDynamicMapObject;
+	return DebugDynamicMapObject.GetObjectRef();
 }
 
 void AIDEBUG_SetDebugDynamicMapObject(edict_t* NewObject)
@@ -682,7 +682,7 @@ void AIMGR_UpdateAIPlayers()
 		}
 	}
 
-	if (DebugDynamicMapObject)
+	if (DebugDynamicMapObject.IsValid())
 	{
 		DEBUG_PrintObjectInfo(DebugDynamicMapObject);
 	}

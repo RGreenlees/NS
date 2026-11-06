@@ -39,6 +39,44 @@ enum class EAINavMeshLoadResult
 	NAVMESH_LOAD_SUCCESS // Successfully loaded the navmesh
 };
 
+struct OffMeshConnectionHandle
+{
+	EAINavMeshIndex MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	uint32_t ConnectionId = 0;
+	uint32_t Generation = 0;
+
+	inline bool IsValid() const;
+
+	inline const NavOffMeshConnection* GetConnectionRef() const;
+	inline NavOffMeshConnection* GetConnectionRef_Mutable() const;
+
+	inline void Invalidate()
+	{
+		ConnectionId = 0;
+		Generation = 0;
+		MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	}
+};
+
+struct NavTempObstacleHandle
+{
+	EAINavMeshIndex MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	uint32_t ObstacleId = 0;
+	uint32_t Generation = 0;
+
+	inline bool IsValid() const;
+
+	inline const NavTempObstacle* GetObstacleRef() const;
+	inline NavTempObstacle* GetObstacleRef_Mutable() const;
+
+	inline void Invalidate()
+	{
+		ObstacleId = 0;
+		Generation = 0;
+		MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	}
+};
+
 // Works like a TraceResult, but specifically for running traces on the nav mesh
 struct NavHitResult
 {
@@ -56,6 +94,8 @@ struct NavHitResult
 	}
 };
 
+typedef std::vector<OffMeshConnectionHandle> OffMeshConnectionHandleList;
+
 // Links together a tile cache, nav query and the nav mesh into one handy structure for all your querying needs
 struct NavMesh
 {
@@ -64,6 +104,7 @@ struct NavMesh
 	class dtTileCache* TileCacheRef = nullptr;
 	class dtNavMeshQuery* NavQueryRef = nullptr;
 	OffMeshConnectionList MeshConnections;
+	OffMeshConnectionHandleList MeshConnectionHandles;
 	NavHintList MeshHints;
 	NavTempObstacleList TempObstacles;
 	bool bIsMeshUpToDate = true;
@@ -90,8 +131,9 @@ struct NavMesh
 
 	bool IsUpToDate() { return bIsMeshUpToDate; }
 
-	void RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionToRemove);
-	void RemoveTempObstacleFromList(NavTempObstacle* ObstacleToRemove);
+	void RemoveOffMeshConnectionFromList(uint32_t ConnectionId);
+	void RemoveTempObstacleFromList(NavTempObstacleHandle& ObstacleToRemove);
+	void RefreshOffMeshConnectionHandles();
 };
 typedef std::vector<NavMesh*> NavMeshList;
 
@@ -192,13 +234,15 @@ NavMesh* AIMESH_GetNavMeshAtIndex(EAINavMeshIndex DesiredIndex);
 NavMeshList AIMESH_GetAllNavMeshes();
 
 /* Adds a new off-mesh connection to the specified navmesh at runtime. Bots using this nav mesh will immediately start using this connection if they're allowed to */
-NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional);
+bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle);
 
 // Changes the flags on an existing off-mesh connection. Returns true if Detour accepted the change.
-bool AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const EAINavMovementFlag NewFlag);
+bool AIMESH_ModifyOffMeshConnectionFlag(OffMeshConnectionHandle& ConnectionHandle, const EAINavMovementFlag NewFlag);
+
+bool AIMESH_RestoreDefaultOffMeshConnectionFlags(OffMeshConnectionHandle& ConnectionHandle);
 
 /* Removes the off-mesh connection from all nav meshes which contain it */
-bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef);
+bool AIMESH_RemoveOffMeshConnection(OffMeshConnectionHandle& ConnectionHandle);
 
 // Returns true if the trace along the nav mesh from start to end made it within the acceptable distance range
 bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, float MaxAcceptableDistance = 0.1f);
@@ -206,18 +250,17 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 // Returns detailed information on a nav mesh trace. Will return the end location of the trace, as well as populating the details in HitResult
 Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult = nullptr);
 EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const Vector Location);
-dtPolyRef AIMESH_GetNearestPolyRefForLocation(const NavAgentProfile* NavProfile, const Vector Location);
 Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, const Vector& Location, const float MaxDistanceFromWall);
 
 // Applies a temporary obstacle to the navmesh. Returns a pointer to the temp obstacle created if successful.
-NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area);
+NavTempObstacleHandle AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area);
 
 // Will remove the temporary obstacle from the navmesh completely.
 // NOTE: This will also null the supplied pointer if successful, as the pointer will be gone from the navmesh.
-bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove);
+bool AIMESH_RemoveTemporaryObstacle(NavTempObstacleHandle& ObstacleToRemove);
 
 // Add a hint to the requested nav mesh
-NavHint* AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags);
+void AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags);
 
 /*
 	Project point to navmesh:

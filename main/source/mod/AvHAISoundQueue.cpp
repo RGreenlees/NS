@@ -5,7 +5,7 @@ std::vector<AvHAISound> PendingSounds;
 
 void AISND_RegisterNewSound(int EntIndex, float* NewLocation, EAISoundType NewSoundType, float Volume)
 {
-	if (!AIMGR_IsBotEnabled() || Volume < 0.01f) { return; }
+	if (!AIMGR_IsBotEnabled() || Volume < 0.01f || !NewLocation) { return; }
 
 	AvHAISound NewSound;
 	NewSound.EntIndex = EntIndex;

@@ -1201,7 +1201,9 @@ void AITAC_UpdateBuildableStructure(CBaseEntity* Structure)
 		StructureRef->Location = BaseBuildable->pev->origin;
 	}
 
-	StructureRef->HealthPercent = (BuildingEdict->v.health / BuildingEdict->v.max_health);
+	StructureRef->HealthPercent = (BuildingEdict->v.max_health > 0.0f)
+		? (BuildingEdict->v.health / BuildingEdict->v.max_health)
+		: 1.0f;
 
 	const bool bOldGhost = StructureRef->IsGhost();
 	const bool bOldCompleted = StructureRef->IsCompleted();
@@ -1420,12 +1422,19 @@ void AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure)
 		{
 			if (!OtherPG || !OtherPG->IsValid() || OtherPG == Structure) { continue; }
 
-			NavOffMeshConnection* NewConnection = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true);
+			OffMeshConnectionHandle NewConnectionHandle;
 
-			if (NewConnection && NewConnection->IsValid())
+			const bool bAdded = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true, NewConnectionHandle);
+
+			if (bAdded)
 			{
-				NewConnection->LinkedObject = OtherPG->Edict;
-				Structure->OffMeshConnections.push_back(NewConnection);
+				NavOffMeshConnection* NewConnection = NewConnectionHandle.GetConnectionRef_Mutable();
+
+				if (NewConnection)
+				{
+					NewConnection->LinkedObject = OtherPG->Edict;
+					Structure->OffMeshConnections.push_back(NewConnectionHandle);
+				}
 			}
 		}
 
@@ -1459,13 +1468,17 @@ void AITAC_OnStructureBeginRecycling(AvHAIBuildableStructure* RecyclingStructure
 
 			for (auto ConnIt = OtherPG->OffMeshConnections.begin(); ConnIt != OtherPG->OffMeshConnections.end();)
 			{
-				NavOffMeshConnection* OtherConnection = (*ConnIt);
+				OffMeshConnectionHandle& OtherConnectionHandle = (*ConnIt);
 
-				if (!OtherConnection || !OtherConnection->IsValid()) { continue; }
+				if (!OtherConnectionHandle.IsValid()) { continue; }
+
+				NavOffMeshConnection* OtherConnection = OtherConnectionHandle.GetConnectionRef_Mutable();
+
+				if (!OtherConnection) { continue; }
 
 				if (OtherConnection->LinkedObject == RecyclingStructure->Edict)
 				{
-					AIMESH_RemoveOffMeshConnection(OtherConnection);
+					AIMESH_RemoveOffMeshConnection(OtherConnectionHandle);
 					ConnIt = OtherPG->OffMeshConnections.erase(ConnIt);
 				}
 				else
@@ -1503,13 +1516,17 @@ void AITAC_OnStructureDestroyed(AvHAIBuildableStructure* DestroyedStructure)
 
 			for (auto ConnIt = OtherPG->OffMeshConnections.begin(); ConnIt != OtherPG->OffMeshConnections.end();)
 			{
-				NavOffMeshConnection* OtherConnection = (*ConnIt);
+				OffMeshConnectionHandle& OtherConnectionHandle = *ConnIt;
 
-				if (!OtherConnection || !OtherConnection->IsValid()) { continue; }
+				if (!OtherConnectionHandle.IsValid()) { continue; }
+
+				NavOffMeshConnection* OtherConnection = OtherConnectionHandle.GetConnectionRef_Mutable();
+
+				if (!OtherConnection) { continue; }
 
 				if (OtherConnection->LinkedObject == DestroyedStructure->Edict)
 				{
-					AIMESH_RemoveOffMeshConnection(OtherConnection);
+					AIMESH_RemoveOffMeshConnection(OtherConnectionHandle);
 					ConnIt = OtherPG->OffMeshConnections.erase(ConnIt);
 				}
 				else
@@ -1709,7 +1726,7 @@ void AITAC_ClearStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
 
 	for (auto it = Structure->TempObstacles.begin(); it != Structure->TempObstacles.end(); it++)
 	{
-		NavTempObstacle* TempObstacle = (*it);
+		NavTempObstacleHandle& TempObstacle = (*it);
 
 		AIMESH_RemoveTemporaryObstacle(TempObstacle);
 	}
@@ -1736,24 +1753,24 @@ void AITAC_AddStructureTemporaryObstacles(AvHAIBuildableStructure* Structure)
 	{
 		const EAINavArea StructureObstacleArea = UTIL_GetAreaForStructuralObstruction(Structure);
 
-		NavTempObstacle* NewRegularMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_REGULAR, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, StructureObstacleArea);
+		NavTempObstacleHandle NewRegularMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_REGULAR, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, StructureObstacleArea);
 
-		if (NewRegularMeshObstacle)
+		if (NewRegularMeshObstacle.IsValid())
 		{
 			Structure->TempObstacles.push_back(NewRegularMeshObstacle);
 		}
 
-		NavTempObstacle* NewOnosMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_ONOS, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, StructureObstacleArea);
+		NavTempObstacleHandle NewOnosMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_ONOS, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, StructureObstacleArea);
 
-		if (NewOnosMeshObstacle)
+		if (NewOnosMeshObstacle.IsValid())
 		{
 			Structure->TempObstacles.push_back(NewOnosMeshObstacle);
 		}
 	}
 
-	NavTempObstacle* NewBuildingMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_CONSTRUCTION, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, EAINavArea::NAV_AREA_NULL);
+	NavTempObstacleHandle NewBuildingMeshObstacle = AIMESH_AddTemporaryObstacle(EAINavMeshIndex::NAV_MESH_CONSTRUCTION, UTIL_GetCentreOfEntity(Structure->Edict), Radius, 100.0f, EAINavArea::NAV_AREA_NULL);
 
-	if (NewBuildingMeshObstacle)
+	if (NewBuildingMeshObstacle.IsValid())
 	{
 		Structure->TempObstacles.push_back(NewBuildingMeshObstacle);
 	}
@@ -2733,9 +2750,7 @@ void AvHAIBuildableStructure::ClearTempObstacles()
 {
 	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
 	{
-		NavTempObstacle* ThisObstacle = (*ObsIt);
-
-		if (!ThisObstacle || !ThisObstacle->IsValid()) { continue; }
+		NavTempObstacleHandle& ThisObstacle = (*ObsIt);
 
 		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
 	}
@@ -2747,11 +2762,11 @@ void AvHAIBuildableStructure::ClearOffMeshConnections()
 {
 	for (auto ConnIt = OffMeshConnections.begin(); ConnIt != OffMeshConnections.end(); ConnIt++)
 	{
-		NavOffMeshConnection* ThisConnection = (*ConnIt);
+		OffMeshConnectionHandle& ThisConnectionHandle = (*ConnIt);
 
-		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+		if (!ThisConnectionHandle.IsValid()) { continue; }
 
-		AIMESH_RemoveOffMeshConnection(ThisConnection);
+		AIMESH_RemoveOffMeshConnection(ThisConnectionHandle);
 	}
 
 	OffMeshConnections.clear();
@@ -2807,9 +2822,9 @@ void AvHAIHive::OnBuiltStatusChanged(const EAIHiveStatus OldStatus, const EAIHiv
 
 		for (NavMesh* Mesh : MeshList)
 		{
-			NavTempObstacle* NewObstacle = AIMESH_AddTemporaryObstacle(Mesh->MeshIndex, UTIL_GetCentreOfEntity(Edict), HiveWidth, HiveHeight, NewObstacleType);
+			NavTempObstacleHandle NewObstacle = AIMESH_AddTemporaryObstacle(Mesh->MeshIndex, UTIL_GetCentreOfEntity(Edict), HiveWidth, HiveHeight, NewObstacleType);
 
-			if (NewObstacle)
+			if (NewObstacle.IsValid())
 			{
 				TempObstacles.push_back(NewObstacle);
 			}
@@ -2831,20 +2846,16 @@ void AvHAIHive::ClearNavInformation()
 {
 	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
 	{
-		NavTempObstacle* ThisObstacle = (*ObsIt);
-
-		if (!ThisObstacle || !ThisObstacle->IsValid()) { continue; }
+		NavTempObstacleHandle& ThisObstacle = (*ObsIt);
 
 		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
 	}
 
 	for (auto ConnIt = OffMeshConnections.begin(); ConnIt != OffMeshConnections.end(); ConnIt++)
 	{
-		NavOffMeshConnection* ThisConnection = (*ConnIt);
+		OffMeshConnectionHandle& ThisConnectionHandle = (*ConnIt);
 
-		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
-
-		AIMESH_RemoveOffMeshConnection(ThisConnection);
+		AIMESH_RemoveOffMeshConnection(ThisConnectionHandle);
 	}
 
 	TempObstacles.clear();

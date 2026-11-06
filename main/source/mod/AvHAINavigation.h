@@ -199,7 +199,7 @@ struct AvHAIPath
 
 	const AvHAIPathNode* GetPreviousPathNode() const
 	{
-		if (IsValidPath() || CurrentNodeIndex == 0) { return nullptr; }
+		if (CurrentNodeIndex == 0 || !IsValidPath()) { return nullptr; }
 
 		if (CurrentNodeIndex - 1 < PathNodes.size())
 		{
@@ -211,14 +211,14 @@ struct AvHAIPath
 
 	const AvHAIPathNode* GetNodeAtIndex(int32 Index) const
 	{
-		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
+		if (Index >= PathNodes.size() || Index < 0) { return nullptr; }
 
 		return &PathNodes[Index];
 	}
 
 	AvHAIPathNode* GetNodeAtIndex_Mutable(int32 Index)
 	{
-		if (Index > PathNodes.size() || Index < 0) { return nullptr; }
+		if (Index >= PathNodes.size() || Index < 0) { return nullptr; }
 
 		return &PathNodes[Index];
 	}

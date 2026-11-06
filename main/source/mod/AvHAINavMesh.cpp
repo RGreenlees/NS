@@ -26,6 +26,8 @@ EAINavMeshStatus CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_UNLOADE
 std::vector<NavMesh> ActiveNavMeshes;
 
 int ConnectionDrawIndex = 0;
+uint32_t CurrentNavMeshGeneration = 1;
+uint32_t NextNavHintIndex = 1;
 
 struct FastLZCompressor : public dtTileCacheCompressor
 {
@@ -133,6 +135,7 @@ void AIMESH_UnloadNavMesh()
 
 	CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_UNLOADED;
 	ConnectionDrawIndex = 0;
+	CurrentNavMeshGeneration++;
 }
 
 bool AIMESH_IsNavMeshLoaded()
@@ -258,10 +261,6 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		return EAINavMeshLoadResult::NAVMESH_LOAD_NOTFOUND;
 	}
 
-	LinearAllocator* m_talloc = new LinearAllocator(32000);
-	FastLZCompressor* m_tcomp = new FastLZCompressor;
-	MeshProcess* m_tmproc = new MeshProcess;
-
 	// Read header.
 	TileCacheExportHeader fileHeader;
 	size_t headerReadReturnCode = fread(&fileHeader, sizeof(TileCacheExportHeader), 1, OpenedNavFile);
@@ -276,7 +275,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 	}
 
 	// Incompatible version of the nav data
-	if (fileHeader.magic != TILECACHESET_MAGIC)
+	if (fileHeader.magic != TILECACHESET_MAGIC || fileHeader.version != TILECACHESET_VERSION)
 	{
 		AIMESH_UnloadNavMesh();
 		fclose(OpenedNavFile);
@@ -284,16 +283,19 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		return EAINavMeshLoadResult::NAVMESH_LOAD_WRONGVERSION;
 	}
 
-	// Incompatible version of the nav data
-	if (fileHeader.version != TILECACHESET_VERSION)
+	if (fileHeader.numTileCaches < 0 || fileHeader.numTileCaches >= 8)
 	{
 		AIMESH_UnloadNavMesh();
 		fclose(OpenedNavFile);
 		CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
-		return EAINavMeshLoadResult::NAVMESH_LOAD_WRONGVERSION;
+		return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 	}
 
 	fseek(OpenedNavFile, fileHeader.tileCacheDataOffset, SEEK_SET);
+
+	LinearAllocator* m_talloc = new LinearAllocator(32000);
+	FastLZCompressor* m_tcomp = new FastLZCompressor;
+	MeshProcess* m_tmproc = new MeshProcess;
 
 	for (int i = 0; i < fileHeader.numTileCaches; i++)
 	{
@@ -304,6 +306,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		// More nav meshes than we were expecting.
 		if (!IsValidNavMeshIndex(i))
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -317,9 +322,14 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 
 		size_t headerReadReturnCode = fread(&tcHeader, sizeof(TileCacheSetHeader), 1, OpenedNavFile);
 
+		const int HeaderTileLimit = tcHeader.cacheParams.maxTiles;
+
 		// The file is corrupted in some way, invalid tile data.
-		if (headerReadReturnCode != 1)
+		if (headerReadReturnCode != 1 || tcHeader.numTiles < 0 || tcHeader.numTiles > HeaderTileLimit)
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -332,6 +342,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		// Could not allocate memory for the nav mesh for some reason.
 		if (!NewNavMesh.NavMeshRef)
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -344,6 +357,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		// Could not allocate memory for the tile cache for some reason.
 		if (!NewNavMesh.TileCacheRef)
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -356,6 +372,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		// Could not allocate memory for the nav query for some reason.
 		if (!NewNavMesh.NavQueryRef)
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -368,6 +387,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		// Could not initialize the nav mesh for some reason (possibly bad data?)
 		if (dtStatusFailed(MeshInitStatus))
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -380,6 +402,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		// Could not initialize the tile cache for some reason (possibly bad data?)
 		if (dtStatusFailed(TileCacheInitStatus))
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -405,6 +430,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			// Invalid tile data
 			if (tileDataReadReturnCode != 1)
 			{
+				delete m_talloc;
+				delete m_tcomp;
+				delete m_tmproc;
 				dtFree(data);
 				NewNavMesh.Clear();
 				AIMESH_UnloadNavMesh();
@@ -419,6 +447,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			// Invalid tile data
 			if (dtStatusFailed(addTileStatus))
 			{
+				delete m_talloc;
+				delete m_tcomp;
+				delete m_tmproc;
 				dtFree(data);
 				NewNavMesh.Clear();
 				AIMESH_UnloadNavMesh();
@@ -435,6 +466,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 
 		if (dtStatusFailed(QueryInitStatus))
 		{
+			delete m_talloc;
+			delete m_tcomp;
+			delete m_tmproc;
 			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
@@ -449,15 +483,20 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 
 		fseek(OpenedNavFile, tcHeader.OffMeshConsOffset, SEEK_SET);
 
+		OffMeshConnectionHandle NewConnectionHandle;
+
 		for (int ii = 0; ii < tcHeader.NumOffMeshCons; ii++)
 		{
 			dtOffMeshConnection def;
-			fread(&def, sizeof(dtOffMeshConnection), 1, OpenedNavFile);
+
+			size_t ConnectionReadCode = fread(&def, sizeof(dtOffMeshConnection), 1, OpenedNavFile);
+
+			if (ConnectionReadCode != 1) { break; }
 
 			Vector Start = UTIL_VecDetourToGoldSrc(def.pos);
 			Vector End = UTIL_VecDetourToGoldSrc(&def.pos[3]);
 
-			AIMESH_AddOffMeshConnection(NewIndex, Start, End, static_cast<EAINavArea>(def.area), static_cast<EAINavMovementFlag>(def.flags), def.bBiDir);
+			AIMESH_AddOffMeshConnection(NewIndex, Start, End, static_cast<EAINavArea>(def.area), static_cast<EAINavMovementFlag>(def.flags), def.bBiDir, NewConnectionHandle);
 		}
 
 		fseek(OpenedNavFile, tcHeader.NavHintsOffset, SEEK_SET);
@@ -466,7 +505,9 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 		{
 			NavHint def;
 
-			fread(&def, sizeof(NavHint), 1, OpenedNavFile);
+			size_t HintReadCode = fread(&def, sizeof(NavHint), 1, OpenedNavFile);
+
+			if (HintReadCode != 1) { break; }
 
 			Vector Position = UTIL_VecDetourToGoldSrc(def.Position);
 
@@ -480,32 +521,32 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 	return EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS;
 }
 
-NavHint* AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags)
+void AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, unsigned int HintFlags)
 {
-	if (!IsValidNavMeshIndex(static_cast<int>(TargetNavMesh))) { return nullptr; }
+	if (!IsValidNavMeshIndex(static_cast<int>(TargetNavMesh))) { return; }
 
 	NavMesh* FoundNavMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
 
-	if (!FoundNavMesh) { return nullptr; }
+	if (!FoundNavMesh) { return; }
 
 	NavHint NewHint;
 	NewHint.Position = Location;
 	NewHint.HintTypes = HintFlags;
 
 	FoundNavMesh->MeshHints.push_back(NewHint);
-
-	return &(*prev(FoundNavMesh->MeshHints.end()));
 }
 
-NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional)
+bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle)
 {
+	OutHandle.Invalidate();
+
 	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
 
-	if (!FoundMesh) { return nullptr; }
+	if (!FoundMesh) { return false; }
 
 	const NavAgentProfile* DefaultProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
 
-	if (!DefaultProfile) { return nullptr; }
+	if (!DefaultProfile) { return false; }
 
 	NavAgentProfile ProjectProfile = *DefaultProfile;
 	ProjectProfile.MeshIndex = TargetNavMesh;
@@ -513,7 +554,7 @@ NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh,
 	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(&ProjectProfile, StartLoc);
 	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(&ProjectProfile, EndLoc);
 
-	if (vIsZero(ProjectedStart) || vIsZero(ProjectedEnd)) { return nullptr; }
+	if (vIsZero(ProjectedStart) || vIsZero(ProjectedEnd)) { return false; }
 
 	NavOffMeshConnection NewConnectionDef;
 	NewConnectionDef.NavMeshIndex = TargetNavMesh;
@@ -530,32 +571,64 @@ NavOffMeshConnection* AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh,
 	UTIL_VecGoldSrcToDetour(ProjectedStart, ConvProjectedStart);
 	UTIL_VecGoldSrcToDetour(ProjectedEnd, ConvProjectedEnd);
 
-	dtOffMeshConnectionRef ref = 0;
+	dtOffMeshConnectionRef dtRef = 0;
 	NewConnectionDef.ConnectionRef = 0;
 
-	dtStatus AddStatus = FoundMesh->TileCacheRef->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 18.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &ref);
+	dtStatus AddStatus = FoundMesh->TileCacheRef->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 18.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &dtRef);
 
 	if (dtStatusSucceed(AddStatus))
 	{
-		NewConnectionDef.ConnectionRef = (unsigned int)ref;
+		const uint32_t NewConnectionId = static_cast<uint32_t>(dtRef);
 
-		FoundMesh->MeshConnections.push_back(NewConnectionDef);
+		NewConnectionDef.ConnectionRef = NewConnectionId;
 
-		return &(*prev(FoundMesh->MeshConnections.end()));
+		auto InsertResult = FoundMesh->MeshConnections.try_emplace(NewConnectionId, NewConnectionDef);
+
+		if (!InsertResult.second)
+		{
+			return false;
+		}
+
+		OutHandle.ConnectionId = NewConnectionId;
+		OutHandle.Generation = CurrentNavMeshGeneration;
+		OutHandle.MeshIndex = TargetNavMesh;
+
+		FoundMesh->RefreshOffMeshConnectionHandles();
+
+		return true;
 	}
 
-	return nullptr;
+	return false;
 }
 
-bool AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const EAINavMovementFlag NewFlag)
+bool AIMESH_ModifyOffMeshConnectionFlag(OffMeshConnectionHandle& ConnectionHandle, const EAINavMovementFlag NewFlag)
 {
 	// Don't do anything if the connection is invalid, or already has the desired flags set
-	if (!Connection || !Connection->IsValid()) { return false; }
-	if (Connection->ConnectionFlags == NewFlag) { return true; }
+	if (!ConnectionHandle.IsValid())
+	{
+		ConnectionHandle.Invalidate();
+
+		return false;
+	}
+
+	NavOffMeshConnection* Connection = ConnectionHandle.GetConnectionRef_Mutable();
+
+	if (!Connection)
+	{
+		ConnectionHandle.Invalidate();
+
+		return false;
+	}
 
 	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(Connection->NavMeshIndex);
 
-	if (!ParentMesh) { return false; }
+	if (!ParentMesh)
+	{
+		ConnectionHandle.Invalidate();
+		return false;
+	}
+
+	if (Connection->ConnectionFlags == NewFlag) { return true; }
 
 	const dtStatus ModifyStatus = ParentMesh->TileCacheRef->modifyOffMeshConnection(Connection->ConnectionRef, static_cast<unsigned int>(NewFlag), ParentMesh->NavMeshRef);
 
@@ -565,53 +638,68 @@ bool AIMESH_ModifyOffMeshConnectionFlag(NavOffMeshConnection* Connection, const 
 	return true;
 }
 
-bool AIMESH_RemoveOffMeshConnection(NavOffMeshConnection* RemoveConnectionDef)
+bool AIMESH_RestoreDefaultOffMeshConnectionFlags(OffMeshConnectionHandle& ConnectionHandle)
 {
-	if (!RemoveConnectionDef || !RemoveConnectionDef->IsValid()) { return false; }
+	// Don't do anything if the connection is invalid, or already has the desired flags set
+	if (!ConnectionHandle.IsValid())
+	{
+		ConnectionHandle.Invalidate();
+		return false;
+	}
 
-	NavMesh* ParentNavMesh = AIMESH_GetNavMeshAtIndex(RemoveConnectionDef->NavMeshIndex);
+	const NavOffMeshConnection* Connection = ConnectionHandle.GetConnectionRef();
 
-	if (!ParentNavMesh) { return false; }
+	if (!Connection)
+	{
+		ConnectionHandle.Invalidate();
+		return false;
+	}
+
+	return AIMESH_ModifyOffMeshConnectionFlag(ConnectionHandle, Connection->DefaultConnectionFlags);
+}
+
+bool AIMESH_RemoveOffMeshConnection(OffMeshConnectionHandle& ConnectionHandle)
+{
+	if (!ConnectionHandle.IsValid())
+	{
+		ConnectionHandle.Invalidate();
+
+		return false;
+	}
+
+	NavMesh* ParentNavMesh = AIMESH_GetNavMeshAtIndex(ConnectionHandle.MeshIndex);
+
+	if (!ParentNavMesh)
+	{
+		ConnectionHandle.Invalidate();
+
+		return false;
+	}
+
+	const NavOffMeshConnection* RemoveConnectionDef = ConnectionHandle.GetConnectionRef();
+
+	if (!RemoveConnectionDef)
+	{
+		ConnectionHandle.Invalidate();
+
+		return false;
+	}
 
 	dtStatus RemoveStatus = ParentNavMesh->TileCacheRef->removeOffMeshConnection(RemoveConnectionDef->ConnectionRef);
 
 	if (dtStatusSucceed(RemoveStatus))
 	{
-		ParentNavMesh->RemoveOffMeshConnectionFromList(RemoveConnectionDef);
+		ParentNavMesh->RemoveOffMeshConnectionFromList(ConnectionHandle.ConnectionId);
+		ParentNavMesh->RefreshOffMeshConnectionHandles();
+
+		ConnectionHandle.Invalidate();
+
 		return true;
 	}
 	else
 	{
 		return false;
 	}
-}
-
-dtPolyRef AIMESH_GetNearestPolyRefForLocation(const NavAgentProfile* NavProfile, const Vector Location)
-{
-	if (!NavProfile) { return 0; }
-
-	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
-
-	if (!FoundMesh) { return 0; }
-
-	float dtLocation[3];
-	UTIL_VecGoldSrcToDetour(Location, dtLocation);
-
-	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
-
-	float dtSearchExtents[3] = { 50.0f, 50.0f, 50.0f };
-
-	dtPolyRef ResultPoly;
-	float dtNearestPoint[3] = { 0.0f, 0.0f, 0.0f };
-
-	dtStatus FindResult = FoundMesh->NavQueryRef->findNearestPoly(dtLocation, dtSearchExtents, m_navFilter, &ResultPoly, dtNearestPoint);
-
-	if (dtStatusSucceed(FindResult))
-	{
-		return ResultPoly;
-	}
-
-	return 0;
 }
 
 EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const Vector Location)
@@ -624,9 +712,9 @@ EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const 
 
 	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
 
-	Vector TraceHit = UTIL_GetTraceHitLocation(Location + Vector(0.0f, 0.0f, 10.0f), Location - Vector(0.0f, 0.0f, 500.0f));
+	const Vector TraceHit = UTIL_GetTraceHitLocation(Location + Vector(0.0f, 0.0f, 10.0f), Location - Vector(0.0f, 0.0f, 500.0f));
 
-	Vector PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
+	const Vector PointToProject = (TraceHit != g_vecZero) ? TraceHit : Location;
 
 	float dtLocation[3];
 	UTIL_VecGoldSrcToDetour(PointToProject, dtLocation);
@@ -634,7 +722,7 @@ EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const 
 	dtPolyRef FoundPoly;
 	float NavNearest[3];
 
-	dtStatus success = FoundMesh->NavQueryRef->findNearestPoly(PointToProject, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
+	const dtStatus success = FoundMesh->NavQueryRef->findNearestPoly(PointToProject, dtDefaultReachableExtents, m_navFilter, &FoundPoly, NavNearest);
 
 	if (dtStatusSucceed(success))
 	{
@@ -683,7 +771,7 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 		const Vector HitPosVector = UTIL_VecDetourToGoldSrc(HitPos);
 		const Vector HitNormVector = UTIL_VecDetourToGoldSrc(HitNorm);
 
-		Vector AdjustLocation = Location + (HitNormVector * AdjustDistance);
+		const Vector AdjustLocation = Location + (HitNormVector * AdjustDistance);
 
 		if (AIMESH_QuickTraceNavLine(NavProfile, Location, AdjustLocation, 0.1f))
 		{
@@ -702,7 +790,7 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 {
 	if (!NavProfile || MaxAcceptableDistance < 0.0f) { return false; }
 
-	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!FoundMesh) { return false; }
 
@@ -719,7 +807,7 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 	float dtStartNearest[3] = { 0.0f, 0.0f, 0.0f };
 	float dtEndNearest[3] = { 0.0f, 0.0f, 0.0f };
 
-	float MaxReachableExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
+	const float MaxReachableExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
 
 	dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
 
@@ -771,19 +859,16 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 
 Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult)
 {
-	HitResult->Clear();
-
-	if (!NavProfile)
+	if (HitResult)
 	{
-		return ZERO_VECTOR;
+		HitResult->Clear();
 	}
 
-	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+	if (!NavProfile) { return ZERO_VECTOR; }
 
-	if (!FoundMesh)
-	{
-		return ZERO_VECTOR;
-	}
+	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return ZERO_VECTOR; }
 
 	const dtQueryFilter* m_Filter = &NavProfile->Filters;
 
@@ -798,17 +883,21 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 	float dtStartNearest[3];
 	float dtEndNearest[3];
 
-	float MaxReachableExtents[3] = { 18.0f, 32.0f, 18.0f };
+	const float MaxReachableExtents[3] = { 18.0f, 32.0f, 18.0f };
 
-	dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
+	const dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly))
 	{
-		HitResult->bStartOffMesh = true;
+		if (HitResult)
+		{
+			HitResult->bStartOffMesh = true;
+		}
+
 		return ZERO_VECTOR;
 	}
 
-	dtStatus FoundEndPoly = FoundMesh->NavQueryRef->findNearestPoly(dtEndLocation, MaxReachableExtents, m_Filter, &EndPoly, dtEndNearest);
+	const dtStatus FoundEndPoly = FoundMesh->NavQueryRef->findNearestPoly(dtEndLocation, MaxReachableExtents, m_Filter, &EndPoly, dtEndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly))
 	{
@@ -818,10 +907,14 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
 	if (StartPoly == EndPoly)
 	{
-		HitResult->flFraction = 1.0f;
-		HitResult->bStartOffMesh = false;
-		HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
-		return HitResult->TraceEndPoint;
+		if (HitResult)
+		{
+			HitResult->flFraction = 1.0f;
+			HitResult->bStartOffMesh = false;
+			HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
+		}
+
+		return UTIL_VecDetourToGoldSrc(dtEndNearest);
 	}
 
 	dtPolyRef PolyPath[MAX_PATH_POLY];
@@ -832,30 +925,47 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 
 	FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
 
-	HitResult->flFraction = HitDist;
-	HitResult->bStartOffMesh = false;
+	if (HitResult)
+	{
+		HitResult->flFraction = HitDist;
+		HitResult->bStartOffMesh = false;
+	}
 
 	Vector HitLocation = ZERO_VECTOR;
 
 	if (HitDist >= 1.0f)
 	{
-		HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
-		return HitResult->TraceEndPoint;
+		const Vector Result = UTIL_VecDetourToGoldSrc(dtEndNearest);
+
+		if (HitResult)
+		{
+			HitResult->TraceEndPoint = Result;
+		}
+
+		return Result;
 	}
 
 	dtVlerp(dtEndNearest, dtStartNearest, dtEndNearest, HitDist);
 
-	HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
-	HitResult->HitNormal = UTIL_VecDetourToGoldSrc(HitNormal);
+	const Vector TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
+	const Vector HitNormalVector = UTIL_VecDetourToGoldSrc(HitNormal);
 
-	return HitResult->TraceEndPoint;
+	if (HitResult)
+	{
+		HitResult->TraceEndPoint = TraceEndPoint;
+		HitResult->HitNormal = HitNormalVector;
+	}
+
+	return TraceEndPoint;
 }
 
-NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area)
+NavTempObstacleHandle AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vector Position, float Radius, float Height, EAINavArea Area)
 {
+	NavTempObstacleHandle Result = NavTempObstacleHandle();
+
 	NavMesh* ParentNavMesh = AIMESH_GetNavMeshAtIndex(TargetNavMesh);
 
-	if (!ParentNavMesh) { return nullptr; }
+	if (!ParentNavMesh) { return Result; }
 
 	// Convert to Detour coordinate system, and adjust so position is the centre of the obstacle rather than bottom
 	float Pos[3] = { 0.0f, 0.0f, 0.0f };
@@ -865,9 +975,9 @@ NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vect
 	Pos[1] -= Height * 0.5f;
 
 	dtObstacleRef ObsRef = 0;
-	dtStatus status = ParentNavMesh->TileCacheRef->addObstacle(Pos, Radius, Height, static_cast<int>(Area), &ObsRef);
+	const dtStatus status = ParentNavMesh->TileCacheRef->addObstacle(Pos, Radius, Height, static_cast<int>(Area), &ObsRef);
 
-	if (!dtStatusSucceed(status) || ObsRef == 0) { return nullptr; }
+	if (!dtStatusSucceed(status) || ObsRef == 0) { return Result; }
 
 	NavTempObstacle NewObstacle;
 	NewObstacle.NavMeshIndex = TargetNavMesh;
@@ -877,31 +987,34 @@ NavTempObstacle* AIMESH_AddTemporaryObstacle(EAINavMeshIndex TargetNavMesh, Vect
 	NewObstacle.Area = Area;
 	NewObstacle.ObstacleRef = (unsigned int)ObsRef;
 
-	ParentNavMesh->TempObstacles.push_back(NewObstacle);
+	ParentNavMesh->TempObstacles.try_emplace(ObsRef, NewObstacle);
 
-	return &(*prev(ParentNavMesh->TempObstacles.end()));
+	Result.ObstacleId = (uint32_t)ObsRef;
+	Result.MeshIndex = TargetNavMesh;
+	Result.Generation = CurrentNavMeshGeneration;
+
+	return Result;
 }
 
-bool AIMESH_RemoveTemporaryObstacle(NavTempObstacle* ObstacleToRemove)
+bool AIMESH_RemoveTemporaryObstacle(NavTempObstacleHandle& ObstacleToRemove)
 {
-	if (!ObstacleToRemove || !ObstacleToRemove->IsValid()) { return false; }
+	if (!ObstacleToRemove.IsValid()) { return false; }
 
-	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(ObstacleToRemove->NavMeshIndex);
+	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(ObstacleToRemove.MeshIndex);
 
 	if (!ParentMesh)
 	{
-		ObstacleToRemove->Clear();
+		ObstacleToRemove.Invalidate();
 		return false;
 	}
 
-	dtStatus status = ParentMesh->TileCacheRef->removeObstacle(ObstacleToRemove->ObstacleRef);
+	dtStatus status = ParentMesh->TileCacheRef->removeObstacle(ObstacleToRemove.ObstacleId);
 
 	const bool bSuccessful = dtStatusSucceed(status);
 
 	if (bSuccessful)
 	{
 		ParentMesh->RemoveTempObstacleFromList(ObstacleToRemove);
-		ObstacleToRemove->Clear();
 	}
 
 	return bSuccessful;
@@ -1191,43 +1304,136 @@ void AIMESH_DEBUG_DrawTemporaryObstacles(EAINavMeshIndex MeshIndex, float DrawTi
 		}
 }
 
-void NavMesh::RemoveOffMeshConnectionFromList(NavOffMeshConnection* ConnectionToRemove)
+void NavMesh::RefreshOffMeshConnectionHandles()
 {
-	if (!ConnectionToRemove || !ConnectionToRemove->IsValid()) { return; }
-	const unsigned int ConnectionRef = ConnectionToRemove->ConnectionRef;
+	MeshConnectionHandles.clear();
 
-	for (auto it = MeshConnections.begin(); it != MeshConnections.end();)
+	for (auto it = MeshConnections.begin(); it != MeshConnections.end(); it++)
 	{
-		NavOffMeshConnection* CheckRef = &(*it);
+		const uint32_t ThisConnectionId = it->first;
+		NavOffMeshConnection* ThisConnection = &it->second;
 
-		if (!CheckRef || !CheckRef->IsValid() || CheckRef->ConnectionRef == ConnectionRef)
-		{
-			const bool bRemovedRequestedConnection = CheckRef && CheckRef->ConnectionRef == ConnectionRef;
-			it = MeshConnections.erase(it);
-			if (bRemovedRequestedConnection) { return; }
-		}
-		else
-		{
-			it++;
-		}
+		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+
+		OffMeshConnectionHandle NewHandle;
+		NewHandle.ConnectionId = ThisConnectionId;
+		NewHandle.Generation = CurrentNavMeshGeneration;
+		NewHandle.MeshIndex = MeshIndex;
+
+		MeshConnectionHandles.push_back(NewHandle);
 	}
 }
 
-void NavMesh::RemoveTempObstacleFromList(NavTempObstacle* ObstacleToRemove)
+void NavMesh::RemoveOffMeshConnectionFromList(uint32_t ConnectionId)
 {
-	if (!ObstacleToRemove) { return; }
+	if (ConnectionId == 0) { return; }
 
-	for (auto it = TempObstacles.begin(); it != TempObstacles.end();)
+	MeshConnections.erase(ConnectionId);
+}
+
+void NavMesh::RemoveTempObstacleFromList(NavTempObstacleHandle& ObstacleToRemove)
+{
+	if (!ObstacleToRemove.IsValid())
 	{
-		NavTempObstacle* CheckRef = &(*it);
-
-		if (CheckRef->ObstacleRef == ObstacleToRemove->ObstacleRef)
-		{
-			it = TempObstacles.erase(it);
-		}
-		else
-		{
-			it++;
-		}
+		ObstacleToRemove.Invalidate();
+		return;
 	}
+
+	if (MeshIndex != ObstacleToRemove.MeshIndex) { return; }
+
+	const uint32_t ObstacleIndex = ObstacleToRemove.ObstacleId;
+
+	ObstacleToRemove.Invalidate();
+
+	auto FoundObstacleIt = TempObstacles.find(ObstacleIndex);
+
+	if (FoundObstacleIt == TempObstacles.end()) { return; }
+
+	TempObstacles.erase(FoundObstacleIt);
+}
+
+bool OffMeshConnectionHandle::IsValid() const
+{
+	return ConnectionId > 0 && Generation > 0 && Generation == CurrentNavMeshGeneration && IsValidNavMeshIndex(static_cast<int>(MeshIndex));
+}
+
+const NavOffMeshConnection* OffMeshConnectionHandle::GetConnectionRef() const
+{
+	if (!IsValid()) { return nullptr; }
+
+	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!ParentMesh || !ParentMesh->IsValid()) { return nullptr; }
+
+	auto FoundConnectionIt = ParentMesh->MeshConnections.find(ConnectionId);
+
+	if (FoundConnectionIt == ParentMesh->MeshConnections.end()) { return nullptr; }
+
+	const NavOffMeshConnection* FoundConnection = &FoundConnectionIt->second;
+
+	if (!FoundConnection || !FoundConnection->IsValid()) { return nullptr; }
+
+	return FoundConnection;
+}
+
+NavOffMeshConnection* OffMeshConnectionHandle::GetConnectionRef_Mutable() const
+{
+	if (!IsValid()) { return nullptr; }
+
+	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!ParentMesh || !ParentMesh->IsValid()) { return nullptr; }
+
+	auto FoundConnectionIt = ParentMesh->MeshConnections.find(ConnectionId);
+
+	if (FoundConnectionIt == ParentMesh->MeshConnections.end()) { return nullptr; }
+
+	NavOffMeshConnection* FoundConnection = &FoundConnectionIt->second;
+
+	if (!FoundConnection || !FoundConnection->IsValid()) { return nullptr; }
+
+	return FoundConnection;
+}
+
+bool NavTempObstacleHandle::IsValid() const
+{
+	return ObstacleId > 0 && Generation > 0 && Generation == CurrentNavMeshGeneration && IsValidNavMeshIndex(static_cast<int>(MeshIndex));
+}
+
+const NavTempObstacle* NavTempObstacleHandle::GetObstacleRef() const
+{
+	if (!IsValid()) { return nullptr; }
+
+	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!ParentMesh || !ParentMesh->IsValid()) { return nullptr; }
+
+	auto FoundObstacleIt = ParentMesh->TempObstacles.find(ObstacleId);
+
+	if (FoundObstacleIt == ParentMesh->TempObstacles.end()) { return nullptr; }
+
+	const NavTempObstacle* FoundObstacle = &FoundObstacleIt->second;
+
+	if (!FoundObstacle || !FoundObstacle->IsValid()) { return nullptr; }
+
+	return FoundObstacle;
+}
+
+NavTempObstacle* NavTempObstacleHandle::GetObstacleRef_Mutable() const
+{
+	if (!IsValid()) { return nullptr; }
+
+	NavMesh* ParentMesh = AIMESH_GetNavMeshAtIndex(MeshIndex);
+
+	if (!ParentMesh || !ParentMesh->IsValid()) { return nullptr; }
+
+	auto FoundObstacleIt = ParentMesh->TempObstacles.find(ObstacleId);
+
+	if (FoundObstacleIt == ParentMesh->TempObstacles.end()) { return nullptr; }
+
+	NavTempObstacle* FoundObstacle = &FoundObstacleIt->second;
+
+	if (!FoundObstacle || !FoundObstacle->IsValid()) { return nullptr; }
+
+	return FoundObstacle;
 }

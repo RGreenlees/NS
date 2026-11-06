@@ -189,13 +189,13 @@ inline bool IsValidNavMeshIndex(int CheckIndex)
 		&& CheckIndex < static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 }
 
-// Hints are locations placed on the nav mesh to influence and guide the bot. For example, "good ambush point".
+// Hints are optional locations placed on the nav mesh to influence and guide the bot. For example, "good ambush point".
 // See the nav constants header for all nav hint types.
 struct NavHint
 {
 	EAINavMeshIndex NavMeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
 	unsigned int HintTypes = 0;
-	Vector Position;
+	Vector Position = g_vecZero;
 };
 typedef std::vector<NavHint> NavHintList;
 
@@ -206,7 +206,7 @@ struct NavOffMeshConnection
 	Vector ToLocation = g_vecZero; // The end point of the connection
 	EAINavMovementFlag ConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // The type of connection it is
 	EAINavMovementFlag DefaultConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // If this connection is being temporarily modified, what it should normally be
-	unsigned int ConnectionRef = 0; // References to this connection on all defined nav meshes
+	uint32_t ConnectionRef = 0; // References to this connection on all defined nav meshes
 	edict_t* LinkedObject = nullptr;
 
 	bool IsValid() const
@@ -214,7 +214,7 @@ struct NavOffMeshConnection
 		return ConnectionRef > 0 && IsValidNavMeshIndex(static_cast<int>(NavMeshIndex));
 	}
 };
-typedef std::list<NavOffMeshConnection> OffMeshConnectionList;
+typedef std::unordered_map<uint32_t, NavOffMeshConnection> OffMeshConnectionList;
 
 // A temporary obstacle is a shape placed on the map during play which affects the area it covers, changing the movement flags on it.
 // For example, a temporary obstacle with an area type of NULL would cut a hole in the nav mesh, e.g. a door is permanently welded shut.
@@ -228,7 +228,7 @@ struct NavTempObstacle
 	EAINavArea Area = EAINavArea::NAV_AREA_NULL; // The area to mark on the nav mesh
 	unsigned int ObstacleRef = 0; // The reference to the obstacle within Detour
 
-	bool IsValid()
+	bool IsValid() const
 	{
 		return IsValidNavMeshIndex(static_cast<int>(NavMeshIndex)) && ObstacleRef > 0;
 	}
@@ -240,7 +240,7 @@ struct NavTempObstacle
 		ObstacleRef = 0;
 	}
 };
-typedef std::list<NavTempObstacle> NavTempObstacleList;
+typedef std::unordered_map<uint32_t, NavTempObstacle> NavTempObstacleList;
 
 // Retrieve appropriate flag for area (See process() in the MeshProcess struct)
 inline EAINavMovementFlag GetFlagForArea(EAINavArea Area)

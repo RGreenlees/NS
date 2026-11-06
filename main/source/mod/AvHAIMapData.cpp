@@ -17,7 +17,14 @@
 #include <dlls/cbase.h>       // Core base entity classes (CBaseEntity)
 #include "AvHAIPlayerUtil.h"
 
-std::vector<DynamicMapObject> DynamicMapObjects;
+// Be very careful if you're access this directly, prefer to use the handles array where possible
+std::unordered_map<uint32_t, DynamicMapObject> DynamicMapObjects;
+
+// The safe list of dynamic map objects for external access
+std::vector<DynamicMapObjectHandle> DynamicMapObjectHandles;
+
+uint32_t NextDynamicObjectIndex = 1;
+extern uint32_t CurrentNavMeshGeneration;
 
 static const int DOOR_START_OPEN = 1;
 static const int DOOR_USE_ONLY = 256; // Flag used by GoldSrc to determine if a door entity can only be used to open (i.e. can't be triggered)
@@ -79,7 +86,29 @@ bool AIMAP_PopulateDynamicMapObjects()
 		AIMAP_PopulateDynamicBreakableObject(theEntity->edict());
 	END_FOR_ALL_ENTITIES("func_breakable")
 
+	AIMAP_RefreshDynamicHandleList();
+
 	return true;
+}
+
+void AIMAP_RefreshDynamicHandleList()
+{
+	DynamicMapObjectHandles.clear();
+
+	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
+	{
+		const uint32_t ObjectId = it->first;
+		const DynamicMapObject* ThisObject = &it->second;
+
+		if (!ThisObject || !ThisObject->IsValid()) { continue; }
+
+		DynamicMapObjectHandle NewHandle;
+		NewHandle.ObjectId = ObjectId;
+		NewHandle.Generation = CurrentNavMeshGeneration;
+
+		DynamicMapObjectHandles.push_back(NewHandle);
+
+	}
 }
 
 bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
@@ -92,6 +121,7 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = DoorRef;
 	NewObject.EdictIndex = ENTINDEX(DoorObject);
 	NewObject.Edict = DoorObject;
@@ -145,7 +175,9 @@ bool AIMAP_PopulateDynamicDoorObject(edict_t* DoorObject)
 		NewObject.Targets.push_back(Target->edict());
 	}
 
-	DynamicMapObjects.push_back(NewObject);
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
+
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -160,6 +192,7 @@ bool AIMAP_PopulateDynamicTrainObject(edict_t* TrainObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = TrainRef;
 	NewObject.EdictIndex = ENTINDEX(TrainObject);
 	NewObject.Edict = TrainObject;
@@ -198,7 +231,9 @@ bool AIMAP_PopulateDynamicTrainObject(edict_t* TrainObject)
 		NewObject.Targets.push_back(Target->edict());
 	}
 
-	DynamicMapObjects.push_back(NewObject);
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
+
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -289,6 +324,7 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = PlatRef;
 	NewObject.EdictIndex = ENTINDEX(PlatObject);
 	NewObject.Edict = PlatObject;
@@ -343,7 +379,9 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 		NewObject.Targets.push_back(Target->edict());
 	}
 
-	DynamicMapObjects.push_back(NewObject);
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
+
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -358,6 +396,7 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = ButtonRef;
 	NewObject.EdictIndex = ENTINDEX(ButtonObject);
 	NewObject.Edict = ButtonObject;
@@ -398,17 +437,12 @@ bool AIMAP_PopulateDynamicButtonObject(edict_t* ButtonObject)
 	SecondStop.bWaitForRetrigger = (NewObject.Edict->v.spawnflags & SF_DOOR_NO_AUTO_RETURN);
 
 	NewObject.StopPoints.push_back(SecondStop);
-
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
-
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
-	if (CBaseEntity* Target = ButtonRef->GetNextTarget())
-	{
-		NewObject.Targets.push_back(Target->edict());
-	}
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
 
-	DynamicMapObjects.push_back(NewObject);
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -423,6 +457,7 @@ bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = WeldableRef;
 	NewObject.EdictIndex = ENTINDEX(WeldableObject);
 	NewObject.Edict = WeldableObject;
@@ -430,19 +465,13 @@ bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject)
 	NewObject.Triggers.clear();
 	NewObject.Wait = 0.0f;
 	NewObject.Delay = WeldableRef->GetDelay();
-
 	NewObject.Type = EAIDynamicMapObjectType::TRIGGER_WELD;
-
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
-
-	if (CBaseEntity* Target = WeldableRef->GetNextTarget())
-	{
-		NewObject.Targets.push_back(Target->edict());
-	}
-
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
 
-	DynamicMapObjects.push_back(NewObject);
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
+
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -457,6 +486,7 @@ bool AIMAP_PopulateDynamicTriggerObject(edict_t* TriggerObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = TriggerRef;
 	NewObject.EdictIndex = ENTINDEX(TriggerObject);
 	NewObject.Edict = TriggerObject;
@@ -472,19 +502,13 @@ bool AIMAP_PopulateDynamicTriggerObject(edict_t* TriggerObject)
 	NewObject.Triggers.clear();
 	NewObject.Wait = TriggerRef->m_flWait;
 	NewObject.Delay = TriggerRef->m_flDelay;
-
 	NewObject.Type = EAIDynamicMapObjectType::TRIGGER_TOUCH;
-
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
-
-	if (CBaseEntity* Target = TriggerRef->GetNextTarget())
-	{
-		NewObject.Targets.push_back(Target->edict());
-	}
-
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
 
-	DynamicMapObjects.push_back(NewObject);
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
+
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -499,6 +523,7 @@ bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject)
 
 	DynamicMapObject NewObject;
 
+	NewObject.ObjectId = NextDynamicObjectIndex;
 	NewObject.ObjectRef = BreakableRef;
 	NewObject.EdictIndex = ENTINDEX(BreakableObject);
 	NewObject.Edict = BreakableObject;
@@ -509,12 +534,9 @@ bool AIMAP_PopulateDynamicBreakableObject(edict_t* BreakableObject)
 
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 
-	if (CBaseEntity* Target = BreakableRef->GetNextTarget())
-	{
-		NewObject.Targets.push_back(Target->edict());
-	}
+	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
 
-	DynamicMapObjects.push_back(NewObject);
+	NextDynamicObjectIndex++;
 
 	return true;
 }
@@ -577,22 +599,41 @@ void AIMAP_UpdateDynamicMapObjects()
 {
 	if (DynamicMapObjects.empty()) { return; }
 
+	bool bListModified = false;
+
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end();)
 	{
-		DynamicMapObject* ThisObject = &(*it);
+		DynamicMapObject* ThisObject = &it->second;
 
 		if (!ThisObject)
 		{
 			it = DynamicMapObjects.erase(it);
+			bListModified = true;
 			continue;
 		}
 
 		if (!ThisObject->IsValid())
 		{
+			std::vector<DynamicMapObject*> LinkedObjects = AIMAP_GetDynamicObjectsLinkedToTrigger(ThisObject->Edict);
+
+			for (auto it = ThisObject->Targets.begin(); it != ThisObject->Targets.end(); it++)
+			{
+				DynamicMapObjectHandle FoundObjectHandle = AIMAP_GetDynamicObjectByEdict(*it);
+
+				if (!FoundObjectHandle.IsValid()) { continue; }
+
+				DynamicMapObject* TargetObject = FoundObjectHandle.GetObjectRef_Mutable();
+
+				if (!TargetObject || !TargetObject->IsValid()) { continue; }
+
+				AIMAP_ForceRefreshDynamicObjectConnections(TargetObject);
+			}
+
 			ThisObject->ClearTemporaryObstacles();
 			ThisObject->UndoOffMeshConnectionChanges();
 
 			it = DynamicMapObjects.erase(it);
+			bListModified = true;
 			continue;
 		}
 
@@ -644,6 +685,11 @@ void AIMAP_UpdateDynamicMapObjects()
 		}
 
 		++it;
+	}
+
+	if (bListModified)
+	{
+		AIMAP_RefreshDynamicHandleList();
 	}
 }
 
@@ -963,7 +1009,123 @@ void AIMAP_UpdateDynamicWeldableObject(DynamicMapObject* WeldableObject)
 	}
 }
 
-const DynamicMapObject* AIMAP_TraceForDynamicObject(const Vector& TraceFrom, const Vector& TraceTo)
+DynamicMapObjectHandle AIMAP_GetBestTriggerForObject_Internal(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const Vector& ActivateLocation)
+{
+	DynamicMapObjectHandle NullHandle = DynamicMapObjectHandle();
+
+	if (!NavProfile || !NavProfile->IsValid()) { return NullHandle; }
+	if (vIsZero(ActivateLocation)) { return NullHandle; }
+	if (!ObjectToActivate || !ObjectToActivate->IsValid()) { return NullHandle; }
+
+	if (ObjectToActivate->GetNumTriggers() == 0) { return NullHandle; }
+
+	DynamicMapObjectHandle WinningHandle = DynamicMapObjectHandle();
+	const DynamicMapObject* WinningTrigger = nullptr;
+
+	Vector FromLoc = ActivateLocation;
+
+	float MinDist = FLT_MAX;
+
+	// This object is triggered by itself, such as a door set to USE_ONLY or a func_plat which needs to be touched to activate
+	if (ObjectToActivate->Triggers.size() == 1 && ObjectToActivate->Triggers[0] == ObjectToActivate->Edict)
+	{
+		return AIMAP_GetDynamicObjectByEdict(ObjectToActivate->Triggers[0]);
+	}
+
+	for (auto it = ObjectToActivate->Triggers.begin(); it != ObjectToActivate->Triggers.end(); it++)
+	{
+		DynamicMapObjectHandle FoundObjectHandle = AIMAP_GetDynamicObjectByEdict(*it);
+
+		if (!FoundObjectHandle.IsValid()) { continue; }
+
+		const DynamicMapObject* ThisTrigger = FoundObjectHandle.GetObjectRef();
+
+		if (!ThisTrigger || !ThisTrigger->bIsActive || !ThisTrigger->IsValid()) { continue; }
+
+		// For triggers we can activate from a distance and are in our LOS, short-cut and add them to the list
+		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK)
+		{
+			TraceResult hit;
+
+			UTIL_TraceLine(ActivateLocation + Vector(0.0f, 0.0f, 5.0f), UTIL_GetCentreOfEntity(ThisTrigger->Edict), ignore_monsters, ignore_glass, nullptr, &hit);
+
+			if (hit.pHit == ThisTrigger->Edict)
+			{
+				float ThisDist = vDist3DSq(FromLoc, UTIL_GetCentreOfEntity(ThisTrigger->Edict));
+
+				if (ThisDist < MinDist)
+				{
+					WinningTrigger = ThisTrigger;
+					WinningHandle = FoundObjectHandle;
+					MinDist = ThisDist;
+				}
+
+				continue;
+			}
+		}
+
+		Vector TriggerLocation = AIMAP_GetButtonFloorLocation(NavProfile, FromLoc, ThisTrigger->Edict);
+
+		if (vIsZero(TriggerLocation))
+		{
+			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
+		}
+
+		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
+
+		if (!AINAV_IsPointReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
+
+		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
+		{
+			if (AIMAP_IsPathBlockedByObject(NavProfile, FromLoc, TriggerLocation, ObjectToActivate)) { continue; }
+		}
+		else
+		{
+			AvHAIPath CheckPath;
+
+			bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, &CheckPath, MaxDist);
+
+			if (!bFoundPath) { continue; }
+
+			bool bOtherSideOfLift = false;
+
+			for (int32 i = 0; i < CheckPath.GetPathSize(); i++)
+			{
+				const AvHAIPathNode* ThisPathNode = CheckPath.GetNodeAtIndex(i);
+
+				if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
+
+				if (EnumHasAnyFlags(ThisPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+				{
+					if (AIMAP_GetClosestPlatformToPoints(ThisPathNode->FromLocation, ThisPathNode->ToLocation) == ObjectToActivate)
+					{
+						bOtherSideOfLift = true;
+						break;
+					}
+				}
+			}
+
+			if (bOtherSideOfLift) { continue; }
+		}
+
+		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
+
+		// If we have an alternative trigger that doesn't require welding, then prefer that since it avoids locking out players without a welder
+		const bool bCanReplaceWeldTrigger = (WinningTrigger)
+			? (WinningTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD && ThisTrigger->Type != EAIDynamicMapObjectType::TRIGGER_WELD)
+			: true;
+
+		if (ThisDist < MinDist || bCanReplaceWeldTrigger)
+		{
+			WinningTrigger = ThisTrigger;
+			WinningHandle = FoundObjectHandle;
+		}
+	}
+
+	return WinningHandle;
+}
+
+DynamicMapObjectHandle AIMAP_TraceForDynamicObject(const Vector& TraceFrom, const Vector& TraceTo)
 {
 	TraceResult Hit;
 	UTIL_TraceHull(TraceFrom, TraceTo, ignore_monsters, head_hull, nullptr, &Hit);
@@ -985,17 +1147,22 @@ void AIMAP_OnTriggerActivated(DynamicMapObject* UsedObject)
 
 	for (auto it = UsedObject->Targets.begin(); it != UsedObject->Targets.end(); it++)
 	{
-		DynamicMapObject* TargetObject = AIMAP_GetDynamicObjectByEdict_Mutable((*it));
+		DynamicMapObjectHandle FoundObjectHandle = AIMAP_GetDynamicObjectByEdict(*it);
 
-		if (TargetObject)
-		{
-			AIMAP_OnTriggerActivated(TargetObject);
-		}
+		if (!FoundObjectHandle.IsValid()) { continue; }
+
+		DynamicMapObject* TargetObject = FoundObjectHandle.GetObjectRef_Mutable();
+
+		if (!TargetObject || !TargetObject->IsValid()) { continue; }
+
+		AIMAP_OnTriggerActivated(TargetObject);
 	}
 }
 
 void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, EAIDynamicMapObjectState NewState)
 {
+	if (!Object || !Object->IsValid()) { return; }
+
 	if (NewState == Object->State) { return; }
 
 	Object->State = NewState;
@@ -1011,24 +1178,46 @@ void AIMAP_SetDynamicObjectStatus(DynamicMapObject* Object, EAIDynamicMapObjectS
 	}
 }
 
-void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
+void AIMAP_ForceRefreshDynamicObjectConnections(DynamicMapObject* Object)
 {
 	if (!Object || !Object->IsValid()) { return; }
 
-	// Object will not move again, so block off all connections permanently, and place null obstacles to block nav mesh
+	for (auto it = Object->Targets.begin(); it != Object->Targets.end(); it++)
+	{
+		DynamicMapObjectHandle FoundObjectHandle = AIMAP_GetDynamicObjectByEdict(*it);
+
+		if (!FoundObjectHandle.IsValid()) { continue; }
+
+		DynamicMapObject* TargetObject = FoundObjectHandle.GetObjectRef_Mutable();
+
+		if (!TargetObject || !TargetObject->IsValid()) { continue; }
+
+		AIMAP_ForceRefreshDynamicObjectConnections(TargetObject);
+	}
+
+	Object->UndoOffMeshConnectionChanges();
+
+	if (Object->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING) { return; }
+
+	if (Object->StopPoints.empty()) { return; }
+
 	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_STATIC)
 	{
-		AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_NULL);
-
-		if (Object->StopPoints.empty()) { return; }
-
 		int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
-		for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end(); it++)
+		for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
 		{
-			NavOffMeshConnection* ThisConnection = (*it);
+			OffMeshConnectionHandle& ThisConnectionHandle = (*it);
 
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_DISABLED);
+			if (!ThisConnectionHandle.IsValid())
+			{
+				it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
+				continue;
+			}
+
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
+
+			++it;
 		}
 
 		return;
@@ -1046,25 +1235,116 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 
 	NavAgentProfile TestProfile = *DefaultBase;
 
-	for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end(); it++)
+	for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
 	{
-		NavOffMeshConnection* ThisConnection = (*it);
+		OffMeshConnectionHandle& ThisConnectionHandle = (*it);
 
-		TestProfile.MeshIndex = ThisConnection->NavMeshIndex;
-
-		const DynamicMapObject* ThisTrigger = AIMAP_GetBestTriggerForObject(&TestProfile, Object, ThisConnection->FromLocation);
-
-		if (!ThisTrigger)
+		if (!ThisConnectionHandle.IsValid())
 		{
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_DISABLED);
-			return;
+			it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
+			continue;
 		}
 
-		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD)
+		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
+
+		if (!ThisConnection)
 		{
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, EAINavMovementFlag::NAV_FLAG_WELD);
-			return;
+			it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
+			continue;
 		}
+
+		DynamicMapObjectHandle ThisTriggerHandle = AIMAP_GetBestTriggerForObject_Internal(&TestProfile, Object, ThisConnection->FromLocation);
+
+		const DynamicMapObject* ThisTrigger = ThisTriggerHandle.GetObjectRef();
+
+		if (!ThisTrigger || !ThisTrigger->IsValid())
+		{
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
+		}
+		else if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD)
+		{
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_WELD);
+		}
+
+		++it;
+	}
+}
+
+void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
+{
+	if (!Object || !Object->IsValid()) { return; }
+
+	// Object will not move again, so block off all connections permanently, and place null obstacles to block nav mesh
+	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_STATIC)
+	{
+		AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_NULL);
+
+		if (Object->StopPoints.empty()) { return; }
+
+		int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
+
+		for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
+		{
+			OffMeshConnectionHandle& ThisConnectionHandle = (*it);
+
+			if (!ThisConnectionHandle.IsValid())
+			{
+				it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
+				continue;
+			}
+
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
+
+			++it;
+		}
+
+		return;
+	}
+
+	if (Object->StopPoints.empty()) { return; }
+
+	// Door is not permanently blocking anything and can still be activated. We need to do a more nuanced take on how connections are modified
+	// The idea is that if a connection is one-way, we detect how we can activate the door from that side and modify the connection flag accordingly
+	// Two-way connections will end up being treated like a one-way connection, so use 2 one-way connections if a door requires different capabilities for each side!
+
+	const int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
+
+	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
+
+	NavAgentProfile TestProfile = *DefaultBase;
+
+	for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
+	{
+		OffMeshConnectionHandle& ThisConnectionHandle = (*it);
+
+		if (!ThisConnectionHandle.IsValid())
+		{
+			it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
+			continue;
+		}
+
+		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
+
+		if (!ThisConnection)
+		{
+			it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
+			continue;
+		}
+
+		DynamicMapObjectHandle ThisTriggerHandle = AIMAP_GetBestTriggerForObject_Internal(&TestProfile, Object, ThisConnection->FromLocation);
+
+		const DynamicMapObject* ThisTrigger = ThisTriggerHandle.GetObjectRef();
+
+		if (!ThisTrigger || !ThisTrigger->IsValid())
+		{
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
+		}
+		else if(ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD)
+		{
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_WELD);
+		}
+
+		++it;
 	}
 }
 
@@ -1078,7 +1358,7 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 {
 	for (auto objectIt = DynamicMapObjects.begin(); objectIt != DynamicMapObjects.end(); objectIt++)
 	{
-		DynamicMapObject* ThisObject = &(*objectIt);
+		DynamicMapObject* ThisObject = &objectIt->second;
 
 		if (!ThisObject) { continue; }
 
@@ -1114,9 +1394,9 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 			case EAIDynamicMapObjectType::TRIGGER_BREAK:
 			case EAIDynamicMapObjectType::TRIGGER_WELD:
 			{
-				for (auto targetsIt = DynamicMapObjects.begin(); targetsIt != DynamicMapObjects.end(); targetsIt++)
+				for (auto TargetsIt = DynamicMapObjects.begin(); TargetsIt != DynamicMapObjects.end(); TargetsIt++)
 				{
-					DynamicMapObject* OtherObject = &(*targetsIt);
+					DynamicMapObject* OtherObject = &TargetsIt->second;
 
 					if (OtherObject == ThisObject) { continue; }
 
@@ -1124,6 +1404,7 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 					if (AIMAP_IsDynamicMapTriggerLinkedToObject(ThisObject->Edict, OtherObject->Edict, CheckedObjects))
 					{
 						OtherObject->Triggers.push_back(ThisObject->Edict);
+						ThisObject->Targets.push_back(OtherObject->Edict);
 					}
 				}
 			}
@@ -1147,9 +1428,13 @@ void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 
 		if (!FoundNavMesh) { continue; }
 
-		for (auto it = FoundNavMesh->MeshConnections.begin(); it != FoundNavMesh->MeshConnections.end(); it++)
+		for (auto it = FoundNavMesh->MeshConnectionHandles.begin(); it != FoundNavMesh->MeshConnectionHandles.end(); it++)
 		{
-			NavOffMeshConnection* ThisConnection = &(*it);
+			const OffMeshConnectionHandle& ThisConnectionHandle = (*it);
+
+			if (!ThisConnectionHandle.IsValid()) { continue; }
+
+			NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef_Mutable();
 
 			if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
@@ -1170,19 +1455,23 @@ void AIMAP_SetTrainStartPoints()
 {
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
+		DynamicMapObject* ThisObject = &it->second;
+
+		if (!ThisObject) { continue; }
+
 		// We are only interested in trains which have more than 2 stop points and are using path corners.
 		// If the train is acting like a regular up/down lift then we will just treat it like a regular platform.
-		if (it->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN
-			|| it->StopPoints.size() <= 2
-			|| it->Targets.size() == 0) { continue; }
+		if (ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN
+			|| ThisObject->StopPoints.size() <= 2
+			|| ThisObject->Targets.size() == 0) { continue; }
 
 
-		edict_t* TargetEdict = it->Targets[0];
+		edict_t* TargetEdict = ThisObject->Targets[0];
 		const char* TargetEdictName = STRING(TargetEdict->v.targetname);
 
 		int CurrIndex = 0;
 
-		for (auto stopIt = it->StopPoints.begin(); stopIt != it->StopPoints.end(); stopIt++)
+		for (auto stopIt = ThisObject->StopPoints.begin(); stopIt != ThisObject->StopPoints.end(); stopIt++)
 		{
 			if (stopIt->CornerEdict == TargetEdict)
 			{
@@ -1192,11 +1481,11 @@ void AIMAP_SetTrainStartPoints()
 			CurrIndex++;
 		}
 
-		it->NextStopIndex = CurrIndex + 1;
+		ThisObject->NextStopIndex = CurrIndex + 1;
 
-		if (it->NextStopIndex >= it->StopPoints.size())
+		if (ThisObject->NextStopIndex >= ThisObject->StopPoints.size())
 		{
-			it->NextStopIndex = 0;
+			ThisObject->NextStopIndex = 0;
 		}
 	}
 }
@@ -1246,9 +1535,14 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector
 			// Check that this path does not require us to go up the very platform we are checking for blockages
 			if (ThisPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
 			{
-				const DynamicMapObject* MovementObject = AIMAP_GetDynamicObjectByEdict(ThisPathNode->MovementObject);
+				DynamicMapObjectHandle RetrievedHandle = AIMAP_GetDynamicObjectByEdict(ThisPathNode->MovementObject);
 
-				if (MovementObject && MovementObject == SearchObject) { return true; }
+				if (RetrievedHandle.IsValid())
+				{
+					const DynamicMapObject* FoundObject = RetrievedHandle.GetObjectRef();
+
+					if (FoundObject == SearchObject) { return true; }
+				}
 			}
 
 			if (AIMAP_GetObjectBlockingPathPoint(ThisPathNode->FromLocation, ThisPathNode->ToLocation, ThisPathNode->MovementFlag, SearchObject, nullptr) != nullptr)
@@ -1287,11 +1581,15 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				const DynamicMapObject* ThisObject = &it->second;
 
-				if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+				if (!ThisObject) { continue; }
+
+				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
+
+				if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
-					return &(*it);
+					return ThisObject;
 				}
 			}
 		}
@@ -1307,11 +1605,15 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				const DynamicMapObject* ThisObject = &it->second;
 
-				if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+				if (!ThisObject) { continue; }
+
+				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
+
+				if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
-					return &(*it);
+					return ThisObject;
 				}
 			}
 		}
@@ -1332,11 +1634,15 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				const DynamicMapObject* ThisObject = &it->second;
 
-				if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+				if (!ThisObject) { continue; }
+
+				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
+
+				if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
-					return &(*it);
+					return ThisObject;
 				}
 			}
 		}
@@ -1352,11 +1658,15 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 		{
 			for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 			{
-				if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+				const DynamicMapObject* ThisObject = &it->second;
 
-				if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+				if (!ThisObject) { continue; }
+
+				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
+
+				if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
-					return &(*it);
+					return ThisObject;
 				}
 			}
 		}
@@ -1376,11 +1686,15 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 	{
 		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 		{
-			if (it->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+			const DynamicMapObject* ThisObject = &it->second;
 
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+			if (!ThisObject) { continue; }
+
+			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
+
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
-				return &(*it);
+				return ThisObject;
 			}
 		}
 	}
@@ -1484,15 +1798,19 @@ const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint
 
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
-		if (it->Type != EAIDynamicMapObjectType::MAPOBJECT_DOOR && it->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM && it->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN) { continue; }
+		const DynamicMapObject* ThisObject = &it->second;
+
+		if (!ThisObject) { continue; }
+
+		if (ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_DOOR && ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM && ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN) { continue; }
 
 		float distTopPoint = FLT_MAX;
 		float distBottomPoint = FLT_MAX;
 
-		for (auto stop = it->StopPoints.begin(); stop != it->StopPoints.end(); stop++)
+		for (auto stop = ThisObject->StopPoints.begin(); stop != ThisObject->StopPoints.end(); stop++)
 		{
-			distTopPoint = fminf(distTopPoint, vDist3D(UTIL_GetClosestPointOnEntityToLocation(StartPoint, it->Edict, (*stop).StopLocation), StartPoint));
-			distBottomPoint = fminf(distBottomPoint, vDist3D(UTIL_GetClosestPointOnEntityToLocation(EndPoint, it->Edict, (*stop).StopLocation), EndPoint));
+			distTopPoint = fminf(distTopPoint, vDist3D(UTIL_GetClosestPointOnEntityToLocation(StartPoint, ThisObject->Edict, (*stop).StopLocation), StartPoint));
+			distBottomPoint = fminf(distBottomPoint, vDist3D(UTIL_GetClosestPointOnEntityToLocation(EndPoint, ThisObject->Edict, (*stop).StopLocation), EndPoint));
 		}
 
 		// Get the average distance from our desired start and end points, whichever scores lowest is probably the lift/train/door we want to ride
@@ -1500,7 +1818,7 @@ const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint
 
 		if (!Result || thisDist < minDist)
 		{
-			Result = &(*it);
+			Result = ThisObject;
 			minDist = thisDist;
 		}
 	}
@@ -1508,14 +1826,18 @@ const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint
 	return Result;
 }
 
-const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* PathNode, const DynamicMapObject* IgnoreObject)
+DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* PathNode, const DynamicMapObjectHandle& IgnoreObjectHandle)
 {
-	if (!PathNode || !PathNode->IsValidMove() || PathNode->IsTeleportMove()) { return nullptr; }
+	DynamicMapObjectHandle NullHandle = DynamicMapObjectHandle();
+
+	if (!PathNode || !PathNode->IsValidMove() || PathNode->IsTeleportMove()) { return NullHandle; }
 
 	Vector FromLoc = PathNode->FromLocation;
 	Vector ToLoc = PathNode->ToLocation;
 
 	TraceResult doorHit;
+
+	const DynamicMapObject* IgnoreObject = IgnoreObjectHandle.GetObjectRef();
 
 	if (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_LADDER || PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_WALLCLIMB)
 	{
@@ -1523,24 +1845,32 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 		{
-			const DynamicMapObject* ThisObject = &(*it);
+			const DynamicMapObject* ThisObject = &it->second;
 
 			if (!ThisObject || !ThisObject->IsValid()) { continue; }
 
-			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && it->Edict == IgnoreObject->Edict)) { continue; }
+			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
-				return ThisObject;
+				DynamicMapObjectHandle Result;
+				Result.ObjectId = it->first;
+				Result.Generation = CurrentNavMeshGeneration;
+
+				return Result;
 			}
 
-			if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+			if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
-				return ThisObject;
+				DynamicMapObjectHandle Result;
+				Result.ObjectId = it->first;
+				Result.Generation = CurrentNavMeshGeneration;
+
+				return Result;
 			}
 		}
 
-		return nullptr;
+		return NullHandle;
 	}
 
 	if (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_FALL)
@@ -1549,7 +1879,7 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 		{
-			const DynamicMapObject* ThisObject = &(*it);
+			const DynamicMapObject* ThisObject = &it->second;
 
 			if (!ThisObject || !ThisObject->IsValid()) { continue; }
 
@@ -1557,16 +1887,24 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
-				return ThisObject;
+				DynamicMapObjectHandle Result;
+				Result.ObjectId = it->first;
+				Result.Generation = CurrentNavMeshGeneration;
+
+				return Result;
 			}
 
 			if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
-				return ThisObject;
+				DynamicMapObjectHandle Result;
+				Result.ObjectId = it->first;
+				Result.Generation = CurrentNavMeshGeneration;
+
+				return Result;
 			}
 		}
 
-		return nullptr;
+		return NullHandle;
 	}
 
 	Vector TargetLoc = FromLoc + (ToLoc - FromLoc) * 0.5f;
@@ -1574,37 +1912,53 @@ const DynamicMapObject* AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* P
 
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
-		const DynamicMapObject* ThisObject = &(*it);
+		const DynamicMapObject* ThisObject = &it->second;
 
 		if (!ThisObject || !ThisObject->IsValid()) { continue; }
 
 		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
-		if (vlineIntersectsAABB(FromLoc, TargetLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+		if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 		{
-			return ThisObject;
+			DynamicMapObjectHandle Result;
+			Result.ObjectId = it->first;
+			Result.Generation = CurrentNavMeshGeneration;
+
+			return Result;
 		}
 
-		if (vlineIntersectsAABB(TargetLoc, ToLoc, it->Edict->v.absmin, it->Edict->v.absmax))
+		if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 		{
-			return ThisObject;
+			DynamicMapObjectHandle Result;
+			Result.ObjectId = it->first;
+			Result.Generation = CurrentNavMeshGeneration;
+
+			return Result;
 		}
 	}
 
-	return nullptr;
+	return NullHandle;
 }
 
 void AIMAP_PopulateAllConnectionsAffectedByDynamicObjects()
 {
-	for (auto objectIt = DynamicMapObjects.begin(); objectIt != DynamicMapObjects.end(); objectIt++)
+	for (auto ObjectIt = DynamicMapObjects.begin(); ObjectIt != DynamicMapObjects.end(); ObjectIt++)
 	{
-		AIMAP_PopulateConnectionsAffectedByDynamicObject(&(*objectIt));
+		DynamicMapObject* ThisObject = &ObjectIt->second;
+
+		if (!ThisObject || !ThisObject->IsValid()) { continue; }
+
+		DynamicMapObjectHandle NewHandle = DynamicMapObjectHandle(ThisObject);
+
+		AIMAP_PopulateConnectionsAffectedByDynamicObject(NewHandle);
 	}
 }
 
-void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
+void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObjectHandle& ObjectHandle)
 {
-	if (!Object || FNullEnt(Object->Edict)) { return; }
+	if (!ObjectHandle.IsValid()) { return; }
+
+	DynamicMapObject* Object = ObjectHandle.GetObjectRef_Mutable();
 
 	const int InvalidIndex = static_cast<int>(EAINavMeshIndex::NAV_MESH_INVALID);
 
@@ -1633,28 +1987,36 @@ void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObject* Object)
 
 			Vector ObjectCentre = ThisStop->StopLocation;
 
-			for (auto it = FoundMesh->MeshConnections.begin(); it != FoundMesh->MeshConnections.end(); it++)
+			for (auto it = FoundMesh->MeshConnectionHandles.begin(); it != FoundMesh->MeshConnectionHandles.end(); it++)
 			{
-				NavOffMeshConnection* TestConnection = &(*it);
+				const OffMeshConnectionHandle& TestConnectionHandle = *it;
 
-				if (!TestConnection || !TestConnection->IsValid()) { continue; }
+				if (!TestConnectionHandle.IsValid()) { continue; }
 
-				if (AIMAP_IsOffMeshConnectionAffectedByObject(Object, ObjectCentre, TestConnection))
+				if (AIMAP_IsOffMeshConnectionAffectedByObject(ObjectHandle, ObjectCentre, TestConnectionHandle))
 				{
-					ThisStop->AffectedConnections.push_back(TestConnection);
+					ThisStop->AffectedConnections.push_back(TestConnectionHandle);
 				}
 			}
 		}
 	}
 }
 
-bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObject, const Vector& ObjectPosition, const NavOffMeshConnection* Connection)
+bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObjectHandle& TestObjectHandle, const Vector& ObjectPosition, const OffMeshConnectionHandle& ConnectionHandle)
 {
-	if (!TestObject || FNullEnt(TestObject->Edict) || !Connection) { return false; }
+	if (!TestObjectHandle.IsValid() || !ConnectionHandle.IsValid()) { return false; }
+
+	const NavOffMeshConnection* Connection = ConnectionHandle.GetConnectionRef();
+
+	if (!Connection) { return false; }
 
 	EAINavMovementFlag MovementTypes = static_cast<EAINavMovementFlag>(Connection->ConnectionFlags);
 
 	if (IsFlagTeleportType(MovementTypes)) { return false; }
+
+	const DynamicMapObject* TestObject = TestObjectHandle.GetObjectRef();
+
+	if (!TestObject) { return false; }
 
 	if (TestObject->Type == EAIDynamicMapObjectType::TRIGGER_TOUCH) { return false; }
 
@@ -1681,6 +2043,30 @@ bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObject* TestObjec
 	}
 
 	return false;
+}
+
+std::vector<DynamicMapObject*> AIMAP_GetDynamicObjectsLinkedToTrigger(edict_t* TriggerEdict)
+{
+	std::vector<DynamicMapObject*> Result;
+
+	if (!TriggerEdict || FNullEnt(TriggerEdict)) { return Result; }
+
+	for (auto TargetsIt = DynamicMapObjects.begin(); TargetsIt != DynamicMapObjects.end(); TargetsIt++)
+	{
+		DynamicMapObject* OtherObject = &TargetsIt->second;
+
+		if (!OtherObject || !OtherObject->IsValid()) { continue; }
+
+		if (OtherObject->Edict == TriggerEdict) { continue; }
+
+		vector<edict_t*> CheckedObjects;
+		if (AIMAP_IsDynamicMapTriggerLinkedToObject(TriggerEdict, OtherObject->Edict, CheckedObjects))
+		{
+			Result.push_back(OtherObject);
+		}
+	}
+
+	return Result;
 }
 
 bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* TargetObject, vector<edict_t*> CheckedObjects)
@@ -1801,10 +2187,14 @@ bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* Ta
 	{
 		for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 		{
-			if (it->Edict == TriggerObject) { continue; }
-			if (find(CheckedObjects.begin(), CheckedObjects.end(), it->Edict) != CheckedObjects.end()) { continue; }
+			const DynamicMapObject* ThisObject = &it->second;
 
-			CBaseToggle* ToggleObjectRef = dynamic_cast<CBaseToggle*>(CBaseEntity::Instance(it->Edict));
+			if (!ThisObject) { continue; }
+
+			if (ThisObject->Edict == TriggerObject) { continue; }
+			if (find(CheckedObjects.begin(), CheckedObjects.end(), ThisObject->Edict) != CheckedObjects.end()) { continue; }
+
+			CBaseToggle* ToggleObjectRef = dynamic_cast<CBaseToggle*>(CBaseEntity::Instance(ThisObject->Edict));
 
 			if (!ToggleObjectRef) { continue; }
 
@@ -1821,34 +2211,28 @@ bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* Ta
 	return false;
 }
 
-const DynamicMapObject* AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict)
+DynamicMapObjectHandle AIMAP_GetDynamicObjectByEdict(const edict_t* SearchEdict)
 {
-	if (FNullEnt(SearchEdict)) { return nullptr; }
+	DynamicMapObjectHandle NewHandle;
+
+	if (!SearchEdict || FNullEnt(SearchEdict)) { return NewHandle; }
 
 	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
 	{
-		if (it->Edict == SearchEdict)
+		const DynamicMapObject* ThisObject = &it->second;
+
+		if (!ThisObject) { continue; }
+
+		if (ThisObject->Edict == SearchEdict)
 		{
-			return &(*it);
+			NewHandle.ObjectId = it->first;
+			NewHandle.Generation = CurrentNavMeshGeneration;
+
+			return NewHandle;
 		}
 	}
 
-	return nullptr;
-}
-
-DynamicMapObject* AIMAP_GetDynamicObjectByEdict_Mutable(const edict_t* SearchEdict)
-{
-	if (FNullEnt(SearchEdict)) { return nullptr; }
-
-	for (auto it = DynamicMapObjects.begin(); it != DynamicMapObjects.end(); it++)
-	{
-		if (it->Edict == SearchEdict)
-		{
-			return &(*it);
-		}
-	}
-
-	return nullptr;
+	return NewHandle;
 }
 
 void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
@@ -1866,6 +2250,8 @@ void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
 	bool bUseXAxis = (SizeX >= SizeY);
 
 	float CylinderRadius = fminf(SizeX, SizeY) * 0.5f;
+
+	if (CylinderRadius < 1.0f) { return; }
 
 	float Ratio = (bUseXAxis) ? (SizeX / (CylinderRadius * 2.0f)) : (SizeY / (CylinderRadius * 2.0f));
 
@@ -1896,9 +2282,9 @@ void AIMAP_ApplyTempObstaclesToObject(DynamicMapObject* Object, EAINavArea Area)
 		{
 			const EAINavMeshIndex MeshIndex = static_cast<EAINavMeshIndex>(NavIndex);
 
-			NavTempObstacle* NewObstacle = AIMESH_AddTemporaryObstacle(MeshIndex, CurrentPoint, CylinderRadius, SizeZ, Area);
+			NavTempObstacleHandle NewObstacle = AIMESH_AddTemporaryObstacle(MeshIndex, CurrentPoint, CylinderRadius, SizeZ, Area);
 
-			if (NewObstacle)
+			if (NewObstacle.IsValid())
 			{
 				Object->TempObstacles.push_back(NewObstacle);
 			}
@@ -1919,7 +2305,7 @@ void AIMAP_RemoveAllTempObstaclesFromObject(DynamicMapObject* Object)
 {
 	if (!Object) { return; }
 
-	for (auto ObsIt = Object->TempObstacles.begin(); ObsIt != Object->TempObstacles.begin(); ObsIt++)
+	for (auto ObsIt = Object->TempObstacles.begin(); ObsIt != Object->TempObstacles.end(); ObsIt++)
 	{
 		AIMESH_RemoveTemporaryObstacle(*ObsIt);
 	}
@@ -1937,9 +2323,9 @@ void AIMAP_ClearCachedMapData()
 
 	for (auto ObjIt = DynamicMapObjects.begin(); ObjIt != DynamicMapObjects.end(); ObjIt++)
 	{
-		DynamicMapObject* ThisObject = &(*ObjIt);
+		DynamicMapObject* ThisObject = &ObjIt->second;
 
-		if (!ThisObject) { continue; }
+		if (!ThisObject || !ThisObject->IsValid()) { continue; }
 
 		ThisObject->UndoOffMeshConnectionChanges();
 		ThisObject->ClearTemporaryObstacles();
@@ -1948,20 +2334,28 @@ void AIMAP_ClearCachedMapData()
 	DynamicMapObjects.clear();
 }
 
-Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const Vector& RiderPosition, const DynamicMapObject* LiftReference)
+Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const Vector& RiderPosition, const DynamicMapObjectHandle& LiftObjectHandle)
 {
-	if (!LiftReference || !NavProfile) { return ZERO_VECTOR; }
+	if (!LiftObjectHandle.IsValid()) { return ZERO_VECTOR; }
 
-	const NavOffMeshConnection* NearestConnection = nullptr;
+	OffMeshConnectionHandle NearestConnectionHandle = OffMeshConnectionHandle();
 	float MinDist = 0.0f;
 
 	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!ChosenNavMesh) { return ZERO_VECTOR; }
 
-	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
+	const DynamicMapObject* LiftReference = LiftObjectHandle.GetObjectRef();
+
+	if (!LiftReference) { return ZERO_VECTOR; }
+
+	for (auto it = ChosenNavMesh->MeshConnectionHandles.begin(); it != ChosenNavMesh->MeshConnectionHandles.end(); it++)
 	{
-		const NavOffMeshConnection* ThisConnection = &(*it);
+		const OffMeshConnectionHandle& ThisConnectionHandle = *it;
+
+		if (!ThisConnectionHandle.IsValid()) { continue; }
+
+		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
@@ -1969,16 +2363,18 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 
 		if (ThisConnection->LinkedObject == LiftReference->Edict)
 		{
-			const float ThisDist = fminf(vDist3DSq(it->FromLocation, UTIL_GetClosestPointOnEntityToLocation(it->FromLocation, LiftReference->Edict)),
-									vDist3DSq(it->ToLocation, UTIL_GetClosestPointOnEntityToLocation(it->ToLocation, LiftReference->Edict)));
+			const float ThisDist = fminf(vDist3DSq(ThisConnection->FromLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference->Edict)),
+									vDist3DSq(ThisConnection->ToLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference->Edict)));
 
-			if (ThisDist < sqrf(100.0f) && (!NearestConnection || ThisDist < MinDist))
+			if (ThisDist < sqrf(100.0f) && (!NearestConnectionHandle.IsValid() || ThisDist < MinDist))
 			{
-				NearestConnection = ThisConnection;
+				NearestConnectionHandle = ThisConnectionHandle;
 				MinDist = ThisDist;
 			}
 		}
 	}
+
+	const NavOffMeshConnection* NearestConnection = NearestConnectionHandle.GetConnectionRef();
 
 	if (NearestConnection)
 	{
@@ -2038,18 +2434,28 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 	return ZERO_VECTOR;
 }
 
-const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* PlatformRef)
+OffMeshConnectionHandle AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObjectHandle& PlatformRefHandle)
 {
-	if (!NavProfile || !PlatformRef) { return nullptr; }
+	OffMeshConnectionHandle NullHandle = OffMeshConnectionHandle();
+
+	if (!NavProfile || !PlatformRefHandle.IsValid()) { return NullHandle; }
 
 	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
-	if (!ChosenNavMesh) { return nullptr; }
+	if (!ChosenNavMesh) { return NullHandle; }
+
+	const DynamicMapObject* PlatformRef = PlatformRefHandle.GetObjectRef();
+
+	if (!PlatformRef) { return NullHandle; }
 
 	// TODO: What about cases where multiple off-mesh connections are associated with this?
-	for (auto it = ChosenNavMesh->MeshConnections.begin(); it != ChosenNavMesh->MeshConnections.end(); it++)
+	for (auto it = ChosenNavMesh->MeshConnectionHandles.begin(); it != ChosenNavMesh->MeshConnectionHandles.end(); it++)
 	{
-		const NavOffMeshConnection* ThisConnection = &(*it);
+		OffMeshConnectionHandle ThisConnectionHandle = *it;
+
+		if (!ThisConnectionHandle.IsValid()) { continue; }
+
+		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
@@ -2057,11 +2463,11 @@ const NavOffMeshConnection* AIMAP_GetOffMeshConnectionForPlatform(const NavAgent
 
 		if (ThisConnection->LinkedObject == PlatformRef->Edict)
 		{
-			return ThisConnection;
+			return ThisConnectionHandle;
 		}
 	}
 
-	return nullptr;
+	return NullHandle;
 }
 
 bool AIMAP_CanBoardPlatform(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& BoardingPoint, const Vector& DesiredStop)
@@ -2080,9 +2486,13 @@ bool AIMAP_CanBoardPlatform(const NavAgentProfile* NavProfile, const DynamicMapO
 	return (!vIsZero(ProjectedLocation) && AINAV_IsPointDirectlyReachable(NavProfile, BoardingPoint, ProjectedLocation) && vDist2DSq(BoardingPoint, ProjectedLocation) <= sqrf(Dist + 16.0f));
 }
 
-bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const DynamicMapObject* Platform, const Vector& EmbarkPoint, const Vector& DisembarkPoint)
+bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const DynamicMapObjectHandle& PlatformHandle , const Vector& EmbarkPoint, const Vector& DisembarkPoint)
 {
-	if (!NavProfile || !NavProfile->IsValid() || !Platform || !Platform->IsValid()) { return false; }
+	if (!NavProfile || !NavProfile->IsValid() || !PlatformHandle.IsValid()) { return false; }
+
+	const DynamicMapObject* Platform = PlatformHandle.GetObjectRef();
+
+	if (!Platform) { return false; }
 
 	if (Platform->Triggers.size() <= 1 || Platform->Triggers[0] == Platform->Edict) { return false; }
 
@@ -2092,7 +2502,7 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 	DynamicMapObjectStop DesiredEmbarkStop;
 	DynamicMapObjectStop DesiredDisembarkStop;
 
-	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(Platform, EmbarkPoint, DisembarkPoint, DesiredEmbarkStop, DesiredDisembarkStop);
+	const bool bFoundStops = AIMAP_GetDesiredPlatformStops(PlatformHandle, EmbarkPoint, DisembarkPoint, DesiredEmbarkStop, DesiredDisembarkStop);
 
 	if (!bFoundStops) { return false; }
 
@@ -2144,9 +2554,11 @@ bool AIMAP_PlatformNeedsActivating(const NavAgentProfile* NavProfile, const Dyna
 	return false;
 }
 
-bool AIMAP_GetDesiredPlatformStops(const DynamicMapObject* PlatformRef, const Vector& EmbarkPoint, const Vector& DisembarkPoint, DynamicMapObjectStop& EmbarkStop, DynamicMapObjectStop& DisembarkStop)
+bool AIMAP_GetDesiredPlatformStops(const DynamicMapObjectHandle& PlatformHandle, const Vector& EmbarkPoint, const Vector& DisembarkPoint, DynamicMapObjectStop& EmbarkStop, DynamicMapObjectStop& DisembarkStop)
 {
-	if (!PlatformRef || !PlatformRef->IsValid()) { return false; }
+	const DynamicMapObject* PlatformRef = PlatformHandle.GetObjectRef();
+
+	if (!PlatformRef) { return false; }
 
 	float MinStartDist = FLT_MAX;
 	float MinEndDist = FLT_MAX;
@@ -2285,106 +2697,9 @@ Vector AIMAP_GetTriggerFloorLocation(const NavAgentProfile* NavProfile, const Dy
 	return NewButtonAccessPoint;
 }
 
-const DynamicMapObject* AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObject* ObjectToActivate, const Vector& ActivateLocation)
+DynamicMapObjectHandle AIMAP_GetBestTriggerForObject(const NavAgentProfile* NavProfile, const DynamicMapObjectHandle ObjectToActivateHandle, const Vector& ActivateLocation)
 {
-	if (!NavProfile || !NavProfile->IsValid()) { return nullptr; }
-	if (!ObjectToActivate || !ObjectToActivate->IsValid() || ObjectToActivate->GetNumTriggers() == 0) { return nullptr; }
-	if (vIsZero(ActivateLocation)) { return nullptr; }
-
-	const DynamicMapObject* WinningTrigger = nullptr;
-
-	Vector FromLoc = ActivateLocation;
-
-	float MinDist = FLT_MAX;
-
-	// This object is triggered by itself, such as a door set to USE_ONLY or a func_plat which needs to be touched to activate
-	if (ObjectToActivate->Triggers.size() == 1 && ObjectToActivate->Triggers[0] == ObjectToActivate->Edict) { return AIMAP_GetDynamicObjectByEdict(ObjectToActivate->Triggers[0]); }
-
-	for (auto it = ObjectToActivate->Triggers.begin(); it != ObjectToActivate->Triggers.end(); it++)
-	{
-		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
-
-		if (!ThisTrigger || !ThisTrigger->bIsActive) { continue; }
-
-		// For triggers we can activate from a distance and are in our LOS, short-cut and add them to the list
-		if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK)
-		{
-			TraceResult hit;
-
-			UTIL_TraceLine(ActivateLocation + Vector(0.0f, 0.0f, 5.0f), UTIL_GetCentreOfEntity(ThisTrigger->Edict), ignore_monsters, ignore_glass, nullptr, &hit);
-
-			if (hit.pHit == ThisTrigger->Edict)
-			{
-				float ThisDist = vDist3DSq(FromLoc, UTIL_GetCentreOfEntity(ThisTrigger->Edict));
-
-				if (ThisDist < MinDist)
-				{
-					WinningTrigger = ThisTrigger;
-					MinDist = ThisDist;
-				}
-
-				continue;
-			}
-		}
-
-		Vector TriggerLocation = AIMAP_GetButtonFloorLocation(NavProfile, FromLoc, ThisTrigger->Edict);
-
-		if (vIsZero(TriggerLocation))
-		{
-			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
-		}
-
-		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
-
-		if (!AINAV_IsPointReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
-
-		if (ObjectToActivate->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM)
-		{
-			if (AIMAP_IsPathBlockedByObject(NavProfile, FromLoc, TriggerLocation, ObjectToActivate)) { continue; }
-		}
-		else
-		{
-			AvHAIPath CheckPath;
-
-			bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, FromLoc, TriggerLocation, &CheckPath, MaxDist);
-
-			if (!bFoundPath) { continue; }
-
-			bool bOtherSideOfLift = false;
-
-			for (int32 i = 0; i < CheckPath.GetPathSize(); i++)
-			{
-				const AvHAIPathNode* ThisPathNode = CheckPath.GetNodeAtIndex(i);
-
-				if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
-
-				if (EnumHasAnyFlags(ThisPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
-				{
-					if (AIMAP_GetClosestPlatformToPoints(ThisPathNode->FromLocation, ThisPathNode->ToLocation) == ObjectToActivate)
-					{
-						bOtherSideOfLift = true;
-						break;
-					}
-				}
-			}
-
-			if (bOtherSideOfLift) { continue; }
-		}
-
-		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
-
-		// If we have an alternative trigger that doesn't require welding, then prefer that since it avoids locking out players without a welder
-		const bool bCanReplaceWeldTrigger = (WinningTrigger)
-			? (WinningTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD && ThisTrigger->Type != EAIDynamicMapObjectType::TRIGGER_WELD)
-			: true;
-
-		if (ThisDist < MinDist || bCanReplaceWeldTrigger)
-		{
-			WinningTrigger = ThisTrigger;
-		}
-	}
-
-	return WinningTrigger;
+	return AIMAP_GetBestTriggerForObject_Internal(NavProfile, ObjectToActivateHandle.GetObjectRef(), ActivateLocation);
 }
 
 void AIMAP_ForceActivateTrigger(const AvHAIPlayer* AIPlayer, const DynamicMapObject* TriggerObject)
@@ -2419,15 +2734,23 @@ void AIMAP_ForceActivateTrigger(const AvHAIPlayer* AIPlayer, const DynamicMapObj
 	}
 }
 
-const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapObject* Platform, float LiftHeight, const Vector& PlatformPosition)
+DynamicMapObjectHandle AIMAP_GetTriggerReachableFromPlatform(const DynamicMapObjectHandle& PlatformHandle, float LiftHeight, const Vector& PlatformPosition)
 {
-	if (!Platform || Platform->Triggers.size() == 0) { return nullptr; }
+	DynamicMapObjectHandle NullHandle = DynamicMapObjectHandle();
+
+	if (!PlatformHandle.IsValid()) { return NullHandle; }
+
+	const DynamicMapObject* Platform = PlatformHandle.GetObjectRef();
 
 	const Vector CheckPlatformLocation = (vIsZero(PlatformPosition)) ? UTIL_GetCentreOfEntity(Platform->Edict) : PlatformPosition;
 
 	for (auto it = Platform->Triggers.begin(); it != Platform->Triggers.end(); it++)
 	{
-		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
+		DynamicMapObjectHandle ThisTriggerHandle = AIMAP_GetDynamicObjectByEdict((*it));
+
+		if (!ThisTriggerHandle.IsValid()) { continue; }
+
+		const DynamicMapObject* ThisTrigger = ThisTriggerHandle.GetObjectRef();
 
 		if (!ThisTrigger || !ThisTrigger->bIsActive) { continue; }
 
@@ -2436,17 +2759,21 @@ const DynamicMapObject* AIMAP_GetTriggerReachableFromPlatform(const DynamicMapOb
 
 		if (vDist2DSq(ClosestPointOnButton, ClosestPointOnLift) < sqrf(max_player_use_reach - 32.0f) && fabsf(LiftHeight - ClosestPointOnButton.z) < 64.0f)
 		{
-			return ThisTrigger;
+			return ThisTriggerHandle;
 		}
 	}
 
-	return nullptr;
+	return NullHandle;
 }
 
-void DEBUG_PrintObjectInfo(const DynamicMapObject* Object)
+void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 {
 	char buf[511];
 	char interbuf[164];
+
+	const DynamicMapObject* Object = ObjectHandle.GetObjectRef();
+
+	if (!Object) { return; }
 
 	sprintf(buf, "Info for %s (%s):\n\n", (Object->Edict->v.targetname != 0) ? STRING(Object->Edict->v.targetname) : "Unnamed", STRING(Object->Edict->v.classname));
 
@@ -2536,9 +2863,13 @@ void DEBUG_PrintObjectInfo(const DynamicMapObject* Object)
 
 	for (auto it = Object->Triggers.begin(); it != Object->Triggers.end(); it++)
 	{
-		const DynamicMapObject* ThisTrigger = AIMAP_GetDynamicObjectByEdict((*it));
+		const DynamicMapObjectHandle FoundHandle = AIMAP_GetDynamicObjectByEdict(*it);
 
-		if (!ThisTrigger) { continue; }
+		if (!FoundHandle.IsValid()) { continue; }
+
+		const DynamicMapObject* ThisTrigger = FoundHandle.GetObjectRef();
+
+		if (!ThisTrigger || !ThisTrigger->IsValid()) { continue; }
 
 		sprintf(interbuf, "Trigger %s (%s):\n", (ThisTrigger->Edict->v.targetname != 0) ? STRING(ThisTrigger->Edict->v.targetname) : "Unnamed", STRING(ThisTrigger->Edict->v.classname));
 		strcat(buf, interbuf);
@@ -2607,9 +2938,7 @@ void DynamicMapObject::ClearTemporaryObstacles()
 {
 	for (auto ObsIt = TempObstacles.begin(); ObsIt != TempObstacles.end(); ObsIt++)
 	{
-		NavTempObstacle* ThisObstacle = (*ObsIt);
-
-		if (!ThisObstacle || !ThisObstacle->IsValid()) { continue; }
+		NavTempObstacleHandle& ThisObstacle = (*ObsIt);
 
 		AIMESH_RemoveTemporaryObstacle(ThisObstacle);
 	}
@@ -2621,13 +2950,68 @@ void DynamicMapObject::UndoOffMeshConnectionChanges()
 {
 	for (auto stopIt = StopPoints.begin(); stopIt != StopPoints.end(); stopIt++)
 	{
-		for (auto it = stopIt->AffectedConnections.begin(); it != stopIt->AffectedConnections.end(); it++)
+		for (auto it = stopIt->AffectedConnections.begin(); it != stopIt->AffectedConnections.end();)
 		{
-			NavOffMeshConnection* ThisConnection = (*it);
+			OffMeshConnectionHandle& ThisConnectionHandle = (*it);
 
-			if (!ThisConnection) { continue; }
+			if (!ThisConnectionHandle.IsValid())
+			{
+				it = stopIt->AffectedConnections.erase(it);
+				continue;
+			}
 
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnection, ThisConnection->DefaultConnectionFlags);
+			AIMESH_RestoreDefaultOffMeshConnectionFlags(ThisConnectionHandle);
+
+			++it;
 		}
 	}
+}
+
+DynamicMapObjectHandle::DynamicMapObjectHandle(const DynamicMapObject* ObjectRef)
+{
+	if (ObjectRef)
+	{
+		ObjectId = ObjectRef->ObjectId;
+		Generation = CurrentNavMeshGeneration;
+	}
+	else
+	{
+		ObjectId = 0;
+		Generation = 0;
+	}
+}
+
+bool DynamicMapObjectHandle::IsValid() const
+{
+	return ObjectId > 0 && Generation > 0 && Generation == CurrentNavMeshGeneration;
+}
+
+const DynamicMapObject* DynamicMapObjectHandle::GetObjectRef() const
+{
+	if (!IsValid()) { return nullptr; }
+
+	auto FoundObjectIt = DynamicMapObjects.find(ObjectId);
+
+	if (FoundObjectIt == DynamicMapObjects.end()) { return nullptr; }
+
+	const DynamicMapObject* FoundObject = &FoundObjectIt->second;
+
+	if (!FoundObject || !FoundObject->IsValid()) { return nullptr; }
+
+	return FoundObject;
+}
+
+DynamicMapObject* DynamicMapObjectHandle::GetObjectRef_Mutable() const
+{
+	if (!IsValid()) { return nullptr; }
+
+	auto FoundObjectIt = DynamicMapObjects.find(ObjectId);
+
+	if (FoundObjectIt == DynamicMapObjects.end()) { return nullptr; }
+
+	DynamicMapObject* FoundObject = &FoundObjectIt->second;
+
+	if (!FoundObject || !FoundObject->IsValid()) { return nullptr; }
+
+	return FoundObject;
 }

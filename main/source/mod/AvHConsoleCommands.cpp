@@ -1478,12 +1478,14 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		edict_t* HitEdict = Result.pHit;
 
-		const DynamicMapObject* BlockingObject = nullptr;
+		DynamicMapObjectHandle BlockingObjectHandle = DynamicMapObjectHandle();
 
 		if (!FNullEnt(HitEdict))
 		{
-			BlockingObject = AIMAP_GetDynamicObjectByEdict(HitEdict);
+			BlockingObjectHandle = AIMAP_GetDynamicObjectByEdict(HitEdict);
 		}
+
+		const DynamicMapObject* BlockingObject = BlockingObjectHandle.GetObjectRef();
 
 		if (BlockingObject)
 		{
