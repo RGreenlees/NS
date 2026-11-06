@@ -65,6 +65,9 @@ const AvHAISkillLevel* CONFIG_GetBotSkillLevel();
 
 EAIFillTiming CONFIG_GetBotFillTiming();
 
+// Returns how long the AI system should wait once a map is loaded before adding bots if no humans join
+float CONFIG_GetEmptyServerAITimeout();
+
 void CONFIG_RegenerateIniFile();
 
 void CONFIG_PopulateBotNames();

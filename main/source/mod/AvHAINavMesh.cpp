@@ -14,8 +14,6 @@
 
 #include "DetourNavMesh.h"
 #include "DetourCommon.h"
-#include "DetourTileCache.h"
-#include "DetourTileCacheBuilder.h"
 #include "DetourNavMeshBuilder.h"
 #include "fastlz/fastlz.c"
 #include "DetourAlloc.h"
@@ -47,7 +45,7 @@ struct FastLZCompressor : public dtTileCacheCompressor
 		unsigned char* buffer, const int maxBufferSize, int* bufferSize)
 	{
 		*bufferSize = fastlz_decompress(compressed, compressedSize, buffer, maxBufferSize);
-		return *bufferSize < 0 ? DT_FAILURE : DT_SUCCESS;
+		return *bufferSize <= 0 ? DT_FAILURE : DT_SUCCESS;
 	}
 };
 
@@ -114,6 +112,31 @@ struct MeshProcess : public dtTileCacheMeshProcess
 		}
 	}
 };
+
+void NavMesh::Clear()
+{
+	MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
+	dtFreeNavMesh(NavMeshRef);
+	dtFreeNavMeshQuery(NavQueryRef);
+	dtFreeTileCache(TileCacheRef);
+
+	NavMeshRef = nullptr;
+	NavQueryRef = nullptr;
+	TileCacheRef = nullptr;
+
+	delete TileCacheAllocator;
+	delete TileCacheCompressor;
+	delete TileCacheMeshProcess;
+
+	TileCacheAllocator = nullptr;
+	TileCacheCompressor = nullptr;
+	TileCacheMeshProcess = nullptr;
+
+	MeshConnections.clear();
+	MeshConnectionHandles.clear();
+	MeshHints.clear();
+	TempObstacles.clear();
+}
 
 EAINavMeshStatus AIMESH_GetNavMeshStatus()
 {
@@ -293,119 +316,103 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 
 	fseek(OpenedNavFile, fileHeader.tileCacheDataOffset, SEEK_SET);
 
-	LinearAllocator* m_talloc = new LinearAllocator(32000);
-	FastLZCompressor* m_tcomp = new FastLZCompressor;
-	MeshProcess* m_tmproc = new MeshProcess;
-
 	for (int i = 0; i < fileHeader.numTileCaches; i++)
 	{
 		fseek(OpenedNavFile, fileHeader.tileCacheOffsets[i], SEEK_SET);
 
-		NavMesh NewNavMesh;
+		ActiveNavMeshes.emplace_back();
+
+		NavMesh* NewNavMesh = &ActiveNavMeshes.back();
 
 		// More nav meshes than we were expecting.
 		if (!IsValidNavMeshIndex(i))
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 		}
 
-		NewNavMesh.MeshIndex = static_cast<EAINavMeshIndex>(i);
+		NewNavMesh->MeshIndex = static_cast<EAINavMeshIndex>(i);
 
 		TileCacheSetHeader tcHeader;
 
 		size_t headerReadReturnCode = fread(&tcHeader, sizeof(TileCacheSetHeader), 1, OpenedNavFile);
 
-		const int HeaderTileLimit = tcHeader.cacheParams.maxTiles;
-
 		// The file is corrupted in some way, invalid tile data.
-		if (headerReadReturnCode != 1 || tcHeader.numTiles < 0 || tcHeader.numTiles > HeaderTileLimit)
+		if (headerReadReturnCode != 1 || !tcHeader.IsValid())
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_LOAD_INVALID;
 		}
 
-		NewNavMesh.NavMeshRef = dtAllocNavMesh();
+		const int HeaderTileLimit = tcHeader.cacheParams.maxTiles;
+
+		NewNavMesh->NavMeshRef = dtAllocNavMesh();
 
 		// Could not allocate memory for the nav mesh for some reason.
-		if (!NewNavMesh.NavMeshRef)
+		if (!NewNavMesh->NavMeshRef)
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
-		NewNavMesh.TileCacheRef = dtAllocTileCache();
+		NewNavMesh->TileCacheRef = dtAllocTileCache();
 
 		// Could not allocate memory for the tile cache for some reason.
-		if (!NewNavMesh.TileCacheRef)
+		if (!NewNavMesh->TileCacheRef)
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
-		NewNavMesh.NavQueryRef = dtAllocNavMeshQuery();
+		NewNavMesh->NavQueryRef = dtAllocNavMeshQuery();
 
 		// Could not allocate memory for the nav query for some reason.
-		if (!NewNavMesh.NavQueryRef)
+		if (!NewNavMesh->NavQueryRef)
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
 		}
 
-		dtStatus MeshInitStatus = NewNavMesh.NavMeshRef->init(&tcHeader.meshParams);
+		dtStatus MeshInitStatus = NewNavMesh->NavMeshRef->init(&tcHeader.meshParams);
 
 		// Could not initialize the nav mesh for some reason (possibly bad data?)
 		if (dtStatusFailed(MeshInitStatus))
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_STATUS_MESHINITFAIL;
 		}
 
-		dtStatus TileCacheInitStatus = NewNavMesh.TileCacheRef->init(&tcHeader.cacheParams, m_talloc, m_tcomp, m_tmproc);
+		NewNavMesh->TileCacheAllocator = new LinearAllocator(32000);
+		NewNavMesh->TileCacheCompressor = new FastLZCompressor;
+		NewNavMesh->TileCacheMeshProcess = new MeshProcess;
+
+		LinearAllocator* Allocator = static_cast<LinearAllocator*>(NewNavMesh->TileCacheAllocator);
+
+		if (!Allocator || !Allocator->buffer || !NewNavMesh->TileCacheCompressor || !NewNavMesh->TileCacheMeshProcess)
+		{
+			AIMESH_UnloadNavMesh();
+			fclose(OpenedNavFile);
+			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
+			return EAINavMeshLoadResult::NAVMESH_STATUS_ALLOCFAIL;
+		}
+
+		dtStatus TileCacheInitStatus = NewNavMesh->TileCacheRef->init(&tcHeader.cacheParams, NewNavMesh->TileCacheAllocator, NewNavMesh->TileCacheCompressor, NewNavMesh->TileCacheMeshProcess);
 
 		// Could not initialize the tile cache for some reason (possibly bad data?)
 		if (dtStatusFailed(TileCacheInitStatus))
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
@@ -430,11 +437,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			// Invalid tile data
 			if (tileDataReadReturnCode != 1)
 			{
-				delete m_talloc;
-				delete m_tcomp;
-				delete m_tmproc;
 				dtFree(data);
-				NewNavMesh.Clear();
 				AIMESH_UnloadNavMesh();
 				fclose(OpenedNavFile);
 				CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
@@ -442,16 +445,12 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			}
 
 			dtCompressedTileRef tile = 0;
-			dtStatus addTileStatus = NewNavMesh.TileCacheRef->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
+			dtStatus addTileStatus = NewNavMesh->TileCacheRef->addTile(data, tileHeader.dataSize, DT_COMPRESSEDTILE_FREE_DATA, &tile);
 
 			// Invalid tile data
 			if (dtStatusFailed(addTileStatus))
 			{
-				delete m_talloc;
-				delete m_tcomp;
-				delete m_tmproc;
 				dtFree(data);
-				NewNavMesh.Clear();
 				AIMESH_UnloadNavMesh();
 				fclose(OpenedNavFile);
 				CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
@@ -459,26 +458,21 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			}
 
 			if (tile)
-				NewNavMesh.TileCacheRef->buildNavMeshTile(tile, NewNavMesh.NavMeshRef);
+			{
+				NewNavMesh->TileCacheRef->buildNavMeshTile(tile, NewNavMesh->NavMeshRef);
+			}
 		}
 
-		dtStatus QueryInitStatus = NewNavMesh.NavQueryRef->init(NewNavMesh.NavMeshRef, MAX_NAV_QUERY_NODES);
+		const dtStatus QueryInitStatus = NewNavMesh->NavQueryRef->init(NewNavMesh->NavMeshRef, MAX_NAV_QUERY_NODES);
 
 		if (dtStatusFailed(QueryInitStatus))
 		{
-			delete m_talloc;
-			delete m_tcomp;
-			delete m_tmproc;
-			NewNavMesh.Clear();
 			AIMESH_UnloadNavMesh();
 			fclose(OpenedNavFile);
 			CurrentNavMeshStatus = EAINavMeshStatus::NAVMESH_STATUS_FAILED;
 			return EAINavMeshLoadResult::NAVMESH_STATUS_QUERYINITFAIL;
 		}
 
-		ActiveNavMeshes.push_back(NewNavMesh);
-
-		NavMesh* NewNavMeshRef = &ActiveNavMeshes.back();
 		const EAINavMeshIndex NewIndex = static_cast<EAINavMeshIndex>(i);
 
 		fseek(OpenedNavFile, tcHeader.OffMeshConsOffset, SEEK_SET);
@@ -923,7 +917,12 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 	float HitDist;
 	float HitNormal[3];
 
-	FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
+	const dtStatus RaycastResult = FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
+
+	if (dtStatusFailed(RaycastResult))
+	{
+		return ZERO_VECTOR;
+	}
 
 	if (HitResult)
 	{

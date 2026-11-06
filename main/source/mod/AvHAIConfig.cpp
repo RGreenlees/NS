@@ -12,6 +12,8 @@ EAIFillTiming CurrentBotFillTiming = EAIFillTiming::FILLTIMING_ALLHUMANS;
 
 float MaxAIMatchTimeMinutes = 90.0f;
 
+float EmptyServerAITimeout = 30.0f;
+
 float RelocationChance = 0.1f;
 
 float BotFillRate = 0.5f;
@@ -438,6 +440,22 @@ void CONFIG_ParseConfigFile()
                 continue;
             }
 
+            if (!stricmp(keyChar, "EmptyServerAITimeout"))
+            {
+                EmptyServerAITimeout = 30.0f;
+                float ParsedEmptyServerTimeout = 0.0f;
+
+                if (!CONFIG_TryParseFloat(value, ParsedEmptyServerTimeout))
+                {
+                    ALERT(at_console, "Invalid value for EmptyServerAITimeout in nsbots.ini. Using default value of 30 seconds");
+                    continue;
+                }
+
+                EmptyServerAITimeout = fminf(ParsedEmptyServerTimeout, 0.0f);
+
+                continue;
+            }
+
             if (!stricmp(keyChar, "BotFillTiming"))
             {
                 CurrentBotFillTiming = EAIFillTiming::FILLTIMING_ALLHUMANS;
@@ -777,6 +795,11 @@ EAIFillTiming CONFIG_GetBotFillTiming()
     return CurrentBotFillTiming;
 }
 
+float CONFIG_GetEmptyServerAITimeout()
+{
+    return EmptyServerAITimeout;
+}
+
 void CONFIG_RegenerateIniFile()
 {
     string BotConfigFile = string(getModDirectory()) + "/nsbots.ini";
@@ -802,6 +825,10 @@ void CONFIG_RegenerateIniFile()
     fprintf(NewConfigFile, "# Helps prevent stalemates and bugs that happen after extremely long matches\n");
     fprintf(NewConfigFile, "# Default = 90 minutes\n");
     fprintf(NewConfigFile, "MaxAIMatchTime=90\n\n");
+
+    fprintf(NewConfigFile, "# On a new map load, how long in seconds should the AI system wait before adding bots if no humans join the server\n");
+    fprintf(NewConfigFile, "# Default = 30 seconds. This is ignored if the fill mode is manual.\n");
+    fprintf(NewConfigFile, "EmptyServerAITimeout=30\n\n");
 
     fprintf(NewConfigFile, "# When should the server start adding bots? Note: bots will always be added after round start regardless\n");
     fprintf(NewConfigFile, "# 0 = On map load (after 5 second grace period)\n");

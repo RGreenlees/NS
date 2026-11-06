@@ -16,6 +16,7 @@
 #include "DetourStatus.h"
 #include "DetourNavMeshQuery.h"
 #include "DetourTileCache.h"
+#include "DetourTileCacheBuilder.h"
 #include "AvHAINavConstants.h"
 
 // The current state of the nav mesh.
@@ -103,23 +104,17 @@ struct NavMesh
 	class dtNavMesh* NavMeshRef = nullptr;
 	class dtTileCache* TileCacheRef = nullptr;
 	class dtNavMeshQuery* NavQueryRef = nullptr;
+	dtTileCacheAlloc* TileCacheAllocator = nullptr;
+	dtTileCacheCompressor* TileCacheCompressor = nullptr;
+	dtTileCacheMeshProcess* TileCacheMeshProcess = nullptr;
+
 	OffMeshConnectionList MeshConnections;
 	OffMeshConnectionHandleList MeshConnectionHandles;
 	NavHintList MeshHints;
 	NavTempObstacleList TempObstacles;
 	bool bIsMeshUpToDate = true;
 
-	void Clear()
-	{
-		MeshIndex = EAINavMeshIndex::NAV_MESH_INVALID;
-		dtFreeNavMesh(NavMeshRef);
-		dtFreeNavMeshQuery(NavQueryRef);
-		dtFreeTileCache(TileCacheRef);
-
-		MeshConnections.clear();
-		MeshHints.clear();
-		TempObstacles.clear();
-	}
+	void Clear();
 
 	bool IsValid()
 	{
@@ -162,6 +157,24 @@ struct TileCacheSetHeader
 
 	int NumNavHints = 0;
 	int NavHintsOffset = 0;
+
+	inline bool IsValid() const
+	{
+		if (numTiles < 0
+			|| cacheParams.maxTiles <= 0
+			|| numTiles > cacheParams.maxTiles
+			|| cacheParams.maxObstacles < 0
+			|| cacheParams.maxOffMeshConnections < 0
+			|| NumOffMeshCons < 0
+			|| NumOffMeshCons > cacheParams.maxOffMeshConnections
+			|| NumConvexVols < 0
+			|| NumNavHints < 0)
+		{
+			return false;
+		}
+
+		return true;
+	}
 };
 
 struct TileCacheExportHeader

@@ -920,7 +920,7 @@ EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapo
 	{
 		if (vDist3DSq(pBot->Edict->v.origin, Target->v.origin) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
 
-		if (!UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, Target->v.origin) || fabsf(Target->v.origin.z - Target->v.origin.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+		if (!UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, Target->v.origin) || fabsf(pBot->Edict->v.origin.z - Target->v.origin.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
 
 		return EAIAttackResult::ATTACK_SUCCESS;
 	}

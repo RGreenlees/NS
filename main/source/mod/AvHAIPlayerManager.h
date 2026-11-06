@@ -11,8 +11,6 @@ static const double BOT_SERVER_UPDATE_RATE = (1.0 / 100.0);
 static const int BOT_THINK_RATE_HZ = 10;
 // Once the first human player has joined the game, how long to wait before adding bots
 static const float AI_GRACE_PERIOD = 5.0f;
-// Max time to wait before spawning players if none connect (e.g. empty dedicated server)
-static const float AI_MAX_START_TIMEOUT = 20.0f;
 
 void AIMGR_BotPrecache();
 

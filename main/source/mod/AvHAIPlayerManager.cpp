@@ -946,11 +946,18 @@ void AIMGR_NewMap()
 	AIMAP_ClearCachedMapData();
 	AITAC_ClearMapAIData();
 
-	PopulateBaseAgentProfiles();
-	AIMESH_LoadNavMesh(STRING(gpGlobals->mapname));
-	AIMAP_BuildMapData();
-
 	ActiveAIPlayers.clear();
+
+	const char* MapName = STRING(gpGlobals->mapname);
+
+	EAINavMeshLoadResult Result = AIMESH_LoadNavMesh(MapName);
+
+	AIMGR_PrintNavMeshLoadResult(Result, MapName);
+
+	if (Result != EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS) { return; }
+
+	PopulateBaseAgentProfiles();
+	AIMAP_BuildMapData();
 
 	AIStartedTime = gpGlobals->time;
 	LastAIPlayerCountUpdate = 0.0f;
@@ -1151,7 +1158,7 @@ bool AIMGR_ShouldStartPlayerBalancing()
 
 	if (!bPlayerSpawned)
 	{
-		return (gpGlobals->time - AIStartedTime > AI_MAX_START_TIMEOUT);
+		return (gpGlobals->time - AIStartedTime > CONFIG_GetEmptyServerAITimeout());
 	}
 
 	// We've started adding bots, keep going
@@ -1357,6 +1364,7 @@ void AIMGR_OnBotEnabled()
 {
 	AIMAP_ClearCachedMapData();
 	AITAC_ClearMapAIData();
+	ActiveAIPlayers.clear();
 
 	const char* MapName = STRING(gpGlobals->mapname);
 
@@ -1364,11 +1372,9 @@ void AIMGR_OnBotEnabled()
 
 	AIMGR_PrintNavMeshLoadResult(Result, MapName);
 
-	if (Result != EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS)
-	{
-		return;
-	}
+	if (Result != EAINavMeshLoadResult::NAVMESH_LOAD_SUCCESS) { return; }
 
+	PopulateBaseAgentProfiles();
 	AIMAP_BuildMapData();
 
 	CONFIG_ParseConfigFile();
@@ -1376,15 +1382,12 @@ void AIMGR_OnBotEnabled()
 
 	bBotsEnabled = true;
 
-	ActiveAIPlayers.clear();
-
 	AIStartedTime = gpGlobals->time;
 	LastAIPlayerCountUpdate = 0.0f;
 
 	bHasRoundStarted = GetGameRules()->GetGameStarted();
 
 	CountdownStartedTime = (bHasRoundStarted || GetGameRules()->GetCountdownStarted()) ? gpGlobals->time : 0.0f;
-
 }
 
 void AIMGR_OnBotDisabled()

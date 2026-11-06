@@ -857,8 +857,8 @@ bool AvHAIPlayer::IsDead() const
 
 float AvHAIPlayer::GetDesiredMovementSpeed(bool bShouldWalk) const
 {
-	float MaxSpeed = fminf(CVAR_GET_FLOAT("cl_forwardspeed"), CVAR_GET_FLOAT("sv_maxspeed"));
-	return (NextFrameMovementInput.bShouldWalk) ? MaxSpeed * 0.5f : MaxSpeed;
+	const float MaxSpeed = fminf(CVAR_GET_FLOAT("cl_forwardspeed"), CVAR_GET_FLOAT("sv_maxspeed"));
+	return (bShouldWalk) ? MaxSpeed * 0.5f : MaxSpeed;
 }
 
 Vector AvHAIPlayer::GetBottomOfHitbox() const
