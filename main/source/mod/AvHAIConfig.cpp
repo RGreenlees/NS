@@ -435,7 +435,7 @@ void CONFIG_ParseConfigFile()
                     continue;
                 }
 
-                MaxAIMatchTimeMinutes = fminf(ParsedAIMatchTime, 0.0f);
+                MaxAIMatchTimeMinutes = fmaxf(ParsedAIMatchTime, 0.0f);
 
                 continue;
             }
@@ -451,7 +451,7 @@ void CONFIG_ParseConfigFile()
                     continue;
                 }
 
-                EmptyServerAITimeout = fminf(ParsedEmptyServerTimeout, 0.0f);
+                EmptyServerAITimeout = fmaxf(ParsedEmptyServerTimeout, 0.0f);
 
                 continue;
             }

@@ -538,15 +538,8 @@ bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc,
 
 	if (!FoundMesh) { return false; }
 
-	const NavAgentProfile* DefaultProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
-
-	if (!DefaultProfile) { return false; }
-
-	NavAgentProfile ProjectProfile = *DefaultProfile;
-	ProjectProfile.MeshIndex = TargetNavMesh;
-
-	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(&ProjectProfile, StartLoc);
-	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(&ProjectProfile, EndLoc);
+	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(TargetNavMesh, StartLoc);
+	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(TargetNavMesh, EndLoc);
 
 	if (vIsZero(ProjectedStart) || vIsZero(ProjectedEnd)) { return false; }
 
@@ -1017,6 +1010,16 @@ bool AIMESH_RemoveTemporaryObstacle(NavTempObstacleHandle& ObstacleToRemove)
 	}
 
 	return bSuccessful;
+}
+
+Vector AIMESH_ProjectPointToNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const Vector Extents)
+{
+	NavAgentProfile DummyProfile;
+	DummyProfile.MeshIndex = MeshIndex;
+	DummyProfile.Filters.setIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_ALL));
+	DummyProfile.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
+
+	return AIMESH_ProjectPointToNavmesh(&DummyProfile, Location, Extents);
 }
 
 Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents)

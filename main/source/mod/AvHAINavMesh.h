@@ -282,6 +282,7 @@ void AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, uns
 	Returns ZERO_VECTOR if not projected successfully
 */
 Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
+Vector AIMESH_ProjectPointToNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
 
 // Finds any random point on the navmesh that is relevant for the bot. Returns ZERO_VECTOR if none found
 Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile* NavProfile, const Vector& SearchPoint = ZERO_VECTOR, bool bIgnoreReachability = true);

@@ -60,7 +60,7 @@ enum class EAINavMovementFlag : uint32
 	NAV_FLAG_FATALFALL = 1 << 14,		// A fall that would kill player types not immune to fall damage
 	NAV_FLAG_FATALJUMP = 1 << 15,		// A jump that would kill player types not immune to fall damage
 	NAV_FLAG_FLY = 1u << 16,		// Fly
-	NAV_FLAG_ALL = 0xFFFFFFFF		// All flags
+	NAV_FLAG_ALL = (0xFFFFFFFF & ~NAV_FLAG_DISABLED)		// All flags without disabled
 };
 
 inline EAINavMovementFlag operator|(EAINavMovementFlag a, EAINavMovementFlag b)
@@ -786,6 +786,8 @@ inline Vector UTIL_VecDetourToGoldSrc(const float* DetourVector)
 inline const NavAgentProfile* GetBaseAgentProfile(const EAINavProfileIndex Index)
 {
 	unsigned int NavIndex = static_cast<unsigned int>(Index);
+
+	if (NavIndex < 0 || NavIndex >= BaseAgentProfiles.size()) { return nullptr; }
 
 	if (NavIndex > static_cast<unsigned int>(EAINavProfileIndex::NAV_PROFILE_DEFAULT)) { return nullptr; }
 

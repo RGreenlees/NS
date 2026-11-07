@@ -1486,11 +1486,9 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 	{
 		if (!FutureNode || !FutureNode->IsValidMove()) { return false; }
 
-		if (FutureNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		if (EnumHasAnyFlags(FutureNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
 		{
 			const DynamicMapObjectHandle PlatformObjectHandle = AIMAP_GetDynamicObjectByEdict(FutureNode->MovementObject);
-
-			if (!PlatformObjectHandle.IsValid()) { return false; }
 
 			const DynamicMapObject* PlatformObject = PlatformObjectHandle.GetObjectRef();
 
@@ -1500,8 +1498,6 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 		}
 
 		const DynamicMapObjectHandle BlockingObjectHandle = AIMAP_FindObjectBlockingPathPoint(FutureNode, DynamicMapObjectHandle());
-
-		if (BlockingObjectHandle.IsValid()) { continue; }
 
 		const DynamicMapObject* BlockingObject = BlockingObjectHandle.GetObjectRef();
 

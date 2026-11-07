@@ -1450,7 +1450,7 @@ bool AIMGR_HasMatchEnded()
 	float MaxMinutes = CONFIG_GetMaxAIMatchTimeMinutes();
 	float MaxSeconds = MaxMinutes * 60.0f;
 
-	bool bMatchExceededMaxLength = (GetGameRules()->GetGameTime() > MaxSeconds);
+	bool bMatchExceededMaxLength = (MaxSeconds > 0.0f && GetGameRules()->GetGameTime() > MaxSeconds);
 
 	return (bMatchExceededMaxLength && AIMGR_GetNumActiveHumanPlayers() == 0);
 }
