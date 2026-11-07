@@ -2134,6 +2134,75 @@ EAINavMoveResult AvHAIPlayer::ProgressUseTask(AvHAIMoveTask* MoveTask)
 	return FollowPath(&MoveTask->TaskPath);
 }
 
+EAIAttackResult AvHAIPlayer::PerformAttackLOSCheck(const EAIWeaponId Weapon, const edict_t* Target)
+{
+	if (!UTIL_IsEdictActive(Target)) { return EAIAttackResult::ATTACK_INVALIDTARGET; }
+
+	if (Weapon == EAIWeaponId::WEAPON_INVALID) { return EAIAttackResult::ATTACK_NOWEAPON; }
+
+	// Don't need aiming or special LOS checks for primal scream as it's AoE buff
+	if (Weapon == EAIWeaponId::WEAPON_LERK_PRIMALSCREAM)
+	{
+		return EAIAttackResult::ATTACK_SUCCESS;
+	}
+
+	const Vector BotLocation = GetLocation();
+	const Vector EyePosition = GetEyePosition();
+	const Vector TargetLocation = UTIL_GetClosestPointOnEntityToLocation(EyePosition, Target);
+
+	// Add a LITTLE bit of give to avoid edge cases where the bot is a smidge out of range
+	float MaxWeaponRange = GetMaxIdealWeaponRange(Weapon) - 5.0f;
+
+	// Don't need aiming or special LOS checks for Xenocide as it's an AOE attack, just make sure we're close enough and don't have a wall in the way
+	if (Weapon == EAIWeaponId::WEAPON_SKULK_XENOCIDE)
+	{
+		if (vDist3DSq(BotLocation, TargetLocation) <= sqrf(MaxWeaponRange) && UTIL_QuickTrace(Edict, BotLocation, TargetLocation))
+		{
+			return EAIAttackResult::ATTACK_SUCCESS;
+		}
+		else
+		{
+			return EAIAttackResult::ATTACK_OUTOFRANGE;
+		}
+	}
+
+	// For charge and stomp, we can go through stuff so don't need to check for being blocked
+	if (Weapon == EAIWeaponId::WEAPON_ONOS_CHARGE || Weapon == EAIWeaponId::WEAPON_ONOS_STOMP)
+	{
+		if (vDist3DSq(BotLocation, Target->v.origin) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+
+		if (!UTIL_QuickTrace(Edict, GetLocation(), TargetLocation) || fabsf(BotLocation.z - TargetLocation.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+
+		return EAIAttackResult::ATTACK_SUCCESS;
+	}
+
+	TraceResult hit;
+
+	Vector StartTrace = EyePosition;
+
+	Vector AttackDir = UTIL_GetVectorNormal(TargetLocation - StartTrace);
+
+	Vector EndTrace = StartTrace + (AttackDir * MaxWeaponRange);
+
+	UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, Edict->v.pContainingEntity, &hit);
+
+	if (FNullEnt(hit.pHit)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+
+	if (hit.pHit != Target)
+	{
+		if (vDist3DSq(EyePosition, TargetLocation) > sqrf(MaxWeaponRange))
+		{
+			return EAIAttackResult::ATTACK_OUTOFRANGE;
+		}
+		else
+		{
+			return EAIAttackResult::ATTACK_BLOCKED;
+		}
+	}
+
+	return EAIAttackResult::ATTACK_SUCCESS;
+}
+
 EAINavMoveResult AvHAIPlayer::ProgressWeldTask(AvHAIMoveTask* MoveTask)
 {
 	if (!MoveTask || !MoveTask->IsValid()) { return EAINavMoveResult::NAV_MOVE_NOTASK; }
@@ -2180,7 +2249,7 @@ EAINavMoveResult AvHAIPlayer::ProgressWeldTask(AvHAIMoveTask* MoveTask)
 		}
 	}
 
-	EAIAttackResult WeldResult = PerformAttackLOSCheck(GetEyePosition(), EAIWeaponId::WEAPON_MARINE_WELDER, MoveTask->TaskTarget);
+	EAIAttackResult WeldResult = PerformAttackLOSCheck(EAIWeaponId::WEAPON_MARINE_WELDER, MoveTask->TaskTarget);
 
 	if (WeldResult == EAIAttackResult::ATTACK_SUCCESS)
 	{
@@ -2266,7 +2335,7 @@ EAINavMoveResult AvHAIPlayer::ProgressBreakTask(AvHAIMoveTask* MoveTask)
 
 	const EAIWeaponId CurrentWeapon = GetCurrentWeapon();
 
-	const EAIAttackResult AttackResult = PerformAttackLOSCheck(GetEyePosition(), CurrentWeapon, MoveTask->TaskTarget);
+	const EAIAttackResult AttackResult = PerformAttackLOSCheck(CurrentWeapon, MoveTask->TaskTarget);
 
 	if (AttackResult != EAIAttackResult::ATTACK_SUCCESS)
 	{

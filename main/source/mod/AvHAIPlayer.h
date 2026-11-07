@@ -387,6 +387,8 @@ struct AvHAIPlayer
 	EAINavMoveResult ProgressWeldTask(AvHAIMoveTask* MoveTask);
 	EAINavMoveResult ProgressObtainWeaponTask(AvHAIMoveTask* MoveTask);
 
+	EAIAttackResult PerformAttackLOSCheck(const EAIWeaponId Weapon, const edict_t* Target);
+
 	void PrintDebugInfo();
 };
 

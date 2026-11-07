@@ -887,71 +887,6 @@ bool UTIL_PlayerHasWeapon(const AvHPlayer* Player, const EAIWeaponId DesiredComb
 	return (Weapon && Weapon->m_iEnabled);
 }
 
-EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const edict_t* Target)
-{
-	if (FNullEnt(Target) || (Target->v.deadflag != DEAD_NO)) { return EAIAttackResult::ATTACK_INVALIDTARGET; }
-
-	if (Weapon == EAIWeaponId::WEAPON_INVALID) { return EAIAttackResult::ATTACK_NOWEAPON; }
-
-	// Don't need aiming or special LOS checks for primal scream as it's AoE buff
-	if (Weapon == EAIWeaponId::WEAPON_LERK_PRIMALSCREAM)
-	{
-		return EAIAttackResult::ATTACK_SUCCESS;
-	}
-
-	// Add a LITTLE bit of give to avoid edge cases where the bot is a smidge out of range
-	float MaxWeaponRange = GetMaxIdealWeaponRange(Weapon) - 5.0f;
-
-	// Don't need aiming or special LOS checks for Xenocide as it's an AOE attack, just make sure we're close enough and don't have a wall in the way
-	if (Weapon == EAIWeaponId::WEAPON_SKULK_XENOCIDE)
-	{
-		if (vDist3DSq(pBot->Edict->v.origin, Target->v.origin) <= sqrf(MaxWeaponRange) && UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, Target->v.origin))
-		{
-			return EAIAttackResult::ATTACK_SUCCESS;
-		}
-		else
-		{
-			return EAIAttackResult::ATTACK_OUTOFRANGE;
-		}
-	}
-
-	// For charge and stomp, we can go through stuff so don't need to check for being blocked
-	if (Weapon == EAIWeaponId::WEAPON_ONOS_CHARGE || Weapon == EAIWeaponId::WEAPON_ONOS_STOMP)
-	{
-		if (vDist3DSq(pBot->Edict->v.origin, Target->v.origin) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
-
-		if (!UTIL_QuickTrace(pBot->Edict, pBot->Edict->v.origin, Target->v.origin) || fabsf(pBot->Edict->v.origin.z - Target->v.origin.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
-
-		return EAIAttackResult::ATTACK_SUCCESS;
-	}
-
-	TraceResult hit;
-
-	Vector StartTrace = pBot->CurrentEyePosition;
-
-	Vector AttackDir = UTIL_GetVectorNormal(UTIL_GetCentreOfEntity(Target) - StartTrace);
-
-	Vector EndTrace = pBot->CurrentEyePosition + (AttackDir * MaxWeaponRange);
-
-	UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, pBot->Edict->v.pContainingEntity, &hit);
-
-	if (FNullEnt(hit.pHit)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
-
-	if (hit.pHit != Target)
-	{
-		if (vDist3DSq(pBot->CurrentEyePosition, Target->v.origin) > sqrf(MaxWeaponRange))
-		{
-			return EAIAttackResult::ATTACK_OUTOFRANGE;
-		}
-		else
-		{
-			return EAIAttackResult::ATTACK_BLOCKED;
-		}
-	}
-
-	return EAIAttackResult::ATTACK_SUCCESS;
-}
-
 EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const Vector TargetLocation)
 {
 	if (!TargetLocation) { return EAIAttackResult::ATTACK_INVALIDTARGET; }
@@ -1067,7 +1002,7 @@ EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId W
 
 	float MaxWeaponRange = GetMaxIdealWeaponRange(Weapon);
 
-	const Vector EntityLocation = UTIL_GetCentreOfEntity(Target);
+	const Vector EntityLocation = UTIL_GetClosestPointOnEntityToLocation(Location, Target);
 
 	// Don't need aiming or special LOS checks for Xenocide as it's an AOE attack, just make sure we're close enough and don't have a wall in the way
 	if (Weapon == EAIWeaponId::WEAPON_SKULK_XENOCIDE)

@@ -70,9 +70,8 @@ bool CanInterruptWeaponReload(EAIWeaponId Weapon);
 bool IsHitscanWeapon(EAIWeaponId Weapon);
 float GetTimeUntilPlayerNextRefire(const AvHPlayer* Player);
 
-EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const edict_t* Target);
-EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const Vector TargetLocation);
-EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* pBot, const EAIWeaponId Weapon, const Vector TargetLocation, const edict_t* Target);
+EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* AIPlayer, const EAIWeaponId Weapon, const Vector TargetLocation);
+EAIAttackResult PerformAttackLOSCheck(AvHAIPlayer* AIPlayer, const EAIWeaponId Weapon, const Vector TargetLocation, const edict_t* Target);
 EAIAttackResult PerformAttackLOSCheck(const Vector Location, const EAIWeaponId Weapon, const edict_t* Target);
 
 float UTIL_GetProjectileVelocityForWeapon(const EAIWeaponId Weapon);
