@@ -110,6 +110,8 @@ Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity)
 
 	UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, (IgnoreEntity) ? IgnoreEntity->v.pContainingEntity : nullptr, &hit);
 
+	if (hit.fStartSolid || hit.fAllSolid) { return CheckLocation; }
+
 	while (hit.flFraction < 1.0f)
 	{
 		if (IsEdictPlayer(hit.pHit) || AITAC_IsEdictStructure(hit.pHit) || IsEdictHive(hit.pHit))

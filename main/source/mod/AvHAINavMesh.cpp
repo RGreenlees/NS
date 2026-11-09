@@ -826,7 +826,7 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 		dtVcopy(ReachedPoint, dtEndNearest);
 	}
 
-	const float MaxLength = dtSqr(dtMax(dtReachableExtents[0], dtReachableExtents[1]));
+	const float MaxLength = dtMax(dtReachableExtents[0], dtReachableExtents[1]);
 
 	// Early exit: no point checking height difference if we're not close enough anyway
 	if (dtVdist2DSqr(ReachedPoint, dtEndLocation) > sqrf(MaxLength)) { return false; }
@@ -842,6 +842,8 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 
 	// Since nav traces are 2D, we need to ensure we don't end up way below or above our desired destination
 	const dtStatus HeightCheckStatus = FoundMesh->NavQueryRef->getPolyHeight(ReachedPoly, HeightSamplePoint, &ReachedHeight);
+
+	ReachedHeight = (ReachedHeight > 0.0f) ? ReachedHeight : dtEndNearest[1];
 
 	return dtAbs(ReachedHeight - dtEndLocation[1]) <= dtReachableExtents[1];
 }
