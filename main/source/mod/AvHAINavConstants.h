@@ -34,7 +34,7 @@ constexpr auto MAX_NAV_QUERY_NODES = 65535;
 constexpr int TILECACHESET_MAGIC = 'N' << 24 | 'S' << 16 | 'T' << 8 | 'C';
 constexpr int TILECACHESET_VERSION = 1;
 
-constexpr float dtDefaultProjectionExtents[3] = { 400.0f, 50.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
+constexpr float dtDefaultProjectionExtents[3] = { 400.0f, 100.0f, 400.0f }; // Default extents (in GoldSrc units) to find the nearest spot on the nav mesh
 constexpr float dtDefaultReachableExtents[3] = { max_ai_use_reach, max_ai_use_reach, max_ai_use_reach }; // Extents (in GoldSrc units) to determine if something is on the nav mesh
 static const Vector DefaultReachableExtents = Vector(max_ai_use_reach, max_ai_use_reach, max_ai_use_reach); // Extents (in GoldSrc units) to determine if something is on the nav mesh
 

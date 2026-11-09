@@ -174,9 +174,9 @@ bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& Fro
 	return true;
 }
 
-bool AINAV_IsPointDirectlyReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance)
+bool AINAV_IsPointDirectlyReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, Vector MaxAcceptableExtents)
 {
-	return AIMESH_QuickTraceNavLine(NavProfile, FromLocation, ToLocation, MaxAcceptableDistance);
+	return AIMESH_QuickTraceNavLine(NavProfile, FromLocation, ToLocation, MaxAcceptableExtents);
 }
 
 Vector AINAV_FindClosestNavigablePointTo(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation)
@@ -916,8 +916,8 @@ bool AINAV_IsOffJumpNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 
 	if (vEquals2D(ClosestPointOnLine, PathNode->FromLocation) || vEquals2D(ClosestPointOnLine, PathNode->ToLocation))
 	{
-		return (!AINAV_IsPointDirectlyReachable(NavProfile, BottomOfHull, PathNode->FromLocation, 5.0f)
-			&& !AINAV_IsPointDirectlyReachable(NavProfile, BottomOfHull, PathNode->ToLocation, 5.0f));
+		return (!AINAV_IsPointDirectlyReachable(NavProfile, BottomOfHull, PathNode->FromLocation)
+			&& !AINAV_IsPointDirectlyReachable(NavProfile, BottomOfHull, PathNode->ToLocation));
 	}
 
 	if (vDist2DSq(AIPlayer->v.origin, ClosestPointOnLine) > sqrf(GetPlayerRadius(AIPlayer) * 2.0f)) { return true; }
@@ -938,7 +938,7 @@ bool AINAV_IsOffJumpNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 
 	if (vIsZero(ProjectedPoint)) { return false; }
 
-	return (ProjectedPoint.z - AIPlayer->v.origin.z) <= max_ai_jump_height;
+	return (ProjectedPoint.z - AIPlayer->v.origin.z) > max_ai_jump_height;
 }
 
 bool AINAV_IsOffPlatformNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode)
@@ -1343,7 +1343,7 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 
 	if (bHasNextPathNode && !NextPathNode->IsPrecisionMove())
 	{
-		const bool bNextPointDirectlyReachable = AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, 5.0f);
+		const bool bNextPointDirectlyReachable = AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, Vector(8.0f, 8.0f, 55.0f));
 
 		if (!bNextPointDirectlyReachable) { return false; }
 
@@ -1387,7 +1387,7 @@ bool AINAV_IsFallMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 		{
 			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer);
 
-			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f))
+			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, Vector(8.0f, 8.0f, 50.0f)))
 			{
 				TraceResult hit;
 				UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);
@@ -1424,7 +1424,7 @@ bool AINAV_IsJumpMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 		{
 			const Vector FloorPosition = UTIL_GetFloorUnderEntity(AIPlayer);
 
-			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, 5.0f))
+			if (AINAV_IsPointDirectlyReachable(NavProfile, FloorPosition, NextPathNode->ToLocation, Vector(8.0f, 8.0f, 50.0f)))
 			{
 				TraceResult hit;
 				UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);

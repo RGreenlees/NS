@@ -329,7 +329,7 @@ struct AvHAINavStatus
 	}
 };
 
-bool AINAV_IsPointDirectlyReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach);
+bool AINAV_IsPointDirectlyReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, Vector MaxAcceptableExtents = DefaultReachableExtents);
 bool AINAV_IsPointReachable(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation, float MaxAcceptableDistance = max_ai_use_reach, Vector* ClosestPoint = nullptr);
 Vector AINAV_FindClosestNavigablePointTo(const NavAgentProfile* NavProfile, const Vector& FromLocation, const Vector& ToLocation);
 

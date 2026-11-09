@@ -258,7 +258,7 @@ bool AIMESH_RestoreDefaultOffMeshConnectionFlags(OffMeshConnectionHandle& Connec
 bool AIMESH_RemoveOffMeshConnection(OffMeshConnectionHandle& ConnectionHandle);
 
 // Returns true if the trace along the nav mesh from start to end made it within the acceptable distance range
-bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, float MaxAcceptableDistance = 0.1f);
+bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, Vector MaxAcceptableExtents = DefaultReachableExtents);
 
 // Returns detailed information on a nav mesh trace. Will return the end location of the trace, as well as populating the details in HitResult
 Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult = nullptr);

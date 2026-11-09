@@ -1033,7 +1033,7 @@ void AvHAIPlayer::BotUpdateDesiredViewRotation()
 
 	const Vector NewDesiredTargetView = (bIsRequiredView)
 		? NextFrameMovementInput.RequiredLookLocation
-		: (!vIsZero(ViewInfo.LookTargetLocation)) ? ViewInfo.LookTargetLocation : NextFrameMovementInput.DesiredLookLocation;
+		: NextFrameMovementInput.DesiredLookLocation;
 
 	if (vIsZero(NewDesiredTargetView)) { return; }
 
@@ -1136,14 +1136,14 @@ void AvHAIPlayer::InterpolateView(float DeltaTime)
 
 void AvHAIPlayer::LookAt(const Vector& LocationTarget)
 {
-	ViewInfo.LookTargetLocation = LocationTarget;
+	NextFrameMovementInput.DesiredLookLocation = LocationTarget;
 }
 
 void AvHAIPlayer::LookAt(const edict_t* Target)
 {
 	if (FNullEnt(Target)) { return; }
 
-	ViewInfo.LookTargetLocation = UTIL_GetCentreOfEntity(Target);
+	NextFrameMovementInput.DesiredLookLocation = UTIL_GetCentreOfEntity(Target);
 }
 
 void AvHAIPlayer::UpdateViewFrustum()
@@ -1439,7 +1439,7 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
 	// If we are currently navigating a platform, don't run the checks in case we screw up our current move
-	if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM) { return false; }
+	if (EnumHasAnyFlags(CurrentPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { return false; }
 
 	if (EnumHasAnyFlags(Path->RequiredMoveFlags, EAINavMovementFlag::NAV_FLAG_WELD))
 	{
@@ -1613,6 +1613,21 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 		{
 			AddMovementTask(NewMoveTask);
 			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+		}
+	}
+
+	if (!EnumHasAnyFlags(CurrentPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+	{
+		const DynamicMapObjectHandle BlockingObjectHandle = AIMAP_FindObjectBlockingPathPoint(CurrentPathNode, DynamicMapObjectHandle());
+
+		if (const DynamicMapObject* BlockingObject = BlockingObjectHandle.GetObjectRef())
+		{
+			if (BlockingObject->State == EAIDynamicMapObjectState::OBJECTSTATE_PREPARING
+				|| BlockingObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
+			{
+				// TODO: Add some kind of waiting behaviour here. Looking around or something.
+				return EAINavMoveResult::NAV_MOVE_SUCCESS;
+			}
 		}
 	}
 
@@ -3886,7 +3901,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		NextFrameMovementInput.bShouldCrouch = false;
 	}
 
-	if (AINAV_IsPointDirectlyReachable(NavProfile, CurrentFloorPosition, CurrentPathNode->ToLocation, 5.0f))
+	if (AINAV_IsPointDirectlyReachable(NavProfile, CurrentFloorPosition, CurrentPathNode->ToLocation, Vector(8.0f, 8.0f, 50.0f)))
 	{
 		Vector PointOnMoveLine = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentFloorPosition);
 

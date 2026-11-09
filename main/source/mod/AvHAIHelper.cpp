@@ -98,7 +98,7 @@ Vector UTIL_GetFloorUnderEntity(const edict_t* Edict)
 {
 	if (FNullEnt(Edict)) { return g_vecZero; }
 
-	return UTIL_FindFloor(Edict->v.origin);
+	return UTIL_FindFloor(Edict->v.origin, Edict);
 }
 
 Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity)

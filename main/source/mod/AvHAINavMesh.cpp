@@ -760,7 +760,7 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 
 		const Vector AdjustLocation = Location + (HitNormVector * AdjustDistance);
 
-		if (AIMESH_QuickTraceNavLine(NavProfile, Location, AdjustLocation, 0.1f))
+		if (AIMESH_QuickTraceNavLine(NavProfile, Location, AdjustLocation, Vector(5.0f, 5.0f, 50.0f)))
 		{
 			return AdjustLocation;
 		}
@@ -773,9 +773,9 @@ Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, cons
 	return Location;
 }
 
-bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, float MaxAcceptableDistance)
+bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, Vector MaxAcceptableExtents)
 {
-	if (!NavProfile || MaxAcceptableDistance < 0.0f) { return false; }
+	if (!NavProfile) { return false; }
 
 	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
@@ -783,10 +783,12 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 
 	const dtQueryFilter* m_Filter = &NavProfile->Filters;
 
-	float dtStartLocation[3];
+	float dtReachableExtents[3] = { fabsf(MaxAcceptableExtents.x), fabsf(MaxAcceptableExtents.z), fabsf(MaxAcceptableExtents.y) };
+
+	float dtStartLocation[3] = { 0.0f, 0.0f, 0.0f };
 	UTIL_VecGoldSrcToDetour(StartLocation, dtStartLocation);
 
-	float dtEndLocation[3];
+	float dtEndLocation[3] = { 0.0f, 0.0f, 0.0f };
 	UTIL_VecGoldSrcToDetour(EndLocation, dtEndLocation);
 
 	dtPolyRef StartPoly;
@@ -794,13 +796,11 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 	float dtStartNearest[3] = { 0.0f, 0.0f, 0.0f };
 	float dtEndNearest[3] = { 0.0f, 0.0f, 0.0f };
 
-	const float MaxReachableExtents[3] = { MaxAcceptableDistance, MaxAcceptableDistance, MaxAcceptableDistance };
-
-	dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
+	dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, dtReachableExtents, m_Filter, &StartPoly, dtStartNearest);
 
 	if (!dtStatusSucceed(FoundStartPoly) || StartPoly == 0) { return false; }
 
-	dtStatus FoundEndPoly = FoundMesh->NavQueryRef->findNearestPoly(dtEndLocation, MaxReachableExtents, m_Filter, &EndPoly, dtEndNearest);
+	dtStatus FoundEndPoly = FoundMesh->NavQueryRef->findNearestPoly(dtEndLocation, dtReachableExtents, m_Filter, &EndPoly, dtEndNearest);
 
 	if (!dtStatusSucceed(FoundEndPoly) || EndPoly == 0) { return false; }
 
@@ -826,8 +826,10 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 		dtVcopy(ReachedPoint, dtEndNearest);
 	}
 
+	const float MaxLength = dtSqr(dtMax(dtReachableExtents[0], dtReachableExtents[1]));
+
 	// Early exit: no point checking height difference if we're not close enough anyway
-	if (dtVdist2DSqr(ReachedPoint, dtEndLocation) > sqrf(MaxAcceptableDistance)) { return false; }
+	if (dtVdist2DSqr(ReachedPoint, dtEndLocation) > sqrf(MaxLength)) { return false; }
 
 	float HeightSamplePoint[3] = { 0.0f, 0.0f, 0.0f };
 	const dtPolyRef ReachedPoly = PolyPath[PathCount - 1];
@@ -841,7 +843,7 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 	// Since nav traces are 2D, we need to ensure we don't end up way below or above our desired destination
 	const dtStatus HeightCheckStatus = FoundMesh->NavQueryRef->getPolyHeight(ReachedPoly, HeightSamplePoint, &ReachedHeight);
 
-	return dtAbs(ReachedHeight - dtEndLocation[1]) <= MaxAcceptableDistance;
+	return dtAbs(ReachedHeight - dtEndLocation[1]) <= dtReachableExtents[1];
 }
 
 Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult)

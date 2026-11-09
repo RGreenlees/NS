@@ -44,6 +44,14 @@ enum class EAIDynamicMapObjectState
 	OBJECTSTATE_OPEN		// For buttons which don't move, this marks a button which has been pressed and is waiting to release for another use
 };
 
+// How is a trigger linked to a target. Indirect means it is linked through intermediary (e.g. a multisource or multimanager)
+enum class EAITriggerLinkType
+{
+	NOT_LINKED = 0,  // The object has just been registered and does not yet know its state
+	LINKED_DIRECT = 1,   // Object is idling and not going to move until triggered
+	LINKED_INDIRECT
+};
+
 struct DynamicMapObjectStop
 {
 	edict_t* CornerEdict = nullptr;
@@ -184,8 +192,7 @@ void AIMAP_LinkDynamicMapObjectsToTriggers();
 void AIMAP_LinkDynamicMapObjectsToOffMeshConnections();
 void AIMAP_SetTrainStartPoints();
 void AIMAP_PopulateAllConnectionsAffectedByDynamicObjects();
-bool AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* TargetObject, vector<edict_t*> CheckedObjects);
-std::vector<DynamicMapObject*> AIMAP_GetDynamicObjectsLinkedToTrigger(edict_t* TriggerEdict);
+EAITriggerLinkType AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* TargetObject, vector<edict_t*> CheckedObjects);
 void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObjectHandle& ObjectHandle);
 const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, const Vector EndPoint);
 

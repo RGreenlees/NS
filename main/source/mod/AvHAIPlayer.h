@@ -97,8 +97,6 @@ struct AvHAIViewInfo
 {
 	Vector InterpolatingViewTarget = g_vecZero;
 	Vector CurrentInterpolatedView = g_vecZero;
-	Vector LookTargetLocation = g_vecZero; // This is the bot's current desired look target. Could be an enemy (see LookTarget), or point of interest
-	Vector MoveLookLocation = g_vecZero; // If the bot has to look somewhere specific for movement (e.g. up for a ladder or wall-climb), this will override LookTargetLocation so the bot doesn't get distracted and mess the move up
 	bool bSnapView = false; // Use for rapid, precise snapping of the bot's view to the target. Useful if the bot requires more precise view angles for movement or other reasons
 	float LastTargetTrackUpdate = 0.0f; // Add a delay to how frequently a bot can track a target's movements
 	float ViewInterpolationSpeed = 0.0f; // How fast should the bot turn its view for this interpolated movement? Depends on distance to turn
