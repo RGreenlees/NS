@@ -354,7 +354,7 @@ Vector AINAV_AdjustPointForPathfinding(const NavAgentProfile* NavProfile, const 
 
 bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vector FromLocation, const Vector ToLocation, AvHAIPath* ResultPath, float MaxAcceptableDistance);
 
-edict_t* AINAV_GetMovementObjectForPathNode(AvHAIPathNode* PathNode);
+edict_t* AINAV_GetMovementObjectForPathNode(const NavAgentProfile* NavProfile, AvHAIPathNode* PathNode);
 
 Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination);
 

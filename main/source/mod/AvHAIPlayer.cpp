@@ -3603,6 +3603,8 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
+	const NavAgentProfile* NavProfile = GetNavProfile();
+
 	DynamicMapObjectHandle PlatformHandle = DynamicMapObjectHandle();
 
 	if (!FNullEnt(Edict->v.groundentity))
@@ -3619,10 +3621,16 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 
 	if (!Platform)
 	{
-		return NewGroundMove(Path);
+		PlatformHandle = AIMAP_GetClosestPlatformToPoints(NavProfile, CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+
+		Platform = PlatformHandle.GetObjectRef();
+
+		if (!Platform)
+		{
+			return NewGroundMove(Path);
+		}
 	}
 
-	const NavAgentProfile* NavProfile = GetNavProfile();
 	const Vector BotLocation = GetLocation();
 	const Vector PlatformPosition = UTIL_GetCentreOfEntity(Platform->Edict);
 
@@ -3799,7 +3807,7 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 			const Vector CollisionBottom = GetBottomOfHitbox();
 			const Vector ClosestLiftPoint = UTIL_GetClosestPointOnEntityToLocation(CurrentPathNode->ToLocation, Platform);
 
-			Vector ClosestPointOnNavMesh = AIMESH_TraceNavLine(NavProfile, CurrentPathNode->FromLocation, ClosestLiftPoint, nullptr);
+			Vector ClosestPointOnNavMesh = AIMESH_TraceNavLine(NavProfile, CurrentPathNode->ToLocation, ClosestLiftPoint, nullptr);
 
 			if (!vIsZero(ClosestPointOnNavMesh))
 			{

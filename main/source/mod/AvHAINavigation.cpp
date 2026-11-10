@@ -502,20 +502,19 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		NextPathNode.FromLocation = NodeFromLocation;
 
-		// The nav mesh doesn't always align perfectly with the floor, so align each nav point with the floor after generation
 		NextPathNode.ToLocation.x = dtStraightPath[nIndex++];
 		NextPathNode.ToLocation.z = dtStraightPath[nIndex++];
 		NextPathNode.ToLocation.y = -dtStraightPath[nIndex++];
 
+		// The nav mesh doesn't always align perfectly with the floor, so align each nav point with the floor after generation
 		NextPathNode.ToLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToLocation, 16.0f);
-
 		NextPathNode.ToLocation = AINAV_AdjustPointForPathfinding(NavProfile, NextPathNode.ToLocation);
 
 		if (CurrFlags != EAINavMovementFlag::NAV_FLAG_JUMP || NextPathNode.FromLocation.z > NextPathNode.ToLocation.z)
 		{
 			float Offset = UTIL_GetHullOffsetFromFloor(NavProfile->PlayerHullIndex).z;
 
-			if (CurrFlags == EAINavMovementFlag::NAV_FLAG_CROUCH)
+			if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_CROUCH))
 			{
 				Offset *= 0.5f;
 			}
@@ -531,13 +530,13 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		// This what allows bots to climb over railings without having to explicitly place nav points on the railing itself
 		NextPathNode.RequiredClimbZ = NextPathNode.ToLocation.z;
 
-		if (CurrFlags == EAINavMovementFlag::NAV_FLAG_LADDER || CurrFlags == EAINavMovementFlag::NAV_FLAG_WALLCLIMB)
+		if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_LADDER) || EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_WALLCLIMB))
 		{
 			Vector FromLocation = (ResultPath->PathNodes.size() > 0) ? ResultPath->PathNodes.back().ToLocation : FromFloorLocation;
 			float NewRequiredZ = AINAV_FindZHeightForClimb(FromLocation, NextPathNode.ToLocation, head_hull);
 			NextPathNode.RequiredClimbZ = fmaxf(NewRequiredZ, NextPathNode.ToLocation.z);
 
-			if (CurrFlags == EAINavMovementFlag::NAV_FLAG_LADDER)
+			if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_LADDER))
 			{
 				NextPathNode.RequiredClimbZ += 5.0f;
 			}
@@ -561,7 +560,7 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		NodeFromLocation = NextPathNode.ToLocation;
 
-		NextPathNode.MovementObject = AINAV_GetMovementObjectForPathNode(&NextPathNode);
+		NextPathNode.MovementObject = AINAV_GetMovementObjectForPathNode(NavProfile, &NextPathNode);
 
 		ResultPath->PathNodes.push_back(NextPathNode);
 	}
@@ -583,24 +582,26 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 	return true;
 }
 
-edict_t* AINAV_GetMovementObjectForPathNode(AvHAIPathNode* PathNode)
+edict_t* AINAV_GetMovementObjectForPathNode(const NavAgentProfile* NavProfile, AvHAIPathNode* PathNode)
 {
-	if (!PathNode || !PathNode->IsValidMove()) { return nullptr; }
+	if (!NavProfile || !PathNode || !PathNode->IsValidMove()) { return nullptr; }
 
 	switch (PathNode->MovementFlag)
 	{
 		case EAINavMovementFlag::NAV_FLAG_PLATFORM:
 		{
-			const DynamicMapObject* PlatformRef = AIMAP_GetClosestPlatformToPoints(PathNode->FromLocation, PathNode->ToLocation);
+			const DynamicMapObjectHandle PlatformHandle = AIMAP_GetClosestPlatformToPoints(NavProfile, PathNode->FromLocation, PathNode->ToLocation);
 
-			return (PlatformRef && PlatformRef->IsValid()) ? PlatformRef->Edict : nullptr;
+			const DynamicMapObject* Platform = PlatformHandle.GetObjectRef();
+
+			return (Platform) ? Platform->Edict : nullptr;
 		}
 		break;
 
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
 		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
 		{
-			const AvHTeamNumber StructureTeam = (PathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1)
+			const AvHTeamNumber StructureTeam = (PathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1))
 				? GetGameRules()->GetTeamA()->GetTeamNumber()
 				: GetGameRules()->GetTeamB()->GetTeamNumber();
 
@@ -640,7 +641,7 @@ Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHA
 	{
 		const AvHAIPathNode* CurrentPathNode = ExistingPath->GetCurrentPathNode();
 
-		if (CurrentPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_WALK)
+		if (CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_WALK))
 		{
 			bool bFromReachable = AINAV_IsPointDirectlyReachable(NavProfile, FloorLocation, CurrentPathNode->ToLocation);
 			bool bToReachable = AINAV_IsPointDirectlyReachable(NavProfile, FloorLocation, CurrentPathNode->FromLocation);
@@ -1289,8 +1290,8 @@ bool AINAV_IsPathPointComplete(const NavAgentProfile* NavProfile, const edict_t*
 
 	if (bHasNextPathNode)
 	{
-		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1
-			|| NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2)
+		if (NextPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1)
+			|| NextPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2))
 		{
 			if (!FNullEnt(NextPathNode->MovementObject))
 			{
@@ -1347,7 +1348,7 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 
 		if (!bNextPointDirectlyReachable) { return false; }
 
-		if (NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_WALK) { return true; }
+		if (NextPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_WALK)) { return true; }
 
 		TraceResult hit;
 		UTIL_TraceHull(AIPlayer->v.origin, NextPathNode->ToLocation, ignore_monsters, head_hull, AIPlayer->v.pContainingEntity, &hit);

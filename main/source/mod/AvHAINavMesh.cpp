@@ -831,6 +831,8 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 
 	const dtStatus RaycastResult = FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndLocation, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
 
+	HitDist = clampf(HitDist, 0.0f, 1.0f);
+
 	if (dtStatusFailed(RaycastResult))
 	{
 		return ZERO_VECTOR;
@@ -842,26 +844,18 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 		HitResult->bStartOffMesh = false;
 	}
 
-	Vector HitLocation = ZERO_VECTOR;
-
-	if (HitDist >= 1.0f)
-	{
-		if (HitResult)
-		{
-			HitResult->TraceEndPoint = EndLocation;
-		}
-
-		return EndLocation;
-	}
-
 	float dtEndNearest[3] = { 0.0f, 0.0f, 0.0f };
 
 	dtVlerp(dtEndNearest, dtStartNearest, dtEndLocation, HitDist);
 
 	float Height = 0.0f;
 
-	FoundMesh->NavQueryRef->getPolyHeight(PolyPath[PathCount - 1], dtEndNearest, &Height);
-	dtEndNearest[1] = Height;
+	dtStatus PolyHeightStatus = FoundMesh->NavQueryRef->getPolyHeight(PolyPath[PathCount - 1], dtEndNearest, &Height);
+
+	if (dtStatusSucceed(PolyHeightStatus))
+	{
+		dtEndNearest[1] = Height;
+	}
 
 	const Vector TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
 	const Vector HitNormalVector = UTIL_VecDetourToGoldSrc(HitNormal);

@@ -194,7 +194,7 @@ void AIMAP_SetTrainStartPoints();
 void AIMAP_PopulateAllConnectionsAffectedByDynamicObjects();
 EAITriggerLinkType AIMAP_IsDynamicMapTriggerLinkedToObject(edict_t* TriggerObject, edict_t* TargetObject, vector<edict_t*> CheckedObjects);
 void AIMAP_PopulateConnectionsAffectedByDynamicObject(DynamicMapObjectHandle& ObjectHandle);
-const DynamicMapObject* AIMAP_GetClosestPlatformToPoints(const Vector StartPoint, const Vector EndPoint);
+DynamicMapObjectHandle AIMAP_GetClosestPlatformToPoints(const NavAgentProfile* NavProfile, const Vector StartPoint, const Vector EndPoint);
 
 DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* PathNode, const DynamicMapObjectHandle& IgnoreObjectHandle);
 
