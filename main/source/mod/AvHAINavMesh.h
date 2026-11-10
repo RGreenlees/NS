@@ -261,7 +261,7 @@ bool AIMESH_RemoveOffMeshConnection(OffMeshConnectionHandle& ConnectionHandle);
 bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, Vector MaxAcceptableExtents = DefaultReachableExtents);
 
 // Returns detailed information on a nav mesh trace. Will return the end location of the trace, as well as populating the details in HitResult
-Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult = nullptr);
+Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult = nullptr, Vector MaxAcceptableExtents = Vector(18.0f, 55.0f, 18.0f));
 EAINavArea AIMESH_GetNavAreaAtLocation(const NavAgentProfile* NavProfile, const Vector Location);
 Vector AIMESH_AdjustPointAwayFromNavWall(const NavAgentProfile* NavProfile, const Vector& Location, const float MaxDistanceFromWall);
 

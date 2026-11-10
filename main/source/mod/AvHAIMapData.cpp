@@ -1092,7 +1092,7 @@ DynamicMapObjectHandle AIMAP_GetBestTriggerForObject_Internal(const NavAgentProf
 
 				if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
 
-				if (EnumHasAnyFlags(ThisPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+				if (ThisPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 				{
 					if (AIMAP_GetClosestPlatformToPoints(ThisPathNode->FromLocation, ThisPathNode->ToLocation) == ObjectToActivate)
 					{
@@ -1442,7 +1442,7 @@ void AIMAP_LinkDynamicMapObjectsToOffMeshConnections()
 
 			if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-			if (EnumHasAnyFlags(ThisConnection->DefaultConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+			if (ThisConnection->HasDefaultFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 			{
 				const DynamicMapObject* NearestPlatform = AIMAP_GetClosestPlatformToPoints(ThisConnection->FromLocation, ThisConnection->ToLocation);
 
@@ -1843,8 +1843,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 	const DynamicMapObject* IgnoreObject = IgnoreObjectHandle.GetObjectRef();
 
-	if (EnumHasAnyFlags(PathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_LADDER)
-		|| EnumHasAnyFlags(PathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_WALLCLIMB))
+	if (PathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_LADDER | EAINavMovementFlag::NAV_FLAG_WALLCLIMB))
 	{
 		const Vector TargetLoc = (ToLoc.z > FromLoc.z) ? Vector(FromLoc.x, FromLoc.y, ToLoc.z) : Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
@@ -1872,7 +1871,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 		return NullHandle;
 	}
 
-	if (EnumHasAnyFlags(PathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_FALL))
+	if (PathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_FALL))
 	{
 		const Vector TargetLoc = Vector(ToLoc.x, ToLoc.y, FromLoc.z);
 
@@ -2336,7 +2335,7 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-		if (!EnumHasAnyFlags(ThisConnection->ConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
+		if (!ThisConnection->HasFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
 
 		if (ThisConnection->LinkedObject == LiftReference->Edict)
 		{
@@ -2436,7 +2435,7 @@ OffMeshConnectionHandle AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProf
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-		if (!EnumHasAnyFlags(ThisConnection->ConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
+		if (!ThisConnection->HasFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
 
 		if (ThisConnection->LinkedObject == PlatformRef->Edict)
 		{

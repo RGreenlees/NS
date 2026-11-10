@@ -1439,9 +1439,9 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 
 	// If we are currently navigating a platform, don't run the checks in case we screw up our current move
-	if (EnumHasAnyFlags(CurrentPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { return false; }
+	if (CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM)) { return false; }
 
-	if (EnumHasAnyFlags(Path->RequiredMoveFlags, EAINavMovementFlag::NAV_FLAG_WELD))
+	if (Path->HasRequiredFlag(EAINavMovementFlag::NAV_FLAG_WELD))
 	{
 		if (!PlayerHasWeapon(Player, EAIWeaponId::WEAPON_MARINE_WELDER))
 		{
@@ -1486,7 +1486,7 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 	{
 		if (!FutureNode || !FutureNode->IsValidMove()) { return false; }
 
-		if (EnumHasAnyFlags(FutureNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+		if (FutureNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 		{
 			const DynamicMapObjectHandle PlatformObjectHandle = AIMAP_GetDynamicObjectByEdict(FutureNode->MovementObject);
 
@@ -1616,7 +1616,7 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 		}
 	}
 
-	if (!EnumHasAnyFlags(CurrentPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_PLATFORM))
+	if (!CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 	{
 		const DynamicMapObjectHandle BlockingObjectHandle = AIMAP_FindObjectBlockingPathPoint(CurrentPathNode, DynamicMapObjectHandle());
 
@@ -3012,7 +3012,7 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	if (CanCrouch())
 	{
-		if (EnumHasAnyFlags(CurrentPathNode->MovementFlag, EAINavMovementFlag::NAV_FLAG_CROUCH))
+		if (CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_CROUCH))
 		{
 			NextFrameMovementInput.bShouldCrouch = true;
 		}
@@ -3783,10 +3783,48 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 
 	if (!PlatformRef) { return false; }
 
+	const NavAgentProfile* NavProfile = GetNavProfile();
+
 	const DynamicMapObjectStop* CurrentLiftStop = PlatformRef->GetCurrentStop();
 	const DynamicMapObjectStop* PreviousLiftStop = PlatformRef->GetPreviousStop();
 
-	if (!CurrentLiftStop) { return false; }
+	// Lift isn't stopped anywhere
+	if (!CurrentLiftStop)
+	{
+		// Handle cases where the lift doesn't actually stop at the desired disembark position but passes by. Bot needs to time their disembark.
+		const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
+		if (CurrentPathNode && CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
+		{
+			const Vector CollisionBottom = GetBottomOfHitbox();
+			const Vector ClosestLiftPoint = UTIL_GetClosestPointOnEntityToLocation(CurrentPathNode->ToLocation, Platform);
+
+			Vector ClosestPointOnNavMesh = AIMESH_TraceNavLine(NavProfile, CurrentPathNode->FromLocation, ClosestLiftPoint, nullptr);
+
+			if (!vIsZero(ClosestPointOnNavMesh))
+			{
+				if (vDist3DSq(ClosestLiftPoint, ClosestPointOnNavMesh) < sqrf(32.0f) && fabsf(CollisionBottom.z - ClosestPointOnNavMesh.z) < 50.0f)
+				{
+					return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+				}
+			}
+		}
+
+		float DistToCentre = vDist2DSq(GetLocation(), LiftPosition);
+		// Check we're not already in the middle, we might be on a really small moving platform
+		if (DistToCentre > sqrf(8.0f))
+		{
+			Vector NearestEdgePoint = vClampPointToAABBEdge2D(GetLocation(), Platform->v.absmin, Platform->v.absmax);
+			float DistToEdge = vDist2DSq(NearestEdgePoint, GetLocation());
+			// We're a little too close to the edge of the lift, we might fall off. Move to the centre a bit
+			if (DistToEdge < sqrf(GetPlayerRadius()))
+			{
+				return MoveToWithoutNav(LiftPosition) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+			}
+		}
+
+		return true;
+	}
 
 	const bool bCurrentStopIsDisembarkStop = vEquals(CurrentLiftStop->StopLocation, DesiredStop, 5.0f);
 	const bool bPreviousStopIsDisembarkStop = PreviousLiftStop && vEquals(PreviousLiftStop->StopLocation, DesiredStop, 5.0f);
@@ -3800,7 +3838,7 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 
 		if (bLiftHasReachedDestination)
 		{
-			Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(GetNavProfile(), GetLocation(), PlatformRefHandle);
+			Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, GetLocation(), PlatformRefHandle);
 			return MoveToWithoutNav(DisembarkPoint) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 		}
 	}
@@ -3853,11 +3891,11 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 		return true;
 	}
 
-	const Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(GetNavProfile(), BotLocation, PlatformRefHandle);
+	const Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, BotLocation, PlatformRefHandle);
 
 	if (!vIsZero(DisembarkPoint))
 	{
-		DynamicMapObjectHandle DisembarkTrigger = AIMAP_GetBestTriggerForObject(GetNavProfile(), PlatformRefHandle, DisembarkPoint);
+		DynamicMapObjectHandle DisembarkTrigger = AIMAP_GetBestTriggerForObject(NavProfile, PlatformRefHandle, DisembarkPoint);
 
 		if (DisembarkTrigger.IsValid())
 		{

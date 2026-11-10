@@ -97,10 +97,15 @@ struct AvHAIPathNode
 		}
 	}
 
+	bool HasMovementFlag(EAINavMovementFlag CheckFlag) const
+	{
+		return EnumHasAnyFlags(MovementFlag, CheckFlag);
+	}
+
 	bool IsTeleportMove() const
 	{
 		EAINavMovementFlag TeleportFlags = (EAINavMovementFlag::NAV_FLAG_TELEPORT | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1 | EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2);
-		return EnumHasAnyFlags(MovementFlag, TeleportFlags);
+		return HasMovementFlag(TeleportFlags);
 	}
 };
 typedef std::vector<AvHAIPathNode> AvHAIPathList;
@@ -243,6 +248,11 @@ struct AvHAIPath
 		{
 			CurrentNodeIndex++;
 		}
+	}
+
+	bool HasRequiredFlag(EAINavMovementFlag CheckFlag) const
+	{
+		return EnumHasAnyFlags(RequiredMoveFlags, CheckFlag);
 	}
 };
 

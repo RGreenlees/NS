@@ -777,78 +777,15 @@ bool AIMESH_QuickTraceNavLine(const NavAgentProfile* NavProfile, const Vector St
 {
 	if (!NavProfile) { return false; }
 
-	const NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+	const Vector HitEndPoint = AIMESH_TraceNavLine(NavProfile, StartLocation, EndLocation, nullptr, MaxAcceptableExtents);
 
-	if (!FoundMesh) { return false; }
+	if (vIsZero(HitEndPoint)) { return false; }
 
-	const dtQueryFilter* m_Filter = &NavProfile->Filters;
-
-	float dtReachableExtents[3] = { fabsf(MaxAcceptableExtents.x), fabsf(MaxAcceptableExtents.z), fabsf(MaxAcceptableExtents.y) };
-
-	float dtStartLocation[3] = { 0.0f, 0.0f, 0.0f };
-	UTIL_VecGoldSrcToDetour(StartLocation, dtStartLocation);
-
-	float dtEndLocation[3] = { 0.0f, 0.0f, 0.0f };
-	UTIL_VecGoldSrcToDetour(EndLocation, dtEndLocation);
-
-	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
-	float dtStartNearest[3] = { 0.0f, 0.0f, 0.0f };
-	float dtEndNearest[3] = { 0.0f, 0.0f, 0.0f };
-
-	dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, dtReachableExtents, m_Filter, &StartPoly, dtStartNearest);
-
-	if (!dtStatusSucceed(FoundStartPoly) || StartPoly == 0) { return false; }
-
-	dtStatus FoundEndPoly = FoundMesh->NavQueryRef->findNearestPoly(dtEndLocation, dtReachableExtents, m_Filter, &EndPoly, dtEndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly) || EndPoly == 0) { return false; }
-
-	float HitDist;
-	float HitNormal[3] = { 0.0f, 0.0f, 0.0f };
-
-	dtPolyRef PolyPath[MAX_PATH_POLY] = { 0 };
-	int PathCount = 0;
-
-	// Note, nav raycasts are 2D, so later on we will also need to check the height difference between the start and end point
-	const dtStatus RaycastStatus = FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
-
-	if (!dtStatusSucceed(RaycastStatus) || (RaycastStatus & DT_STATUS_DETAIL_MASK) != 0 || PathCount == 0) { return false; }
-
-	float ReachedPoint[3] = { 0.0f, 0.0f, 0.0f };
-
-	if (HitDist < 1.0f)
-	{
-		dtVlerp(ReachedPoint, dtStartNearest, dtEndNearest, HitDist);
-	}
-	else
-	{
-		dtVcopy(ReachedPoint, dtEndNearest);
-	}
-
-	const float MaxLength = dtMax(dtReachableExtents[0], dtReachableExtents[1]);
-
-	// Early exit: no point checking height difference if we're not close enough anyway
-	if (dtVdist2DSqr(ReachedPoint, dtEndLocation) > sqrf(MaxLength)) { return false; }
-
-	float HeightSamplePoint[3] = { 0.0f, 0.0f, 0.0f };
-	const dtPolyRef ReachedPoly = PolyPath[PathCount - 1];
-
-	const dtStatus ClosestPointStatus = FoundMesh->NavQueryRef->closestPointOnPolyBoundary(ReachedPoly, dtEndNearest, HeightSamplePoint);
-
-	if (!dtStatusSucceed(ClosestPointStatus)) { return false; }
-
-	float ReachedHeight = 0.0f;
-
-	// Since nav traces are 2D, we need to ensure we don't end up way below or above our desired destination
-	const dtStatus HeightCheckStatus = FoundMesh->NavQueryRef->getPolyHeight(ReachedPoly, HeightSamplePoint, &ReachedHeight);
-
-	ReachedHeight = (ReachedHeight > 0.0f) ? ReachedHeight : dtEndNearest[1];
-
-	return dtAbs(ReachedHeight - dtEndLocation[1]) <= dtReachableExtents[1];
+	return vDist2DSq(HitEndPoint, EndLocation) <= sqrf(fmaxf(MaxAcceptableExtents.x, MaxAcceptableExtents.y))
+		&& fabsf(HitEndPoint.z - EndLocation.z) <= MaxAcceptableExtents.z;
 }
 
-Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult)
+Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector StartLocation, const Vector EndLocation, NavHitResult* HitResult, Vector MaxAcceptableExtents)
 {
 	if (HitResult)
 	{
@@ -870,11 +807,9 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 	UTIL_VecGoldSrcToDetour(EndLocation, dtEndLocation);
 
 	dtPolyRef StartPoly;
-	dtPolyRef EndPoly;
 	float dtStartNearest[3];
-	float dtEndNearest[3];
 
-	const float MaxReachableExtents[3] = { 18.0f, 32.0f, 18.0f };
+	const float MaxReachableExtents[3] = { MaxAcceptableExtents.x, MaxAcceptableExtents.z, MaxAcceptableExtents.y };
 
 	const dtStatus FoundStartPoly = FoundMesh->NavQueryRef->findNearestPoly(dtStartLocation, MaxReachableExtents, m_Filter, &StartPoly, dtStartNearest);
 
@@ -888,33 +823,13 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 		return ZERO_VECTOR;
 	}
 
-	const dtStatus FoundEndPoly = FoundMesh->NavQueryRef->findNearestPoly(dtEndLocation, MaxReachableExtents, m_Filter, &EndPoly, dtEndNearest);
-
-	if (!dtStatusSucceed(FoundEndPoly))
-	{
-		return ZERO_VECTOR;
-	}
-
-	// All polys are convex, therefore definitely reachable if start and end points are within the same poly
-	if (StartPoly == EndPoly)
-	{
-		if (HitResult)
-		{
-			HitResult->flFraction = 1.0f;
-			HitResult->bStartOffMesh = false;
-			HitResult->TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
-		}
-
-		return UTIL_VecDetourToGoldSrc(dtEndNearest);
-	}
-
 	dtPolyRef PolyPath[MAX_PATH_POLY];
 	int PathCount = 0;
 
-	float HitDist;
-	float HitNormal[3];
+	float HitDist = 0.0f;
+	float HitNormal[3] = { 0.0f, 0.0f, 0.0f };
 
-	const dtStatus RaycastResult = FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndNearest, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
+	const dtStatus RaycastResult = FoundMesh->NavQueryRef->raycast(StartPoly, dtStartNearest, dtEndLocation, m_Filter, &HitDist, HitNormal, PolyPath, &PathCount, MAX_AI_PATH_SIZE);
 
 	if (dtStatusFailed(RaycastResult))
 	{
@@ -931,17 +846,22 @@ Vector AIMESH_TraceNavLine(const NavAgentProfile* NavProfile, const Vector Start
 
 	if (HitDist >= 1.0f)
 	{
-		const Vector Result = UTIL_VecDetourToGoldSrc(dtEndNearest);
-
 		if (HitResult)
 		{
-			HitResult->TraceEndPoint = Result;
+			HitResult->TraceEndPoint = EndLocation;
 		}
 
-		return Result;
+		return EndLocation;
 	}
 
-	dtVlerp(dtEndNearest, dtStartNearest, dtEndNearest, HitDist);
+	float dtEndNearest[3] = { 0.0f, 0.0f, 0.0f };
+
+	dtVlerp(dtEndNearest, dtStartNearest, dtEndLocation, HitDist);
+
+	float Height = 0.0f;
+
+	FoundMesh->NavQueryRef->getPolyHeight(PolyPath[PathCount - 1], dtEndNearest, &Height);
+	dtEndNearest[1] = Height;
 
 	const Vector TraceEndPoint = UTIL_VecDetourToGoldSrc(dtEndNearest);
 	const Vector HitNormalVector = UTIL_VecDetourToGoldSrc(HitNormal);

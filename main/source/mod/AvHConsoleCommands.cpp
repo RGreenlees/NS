@@ -1498,6 +1498,52 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		theSuccess = true;
 	}
+	else if (FStrEq(pcmd, "bot_setdebugvector1"))
+	{
+		edict_t* ListenEdict = INDEXENT(1);
+
+		Vector StartTrace = GetPlayerEyePosition(ListenEdict);
+		Vector EndTrace = StartTrace + UTIL_GetForwardVector(ListenEdict->v.v_angle) * 1000.0f;
+
+		TraceResult Result;
+		UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, ListenEdict->v.pContainingEntity, &Result);
+
+		if (Result.flFraction < 1.0f)
+		{
+			AIDEBUG_SetDebugVector1(Result.vecEndPos);
+		}
+
+		theSuccess = true;
+	}
+	else if (FStrEq(pcmd, "bot_navtrace"))
+	{
+		const Vector DebugVector = AIDEBUG_GetDebugVector1();
+
+		if (!vIsZero(DebugVector))
+		{
+			edict_t* ListenEdict = INDEXENT(1);
+
+			Vector StartTrace = GetPlayerEyePosition(ListenEdict);
+			Vector EndTrace = StartTrace + UTIL_GetForwardVector(ListenEdict->v.v_angle) * 1000.0f;
+
+			TraceResult Result;
+			UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, ListenEdict->v.pContainingEntity, &Result);
+
+			if (Result.flFraction < 1.0f)
+			{
+				const NavAgentProfile* NavProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+
+				const Vector EndPos = AIMESH_TraceNavLine(NavProfile, DebugVector, Result.vecEndPos);
+
+				if (!vIsZero(EndPos))
+				{
+					UTIL_DrawLine(ListenEdict, DebugVector, EndPos, 10.0f);
+				}
+			}
+		}
+
+		theSuccess = true;
+	}
     else if( FStrEq( pcmd, kcRemoveUpgrade) )
     {
         // Allow even with cheats off right now, put this back in for first beta

@@ -213,6 +213,16 @@ struct NavOffMeshConnection
 	{
 		return ConnectionRef > 0 && IsValidNavMeshIndex(static_cast<int>(NavMeshIndex));
 	}
+
+	bool HasFlag(EAINavMovementFlag CheckFlag) const
+	{
+		return EnumHasAnyFlags(ConnectionFlags, CheckFlag);
+	}
+
+	bool HasDefaultFlag(EAINavMovementFlag CheckFlag) const
+	{
+		return EnumHasAnyFlags(DefaultConnectionFlags, CheckFlag);
+	}
 };
 typedef std::unordered_map<uint32_t, NavOffMeshConnection> OffMeshConnectionList;
 

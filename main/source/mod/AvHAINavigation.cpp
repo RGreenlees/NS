@@ -746,7 +746,7 @@ Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 
 		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
 
-		if (!EnumHasAnyFlags(ThisConnection->ConnectionFlags, EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
+		if (!ThisConnection->HasFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
 
 		if (ThisConnection->LinkedObject == LiftReference)
 		{
