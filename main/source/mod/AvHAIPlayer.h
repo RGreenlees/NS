@@ -350,6 +350,9 @@ struct AvHAIPlayer
 	bool NewPhaseGateMove(AvHAIPath* Path);
 	bool NewWallClimbMove(AvHAIPath* Path);
 
+	// Returns true once the current move is successfully aborted
+	bool CanAbortCurrentMove();
+
 	// Checks the bot's current path and sees if there are any necessary movement tasks to progress (e.g. press button, break something)
 	// Returns true if a movement task was required and added.
 	bool CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIMoveTask& Task);

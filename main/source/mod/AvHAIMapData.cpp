@@ -1803,7 +1803,7 @@ Vector AIMAP_GetButtonFloorLocation(const NavAgentProfile* NavProfile, const Vec
 
 DynamicMapObjectHandle AIMAP_GetClosestPlatformToPoints(const NavAgentProfile* NavProfile, const Vector StartPoint, const Vector EndPoint)
 {
-	DynamicMapObjectHandle Result = DynamicMapObjectHandle();;
+	DynamicMapObjectHandle Result = DynamicMapObjectHandle();
 
 	float LowestDist = FLT_MAX;
 
@@ -1813,17 +1813,24 @@ DynamicMapObjectHandle AIMAP_GetClosestPlatformToPoints(const NavAgentProfile* N
 
 		const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-		if (!ThisObject) { continue; }
-
-		if (ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_DOOR && ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM && ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_TRAIN) { continue; }
+		if (!ThisObject || !ThisObject->IsRideablePlatformType() || ThisObject->StopPoints.empty()) { continue; }
 
 		float DistEmbarkPoint = FLT_MAX;
 		float DistDisembarkPoint = FLT_MAX;
 
-		for (auto stop = ThisObject->StopPoints.begin(); stop != ThisObject->StopPoints.end(); stop++)
+		for (int32 i = 0; i < ThisObject->StopPoints.size(); i++)
 		{
-			const Vector ClosestPointEmbark = UTIL_GetClosestPointOnEntityToLocation(StartPoint, ThisObject->Edict, (*stop).StopLocation);
-			const Vector ClosestPointDisembark = UTIL_GetClosestPointOnEntityToLocation(EndPoint, ThisObject->Edict, (*stop).StopLocation);
+			const DynamicMapObjectStop* CurrentStop = &ThisObject->StopPoints[i];
+			const DynamicMapObjectStop* NextStop = (i < ThisObject->StopPoints.size() - 1)
+				? &ThisObject->StopPoints[i + 1]
+				: &ThisObject->StopPoints[0];
+
+			// Handle situations where the lift doesn't necessarily stop exactly where the embark/disembark points are
+			const Vector ClosestStartPointOnLine = vClosestPointOnLine(CurrentStop->StopLocation, NextStop->StopLocation, StartPoint);
+			const Vector ClosestEndPointOnLine = vClosestPointOnLine(CurrentStop->StopLocation, NextStop->StopLocation, EndPoint);
+
+			const Vector ClosestPointEmbark = UTIL_GetClosestPointOnEntityToLocation(StartPoint, ThisObject->Edict, ClosestStartPointOnLine);
+			const Vector ClosestPointDisembark = UTIL_GetClosestPointOnEntityToLocation(EndPoint, ThisObject->Edict, ClosestEndPointOnLine);
 
 			const Vector ClosestEmbarkPointNavigable = AIMESH_TraceNavLine(NavProfile, StartPoint, ClosestPointEmbark);
 			const Vector ClosestDisembarkPointNavigable = AIMESH_TraceNavLine(NavProfile, EndPoint, ClosestPointDisembark);
@@ -2337,7 +2344,7 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 {
 	if (!LiftObjectHandle.IsValid()) { return ZERO_VECTOR; }
 
-	OffMeshConnectionHandle NearestConnectionHandle = OffMeshConnectionHandle();
+	Vector BestDisembarkPoint = ZERO_VECTOR;
 	float MinDist = 0.0f;
 
 	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
@@ -2352,85 +2359,94 @@ Vector AIMAP_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile,
 	{
 		const OffMeshConnectionHandle& ThisConnectionHandle = *it;
 
-		if (!ThisConnectionHandle.IsValid()) { continue; }
-
 		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
 
-		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
+		if (!ThisConnection) { continue; }
 
 		if (!ThisConnection->HasFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
 
-		if (ThisConnection->LinkedObject == LiftReference->Edict)
-		{
-			const float ThisDist = fminf(vDist3DSq(ThisConnection->FromLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference->Edict)),
-									vDist3DSq(ThisConnection->ToLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference->Edict)));
+		if (ThisConnection->LinkedObject != LiftReference->Edict) { continue; }
 
-			if (ThisDist < sqrf(100.0f) && (!NearestConnectionHandle.IsValid() || ThisDist < MinDist))
+		if (const DynamicMapObjectStop* CurrentStop = LiftReference->GetCurrentStop())
+		{
+			const float DistToPoint = vDist3DSq(UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference->Edict), ThisConnection->ToLocation);
+
+			const float DistFromPoint = (ThisConnection->bIsBiDirectional)
+				? vDist3DSq(UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference->Edict), ThisConnection->FromLocation)
+				: FLT_MAX;
+
+			const float ThisDist = fminf(DistFromPoint, DistToPoint);
+
+			if (ThisDist < sqrf(100.0f) && (vIsZero(BestDisembarkPoint) || ThisDist < MinDist))
 			{
-				NearestConnectionHandle = ThisConnectionHandle;
+				BestDisembarkPoint = (DistFromPoint < DistToPoint) ? ThisConnection->FromLocation : ThisConnection->ToLocation;
+				MinDist = ThisDist;
+			}
+
+			continue;
+		}
+
+		const DynamicMapObjectStop* NextStop = LiftReference->GetNextStop();
+		const DynamicMapObjectStop* PreviousStop = LiftReference->GetPreviousStop();
+
+		if (NextStop)
+		{
+			const Vector CurrentPosition = UTIL_GetCentreOfEntity(LiftReference->Edict);
+			const Vector Destination = NextStop->StopLocation;
+
+			const Vector ClosestToPointOnLine = vClosestPointOnLine(CurrentPosition, Destination, ThisConnection->ToLocation);
+			const float DistToPoint = vDist3DSq(UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference->Edict, ClosestToPointOnLine), ThisConnection->ToLocation);
+			float DistFromPoint = FLT_MAX;
+
+			float ThisDist = DistToPoint;
+
+			if (ThisConnection->bIsBiDirectional)
+			{
+				const Vector ClosestFromPointOnLine = vClosestPointOnLine(CurrentPosition, Destination, ThisConnection->FromLocation);
+				DistFromPoint = vDist3DSq(UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference->Edict, ClosestFromPointOnLine), ThisConnection->FromLocation);
+
+				ThisDist = fminf(ThisDist, DistFromPoint);
+			}
+
+			if (ThisDist < sqrf(100.0f) && (vIsZero(BestDisembarkPoint) || ThisDist < MinDist))
+			{
+				BestDisembarkPoint = (DistFromPoint < DistToPoint) ? ThisConnection->FromLocation : ThisConnection->ToLocation;
+				MinDist = ThisDist;
+			}
+
+			continue;
+		}
+
+		if (PreviousStop)
+		{
+			const Vector CurrentPosition = UTIL_GetCentreOfEntity(LiftReference->Edict);
+			const Vector PreviousDestination = PreviousStop->StopLocation;
+
+			if (vDist3DSq(CurrentPosition, PreviousDestination) > sqrf(32.0f)) { continue; }
+
+			const Vector ClosestToPointOnLine = vClosestPointOnLine(CurrentPosition, PreviousDestination, ThisConnection->ToLocation);
+			const float DistToPoint = vDist3DSq(UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference->Edict, ClosestToPointOnLine), ThisConnection->ToLocation);
+			float DistFromPoint = FLT_MAX;
+
+			float ThisDist = DistToPoint;
+
+			if (ThisConnection->bIsBiDirectional)
+			{
+				const Vector ClosestFromPointOnLine = vClosestPointOnLine(CurrentPosition, PreviousDestination, ThisConnection->FromLocation);
+				DistFromPoint = vDist3DSq(UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference->Edict, ClosestFromPointOnLine), ThisConnection->FromLocation);
+
+				ThisDist = fminf(ThisDist, DistFromPoint);
+			}
+
+			if (ThisDist < sqrf(100.0f) && (vIsZero(BestDisembarkPoint) || ThisDist < MinDist))
+			{
+				BestDisembarkPoint = (DistFromPoint < DistToPoint) ? ThisConnection->FromLocation : ThisConnection->ToLocation;
 				MinDist = ThisDist;
 			}
 		}
 	}
 
-	const NavOffMeshConnection* NearestConnection = NearestConnectionHandle.GetConnectionRef();
-
-	if (NearestConnection)
-	{
-		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference->Edict);
-		NearestPointFromLocation.z = RiderPosition.z;
-
-		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference->Edict);
-		NearestPointToLocation.z = RiderPosition.z;
-
-		float DistFromLocation = vDist3DSq(NearestConnection->FromLocation, NearestPointFromLocation);
-		float DistToLocation = vDist3DSq(NearestConnection->ToLocation, NearestPointToLocation);
-		return (DistFromLocation < DistToLocation) ? NearestConnection->FromLocation : NearestConnection->ToLocation;
-	}
-	else
-	{
-		Vector NearestProjectedPoint = ZERO_VECTOR;
-		Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference->Edict);
-		float DisembarkHeight = RiderPosition.z;
-
-		Vector FrontLocation = Vector(LiftReference->Edict->v.absmax.x, LiftCentre.y, DisembarkHeight);
-		Vector RearLocation = Vector(LiftReference->Edict->v.absmin.x, LiftCentre.y, DisembarkHeight);
-		Vector LeftLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmin.y, DisembarkHeight);
-		Vector RightLocation = Vector(LiftCentre.x, LiftReference->Edict->v.absmax.y, DisembarkHeight);
-
-		float ProjectWidth = fmaxf((LiftReference->Edict->v.absmax.x - LiftReference->Edict->v.absmin.x) * 0.5f, (LiftReference->Edict->v.absmax.y - LiftReference->Edict->v.absmin.y) * 0.5f);
-		ProjectWidth += 100.0f;
-
-		Vector ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, FrontLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
-		{
-			return ProjectedLoc;
-		}
-
-		ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RearLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
-		{
-			return ProjectedLoc;
-		}
-
-		ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, LeftLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
-		{
-			return ProjectedLoc;
-		}
-
-		ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RightLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-		if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->Edict->v.absmin, LiftReference->Edict->v.absmax))
-		{
-			return ProjectedLoc;
-		}
-	}
-
-	return ZERO_VECTOR;
+	return BestDisembarkPoint;
 }
 
 OffMeshConnectionHandle AIMAP_GetOffMeshConnectionForPlatform(const NavAgentProfile* NavProfile, const DynamicMapObjectHandle& PlatformRefHandle)
@@ -2768,9 +2784,21 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 
 	if (!Object) { return; }
 
+	Vector ObjectLocation = UTIL_GetCentreOfEntity(Object->Edict);
+
 	sprintf(buf, "Info for %s (%s):\n\n", (Object->Edict->v.targetname != 0) ? STRING(Object->Edict->v.targetname) : "Unnamed", STRING(Object->Edict->v.classname));
 
 	string CurrentType;
+
+	if (Object->IsRideablePlatformType())
+	{
+		const Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE), ObjectLocation, ObjectHandle);
+
+		if (!vIsZero(DisembarkPoint))
+		{
+			UTIL_DrawLine(INDEXENT(1), ObjectLocation, DisembarkPoint, 0, 0, 128);
+		}
+	}
 
 	switch (Object->Type)
 	{
@@ -2834,8 +2862,6 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 	strcat(buf, interbuf);
 
 	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1, 0.1f, 255, 255, 255, buf);
-
-	Vector ObjectLocation = UTIL_GetCentreOfEntity(Object->Edict);
 
 	if (!Object->StopPoints.empty())
 	{

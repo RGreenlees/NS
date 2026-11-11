@@ -1441,7 +1441,7 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 		{
 			AvHAIPlayer* thisBot = (*it);
 
-			thisBot->DebugDestination = theAvHPlayer->pev->origin;
+			thisBot->DebugDestination = UTIL_GetFloorUnderEntity(theAvHPlayer->edict());
 		}
 
 		theSuccess = true;

@@ -596,27 +596,26 @@ void UTIL_DrawHUDText(edict_t* pEntity, char channel, float x, float y, unsigned
 
 	float delta = AIMGR_GetFrameDelta();
 
-	// TODO: Be able to turn these off as a preference
-	hudtextparms_t	theTextParms;
+	hudtextparms_t	TheTextParms;
 
 	// Init text parms
-	theTextParms.x = x;
-	theTextParms.y = y;
-	theTextParms.effect = 0;
-	theTextParms.r1 = 240;
-	theTextParms.g1 = 240;
-	theTextParms.b1 = 240;
-	theTextParms.a1 = 128;
-	theTextParms.r2 = 240;
-	theTextParms.g2 = 240;
-	theTextParms.b2 = 240;
-	theTextParms.a2 = 128;
-	theTextParms.fadeinTime = .0f;
-	theTextParms.fadeoutTime = .0f;
-	theTextParms.holdTime = 0.2f;
-	theTextParms.channel = channel;
+	TheTextParms.x = x;
+	TheTextParms.y = y;
+	TheTextParms.effect = 0;
+	TheTextParms.r1 = 240;
+	TheTextParms.g1 = 240;
+	TheTextParms.b1 = 240;
+	TheTextParms.a1 = 128;
+	TheTextParms.r2 = 240;
+	TheTextParms.g2 = 240;
+	TheTextParms.b2 = 240;
+	TheTextParms.a2 = 128;
+	TheTextParms.fadeinTime = .0f;
+	TheTextParms.fadeoutTime = .0f;
+	TheTextParms.holdTime = 0.2f;
+	TheTextParms.channel = channel;
 
-	UTIL_HudMessage(CBaseEntity::Instance(pEntity), theTextParms, string);
+	UTIL_HudMessage(CBaseEntity::Instance(pEntity), TheTextParms, string);
 }
 
 void UTIL_ClearLocalizations()

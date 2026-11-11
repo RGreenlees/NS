@@ -208,6 +208,7 @@ struct NavOffMeshConnection
 	EAINavMovementFlag DefaultConnectionFlags = EAINavMovementFlag::NAV_FLAG_DISABLED; // If this connection is being temporarily modified, what it should normally be
 	uint32_t ConnectionRef = 0; // References to this connection on all defined nav meshes
 	edict_t* LinkedObject = nullptr;
+	bool bIsBiDirectional = false;
 
 	bool IsValid() const
 	{

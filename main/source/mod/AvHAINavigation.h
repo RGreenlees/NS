@@ -120,6 +120,7 @@ struct AvHAIPath
 	EAINavMovementFlag RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
 	int32 CurrentNodeIndex = 0;
 	EAINavMeshIndex UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
+	bool bIsPendingTermination = false;
 
 	void Clear()
 	{
@@ -128,6 +129,7 @@ struct AvHAIPath
 		CurrentNodeIndex = 0;
 		DesiredDestination = ZERO_VECTOR;
 		UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
+		bIsPendingTermination = false;
 	}
 
 	bool IsValidPath() const
@@ -244,6 +246,12 @@ struct AvHAIPath
 	{
 		if (!IsValidPath()) { return; }
 
+		if (bIsPendingTermination)
+		{
+			Clear();
+			return;
+		}
+
 		if (CurrentNodeIndex < GetPathSize() - 1)
 		{
 			CurrentNodeIndex++;
@@ -358,7 +366,6 @@ edict_t* AINAV_GetMovementObjectForPathNode(const NavAgentProfile* NavProfile, A
 
 Vector AINAV_FindNewPathStartPoint(const NavAgentProfile* NavProfile, const AvHAIPath* ExistingPath, const Vector& DesiredStartPoint, const Vector& Destination);
 
-Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const edict_t* LiftReference);
 
 bool AINAV_AddTriggerMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const Vector& DesiredEndPoint, const edict_t* Trigger, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask);
 bool AINAV_AddPickupMovementTask(const NavAgentProfile* NavProfile, const Vector& StartPoint, const edict_t* ThingToPickup, const edict_t* TriggerTarget, AvHAIMoveTask& NewTask, const AvHAIPathNode* RelevantMoveInfo = nullptr);

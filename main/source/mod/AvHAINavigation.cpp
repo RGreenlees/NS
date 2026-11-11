@@ -334,35 +334,6 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 	Vector FromFloorLocation = AINAV_FindNewPathStartPoint(NavProfile, ResultPath, FromLocation, ToLocation);
 
-	const DynamicMapObjectHandle CurrentPlatformHandle = AIMAP_TraceForDynamicObject(FromLocation, FromLocation - Vector(0.0f, 0.0f, 1000.0f));
-
-	const DynamicMapObject* CurrentPlatform = CurrentPlatformHandle.GetObjectRef();
-
-	bool bMustDisembarkLiftFirst = false;
-	Vector LiftStart = ZERO_VECTOR;
-	Vector LiftEnd = ZERO_VECTOR;
-
-	if (CurrentPlatform && CurrentPlatform->IsValid())
-	{
-		LiftEnd = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, FromLocation, CurrentPlatformHandle);
-
-		if (!vIsZero(LiftEnd))
-		{
-			FromFloorLocation = LiftEnd;
-
-			OffMeshConnectionHandle LiftOffMeshHandle = AIMAP_GetOffMeshConnectionForPlatform(NavProfile, CurrentPlatformHandle);
-
-			const NavOffMeshConnection* LiftOffMesh = LiftOffMeshHandle.GetConnectionRef();
-
-			if (LiftOffMesh && LiftOffMesh->IsValid())
-			{
-				LiftStart = (vEquals(LiftEnd, LiftOffMesh->ToLocation, 5.0f)) ? LiftOffMesh->FromLocation : LiftOffMesh->ToLocation;
-				bMustDisembarkLiftFirst = true;
-				FromFloorLocation = LiftEnd;
-			}
-		}
-	}
-
 	Vector ToFloorLocation = AINAV_AdjustPointForPathfinding(NavProfile, ToLocation);
 
 	if (UTIL_IsPointInSwimArea(ToLocation))
@@ -482,19 +453,6 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 	ResultPath->RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
 
 	Vector NodeFromLocation = FromFloorLocation;
-
-	if (bMustDisembarkLiftFirst)
-	{
-		AvHAIPathNode StartPathNode;
-		StartPathNode.FromLocation = LiftStart;
-		StartPathNode.ToLocation = LiftEnd;
-		StartPathNode.MovementFlag = EAINavMovementFlag::NAV_FLAG_PLATFORM;
-		StartPathNode.MovementArea = EAINavArea::NAV_AREA_WALK;
-
-		ResultPath->PathNodes.push_back(StartPathNode);
-
-		NodeFromLocation = LiftEnd;
-	}
 
 	for (int nVert = 0; nVert < nVertCount; nVert++)
 	{
@@ -726,100 +684,6 @@ float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, 
 	return StartTrace.z;
 }
 
-Vector AINAV_GetNearestPlatformDisembarkPoint(const NavAgentProfile* NavProfile, const edict_t* Rider, const edict_t* LiftReference)
-{
-	if (!NavProfile || !UTIL_IsEdictActive(LiftReference) || !UTIL_IsEdictActive(Rider)) { return ZERO_VECTOR; }
-
-	OffMeshConnectionHandle NearestConnectionHandle = OffMeshConnectionHandle();
-	float MinDist = 0.0f;
-
-	NavMesh* ChosenNavMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
-
-	if (!ChosenNavMesh) { return ZERO_VECTOR; }
-
-	for (auto it = ChosenNavMesh->MeshConnectionHandles.begin(); it != ChosenNavMesh->MeshConnectionHandles.end(); it++)
-	{
-		const OffMeshConnectionHandle& ThisConnectionHandle = *it;
-
-		if (!ThisConnectionHandle.IsValid()) { continue; }
-
-		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
-
-		if (!ThisConnection || !ThisConnection->IsValid()) { continue; }
-
-		if (!ThisConnection->HasFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM)) { continue; }
-
-		if (ThisConnection->LinkedObject == LiftReference)
-		{
-			float ThisDist = fminf(vDist3DSq(ThisConnection->FromLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->FromLocation, LiftReference)),
-				vDist3DSq(ThisConnection->ToLocation, UTIL_GetClosestPointOnEntityToLocation(ThisConnection->ToLocation, LiftReference)));
-
-			if (ThisDist < sqrf(100.0f) && (!NearestConnectionHandle.IsValid() || ThisDist < MinDist))
-			{
-				NearestConnectionHandle = ThisConnectionHandle;
-				MinDist = ThisDist;
-			}
-		}
-	}
-
-	const NavOffMeshConnection* NearestConnection = NearestConnectionHandle.GetConnectionRef();
-
-	if (NearestConnection)
-	{
-		Vector NearestPointFromLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->FromLocation, LiftReference);
-		NearestPointFromLocation.z = Rider->v.origin.z;
-
-		Vector NearestPointToLocation = UTIL_GetClosestPointOnEntityToLocation(NearestConnection->ToLocation, LiftReference);
-		NearestPointToLocation.z = Rider->v.origin.z;
-
-		float DistFromLocation = vDist3DSq(NearestConnection->FromLocation, NearestPointFromLocation);
-		float DistToLocation = vDist3DSq(NearestConnection->ToLocation, NearestPointToLocation);
-		return (DistFromLocation < DistToLocation) ? NearestConnection->FromLocation : NearestConnection->ToLocation;
-	}
-
-	Vector NearestProjectedPoint = ZERO_VECTOR;
-	Vector LiftCentre = UTIL_GetCentreOfEntity(LiftReference);
-	float DisembarkHeight = (!FNullEnt(Rider)) ? GetPlayerBottomOfCollisionHull(Rider).z : LiftReference->v.absmax.z;
-
-	Vector FrontLocation = Vector(LiftReference->v.absmax.x, LiftCentre.y, DisembarkHeight);
-	Vector RearLocation = Vector(LiftReference->v.absmin.x, LiftCentre.y, DisembarkHeight);
-	Vector LeftLocation = Vector(LiftCentre.x, LiftReference->v.absmin.y, DisembarkHeight);
-	Vector RightLocation = Vector(LiftCentre.x, LiftReference->v.absmax.y, DisembarkHeight);
-
-	float ProjectWidth = fmaxf((LiftReference->v.absmax.x - LiftReference->v.absmin.x) * 0.5f, (LiftReference->v.absmax.y - LiftReference->v.absmin.y) * 0.5f);
-	ProjectWidth += 100.0f;
-
-	Vector ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, FrontLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
-	{
-		return ProjectedLoc;
-	}
-
-	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RearLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
-	{
-		return ProjectedLoc;
-	}
-
-	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, LeftLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
-	{
-		return ProjectedLoc;
-	}
-
-	ProjectedLoc = AIMESH_ProjectPointToNavmesh(NavProfile, RightLocation, Vector(ProjectWidth, ProjectWidth, 50.0f));
-
-	if (!vIsZero(ProjectedLoc) && !vPointOverlaps2D(ProjectedLoc, LiftReference->v.absmin, LiftReference->v.absmax))
-	{
-		return ProjectedLoc;
-	}
-
-	return ZERO_VECTOR;
-}
-
 bool AINAV_IsOffPathNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode)
 {
 	if (!NavProfile || !UTIL_IsEdictActive(AIPlayer) || !PathNode || !PathNode->IsValidMove()) { return false; }
@@ -851,6 +715,8 @@ bool AINAV_IsOffWalkNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 	if (!NavProfile || !UTIL_IsEdictActive(AIPlayer) || !PathNode || !PathNode->IsValidMove()) { return true; }
 
 	if (!IsPlayerOnGround(AIPlayer)) { return false; }
+
+	if (AINAV_IsPointDirectlyReachable(NavProfile, GetPlayerBottomOfCollisionHull(AIPlayer), PathNode->ToLocation)) { return false; }
 
 	Vector NearestPointOnLine = vClosestPointOnLine(PathNode->FromLocation, PathNode->ToLocation, AIPlayer->v.origin);
 
@@ -1339,6 +1205,10 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 	const Vector PlayerFloorBBMax = CurrentPosition + Vector(AIPlayer->v.maxs.x, AIPlayer->v.maxs.y, AIPlayer->v.maxs.z - AIPlayer->v.mins.z);
 
 	if (vPointOverlaps3D(CurrentPathNode->ToLocation, PlayerFloorBBMin, PlayerFloorBBMax)) { return true; }
+
+	const Vector PositionInMove = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, AIPlayer->v.origin);
+
+	if (vDist2DSq(PositionInMove, CurrentPathNode->ToLocation) > sqrf(GetPlayerRadius(AIPlayer) * 2.0f)) { return false; }
 
 	const bool bHasNextPathNode = (NextPathNode && NextPathNode->IsValidMove());
 

@@ -90,6 +90,11 @@ struct DynamicMapObject
 		return ObjectRef != nullptr && EdictIndex > -1 && !FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO;
 	}
 
+	bool IsRideablePlatformType() const
+	{
+		return Type == EAIDynamicMapObjectType::MAPOBJECT_DOOR || Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || Type == EAIDynamicMapObjectType::MAPOBJECT_TRAIN;
+	}
+
 	// Returns the current stop the platform / train is at. Will be null if the train is moving (use previous or next stop for that)
 	const DynamicMapObjectStop* GetCurrentStop() const
 	{

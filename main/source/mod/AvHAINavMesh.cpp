@@ -549,6 +549,7 @@ bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc,
 	NewConnectionDef.ToLocation = ProjectedEnd;
 	NewConnectionDef.DefaultConnectionFlags = flags;
 	NewConnectionDef.ConnectionFlags = flags;
+	NewConnectionDef.bIsBiDirectional = bBiDirectional;
 
 	// Now flip the coordinates for Detour
 

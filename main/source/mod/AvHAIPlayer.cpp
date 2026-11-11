@@ -529,6 +529,14 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 		{
 			return ProgressMovementTasks();
 		}
+
+		AvHAIMoveTask* CurrentTask = this->GetCurrentMoveTask();
+
+		if (!CanAbortCurrentMove())
+		{
+			CurrentTask->TaskPath.bIsPendingTermination = true;
+			return ProgressMovementTasks();
+		}
 	}
 
 	// This is a brand new destination
@@ -701,7 +709,7 @@ bool AvHAIPlayer::IsMovementTaskComplete(const AvHAIMoveTask* Task)
 
 	if (Task->RelatedPathData.IsValidMove())
 	{
-		if (Task->RelatedPathData.MovementFlag == EAINavMovementFlag::NAV_FLAG_PLATFORM)
+		if (Task->RelatedPathData.HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 		{
 			const DynamicMapObjectHandle PlatformRef = AIMAP_GetDynamicObjectByEdict(Task->TriggerToActivate);
 
@@ -1520,11 +1528,13 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
 
-	if (AINAV_IsPathPointComplete(GetNavProfile(), Edict, CurrentPathNode, NextPathNode))
+	const NavAgentProfile* NavProfile = GetNavProfile();
+
+	if (AINAV_IsPathPointComplete(NavProfile, Edict, CurrentPathNode, NextPathNode))
 	{
-		// We have reached the end of our path. Job done.
-		if (!bHasNextPathNode)
+		if (Path->bIsPendingTermination || !bHasNextPathNode)
 		{
+			Path->Clear();
 			return EAINavMoveResult::NAV_MOVE_PATH_COMPLETE;
 		}
 
@@ -1569,9 +1579,46 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 		return EAINavMoveResult::NAV_MOVE_AVOID_PLAYER;
 	}
 
-	if (AINAV_IsOffPathNode(GetNavProfile(), Edict, CurrentPathNode))
+	if (!CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 	{
-		const bool bSucceededRegen = AINAV_FindPathClosestToPoint(GetNavProfile(), UTIL_GetFloorUnderEntity(Edict), Path->GetFinalDestination(), Path, GetPlayerRadius());
+		const DynamicMapObjectHandle CurrentPlatformHandle = AIMAP_TraceForDynamicObject(Edict->v.origin + Vector(0.0f, 0.0f, 5.0f), Edict->v.origin - Vector(0.0f, 0.0f, 1000.0f));
+
+		const DynamicMapObject* CurrentPlatform = CurrentPlatformHandle.GetObjectRef();
+
+		if (CurrentPlatform)
+		{
+			const Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, Edict->v.origin, CurrentPlatformHandle);
+
+			if (!vIsZero(DisembarkPoint))
+			{
+				const Vector NearestPoint = UTIL_GetClosestPointOnEntityToLocation(DisembarkPoint, CurrentPlatform->Edict);
+
+				const Vector ClosestNavigablePoint = AIMESH_TraceNavLine(NavProfile, DisembarkPoint, NearestPoint);
+
+				if (vDist3DSq(ClosestNavigablePoint, DisembarkPoint) < sqrf(32.0f))
+				{
+					return MoveToWithoutNav(DisembarkPoint);
+				}
+			}
+
+			const DynamicMapObjectStop* CurrentStop = CurrentPlatform->GetCurrentStop();
+			const DynamicMapObjectStop* NextStop = CurrentPlatform->GetNextStop();
+
+			const DynamicMapObjectStop* DisembarkStop = (CurrentStop)
+				? CurrentStop
+				: NextStop;
+
+			if (!DisembarkStop) { return EAINavMoveResult::NAV_MOVE_STUCK; }
+
+			const bool bMoveSuccess = NewRidePlatformMove(Path, CurrentPlatform->Edict, DisembarkStop->StopLocation);
+
+			return (bMoveSuccess) ? EAINavMoveResult::NAV_MOVE_SUCCESS : EAINavMoveResult::NAV_MOVE_STUCK;
+		}
+	}
+
+	if (AINAV_IsOffPathNode(NavProfile, Edict, CurrentPathNode))
+	{
+		const bool bSucceededRegen = AINAV_FindPathClosestToPoint(NavProfile, UTIL_GetFloorUnderEntity(Edict), Path->GetFinalDestination(), Path, GetPlayerRadius());
 
 		if (!bSucceededRegen)
 		{
@@ -3270,7 +3317,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 			{
 				NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 
-				if (bHasNextPathNode && NextPathNode->MovementFlag == EAINavMovementFlag::NAV_FLAG_CROUCH)
+				if (bHasNextPathNode && NextPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_CROUCH))
 				{
 					NextFrameMovementInput.bShouldCrouch = true;
 				}
@@ -3389,9 +3436,8 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 
 	NextFrameMovementInput.DesiredMoveDirection = ClimbDir;
 
-	Vector LookTarget = CurrentPathNode->ToLocation;
-	LookTarget = LadderTop + (ClimbDir * 50.0f);
-	LookTarget.z = DesiredClimbHeight + 50.0f;
+	Vector LookTarget = LadderTop + (ClimbDir * 100.0f);
+	LookTarget.z = fmaxf(LadderTop.z, CollisionTopLocation.z + 200.0f);
 
 	NextFrameMovementInput.RequiredLookLocation = LookTarget;
 
@@ -3582,8 +3628,11 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 	if (bMountingFromTop && !IsCrouching())
 	{
 		NextFrameMovementInput.bShouldWalk = true;
-		NextFrameMovementInput.RequiredLookLocation = CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotCurrentLocation) * 100.0f);
 	}
+
+	NextFrameMovementInput.RequiredLookLocation = (bMountingFromTop)
+		? CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotCurrentLocation) * 100.0f)
+		: Vector(LadderCentre.x, LadderCentre.y, MountLadder->v.absmax.z);
 
 	NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(MountPoint - BotCurrentLocation);
 
@@ -3629,6 +3678,10 @@ bool AvHAIPlayer::NewPlatformMove(AvHAIPath* Path)
 		{
 			return NewGroundMove(Path);
 		}
+
+		AvHAIPathNode* CurrentPathNodeMutable = Path->GetCurrentPathNode_Mutable();
+
+		CurrentPathNodeMutable->MovementObject = Platform->Edict;
 	}
 
 	const Vector BotLocation = GetLocation();
@@ -3796,12 +3849,12 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 	const DynamicMapObjectStop* CurrentLiftStop = PlatformRef->GetCurrentStop();
 	const DynamicMapObjectStop* PreviousLiftStop = PlatformRef->GetPreviousStop();
 
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+
 	// Lift isn't stopped anywhere
 	if (!CurrentLiftStop)
 	{
 		// Handle cases where the lift doesn't actually stop at the desired disembark position but passes by. Bot needs to time their disembark.
-		const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
-
 		if (CurrentPathNode && CurrentPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 		{
 			const Vector CollisionBottom = GetBottomOfHitbox();
@@ -3846,8 +3899,7 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 
 		if (bLiftHasReachedDestination)
 		{
-			Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, GetLocation(), PlatformRefHandle);
-			return MoveToWithoutNav(DisembarkPoint) == EAINavMoveResult::NAV_MOVE_SUCCESS;
+			return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 		}
 	}
 
@@ -4135,6 +4187,31 @@ bool AvHAIPlayer::NewPhaseGateMove(AvHAIPath* Path)
 	}
 
 	return true;
+}
+
+bool AvHAIPlayer::CanAbortCurrentMove()
+{
+	AvHAIMoveTask* CurrentMoveTask = GetCurrentMoveTask();
+
+	if (!CurrentMoveTask || !CurrentMoveTask->HasPath()) { return true; }
+
+	const AvHAIPathNode* CurrentPathNode = CurrentMoveTask->TaskPath.GetCurrentPathNode();
+
+	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return true; }
+
+	switch (CurrentPathNode->MovementFlag)
+	{
+		case EAINavMovementFlag::NAV_FLAG_TELEPORT:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_PHASEGATE_TEAM2:
+		case EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM1:
+		case EAINavMovementFlag::NAV_FLAG_BLOCKAGE_TEAM2:
+		case EAINavMovementFlag::NAV_FLAG_WALK:
+		case EAINavMovementFlag::NAV_FLAG_WELD:
+			return true;
+		default:
+			return false;
+	}
 }
 
 void AvHAIMovementInput::GenerateMovementOutputs(const Vector& CurrentViewAngles, float MaxSpeed)
