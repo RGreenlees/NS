@@ -93,6 +93,7 @@ dtTileCache::dtTileCache() :
 	m_nextFreeObstacle(0),
 	m_nreqs(0),
 	m_nOffMeshReqs(0),
+	m_lastOffMeshConnectionFailure(0),
 	m_nupdate(0)
 {
 	memset(&m_params, 0, sizeof(m_params));
@@ -648,6 +649,8 @@ dtStatus dtTileCache::queryTiles(const float* bmin, const float* bmax,
 dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 							 bool* upToDate, bool* workDone)
 {
+	m_lastOffMeshConnectionFailure = 0;
+
 	if (workDone) { *workDone = false; }
 
 	if (m_nupdate == 0)
@@ -738,8 +741,10 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 
 				if (!StartTileRef || !EndTileRef)
 				{
-					const int RemainingRequests = m_nOffMeshReqs - i;
-					memmove(m_OffMeshReqs, req, RemainingRequests * sizeof(OffMeshRequest));
+					m_lastOffMeshConnectionFailure = req->ref;
+					const int RemainingRequests = m_nOffMeshReqs - i - 1;
+					if (RemainingRequests > 0)
+						memmove(m_OffMeshReqs, req + 1, RemainingRequests * sizeof(OffMeshRequest));
 					m_nOffMeshReqs = RemainingRequests;
 					if (upToDate) { *upToDate = false; }
 					return DT_FAILURE | DT_INVALID_PARAM;
@@ -871,12 +876,14 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 				status = navmesh->baseOffMeshLinks(con);
 				if (dtStatusFailed(status))
 				{
+					m_lastOffMeshConnectionFailure = getOffMeshRef(con);
 					if (upToDate) { *upToDate = false; }
 					return status;
 				}
 				status = navmesh->GlobalOffMeshLinks(con);
 				if (dtStatusFailed(status))
 				{
+					m_lastOffMeshConnectionFailure = getOffMeshRef(con);
 					if (upToDate) { *upToDate = false; }
 					return status;
 				}
