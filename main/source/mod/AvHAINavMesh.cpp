@@ -530,7 +530,7 @@ void AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, uns
 	FoundNavMesh->MeshHints.push_back(NewHint);
 }
 
-bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle)
+bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle, bool bProjectPositions)
 {
 	OutHandle.Invalidate();
 
@@ -538,8 +538,13 @@ bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc,
 
 	if (!FoundMesh) { return false; }
 
-	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(TargetNavMesh, StartLoc);
-	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(TargetNavMesh, EndLoc);
+	const Vector ProjectedStart = (bProjectPositions)
+		? AIMESH_ProjectPointToNavmesh(TargetNavMesh, StartLoc)
+		: StartLoc;
+
+	const Vector ProjectedEnd = (bProjectPositions)
+		? AIMESH_ProjectPointToNavmesh(TargetNavMesh, EndLoc)
+		: EndLoc;
 
 	if (vIsZero(ProjectedStart) || vIsZero(ProjectedEnd)) { return false; }
 
@@ -562,7 +567,7 @@ bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc,
 	dtOffMeshConnectionRef dtRef = 0;
 	NewConnectionDef.ConnectionRef = 0;
 
-	dtStatus AddStatus = FoundMesh->TileCacheRef->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 18.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &dtRef);
+	dtStatus AddStatus = FoundMesh->TileCacheRef->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 10.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &dtRef);
 
 	if (dtStatusSucceed(AddStatus))
 	{

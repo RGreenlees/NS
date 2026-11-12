@@ -190,6 +190,8 @@ AIBuildableStructureList AITAC_FindAllMatchingStructures(const Vector& Location,
 		{
 			const AvHAIBuildableStructure* Structure = &it.second;
 
+			if (!Structure || !Structure->IsValid()) { continue; }
+
 			if (AITAC_DoesStructureMatchFilter(Structure, Filter, Location))
 			{
 				Result.push_back(Structure);
@@ -202,6 +204,8 @@ AIBuildableStructureList AITAC_FindAllMatchingStructures(const Vector& Location,
 		for (auto& it : TeamBStructureMap)
 		{
 			const AvHAIBuildableStructure* Structure = &it.second;
+
+			if (!Structure || !Structure->IsValid()) { continue; }
 
 			if (AITAC_DoesStructureMatchFilter(Structure, Filter, Location))
 			{
@@ -1420,11 +1424,11 @@ void AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure)
 
 		for (const AvHAIBuildableStructure* OtherPG : OtherPGs)
 		{
-			if (!OtherPG || !OtherPG->IsValid() || OtherPG == Structure) { continue; }
+			if (OtherPG == Structure) { continue; }
 
 			OffMeshConnectionHandle NewConnectionHandle;
 
-			const bool bAdded = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true, NewConnectionHandle);
+			const bool bAdded = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true, NewConnectionHandle, /* Project Positions */ true);
 
 			if (bAdded)
 			{
