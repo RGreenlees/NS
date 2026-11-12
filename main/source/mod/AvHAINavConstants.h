@@ -656,7 +656,7 @@ inline void PopulateBaseAgentProfiles()
 	NavAgentProfile NewProfile1;
 	NewProfile1.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
 	NewProfile1.Filters.setIncludeFlags(static_cast<unsigned int>(SkulkMovementFlags));
-	NewProfile1.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
+	NewProfile1.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED | EAINavMovementFlag::NAV_FLAG_WELD));
 	NewProfile1.Filters.setAreaCost(0, 0.0);
 	NewProfile1.Filters.setAreaCost(1, 1.0);
 	NewProfile1.Filters.setAreaCost(2, 1.0);
