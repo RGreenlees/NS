@@ -868,6 +868,58 @@ dtPolyRef dtNavMesh::findNearestPolyInTile(const dtMeshTile* tile,
 	return nearest;
 }
 
+dtPolyRef dtNavMesh::findNearestPolyInTiles(const float* center, const float* halfExtents,
+											float* nearestPt, const dtMeshTile** nearestTile) const
+{
+	if (!center || !halfExtents || !nearestPt || !nearestTile)
+		return 0;
+
+	*nearestTile = 0;
+
+	const float bmin[3] = { center[0] - halfExtents[0], center[1] - halfExtents[1], center[2] - halfExtents[2] };
+	const float bmax[3] = { center[0] + halfExtents[0], center[1] + halfExtents[1], center[2] + halfExtents[2] };
+	const int tx0 = (int)dtMathFloorf((bmin[0] - m_orig[0]) / m_tileWidth);
+	const int tx1 = (int)dtMathFloorf((bmax[0] - m_orig[0]) / m_tileWidth);
+	const int ty0 = (int)dtMathFloorf((bmin[2] - m_orig[2]) / m_tileHeight);
+	const int ty1 = (int)dtMathFloorf((bmax[2] - m_orig[2]) / m_tileHeight);
+
+	static const int MAX_TILES = 32;
+	dtMeshTile* tiles[MAX_TILES];
+	dtPolyRef nearest = 0;
+	float nearestHorizontalDistanceSqr = FLT_MAX;
+	float nearestVerticalDistanceSqr = FLT_MAX;
+
+	for (int ty = ty0; ty <= ty1; ++ty)
+	{
+		for (int tx = tx0; tx <= tx1; ++tx)
+		{
+			const int tileCount = getTilesAt(tx, ty, tiles, MAX_TILES);
+			for (int i = 0; i < tileCount; ++i)
+			{
+				float tileNearestPt[3];
+				const dtPolyRef tileNearest = findNearestPolyInTile(tiles[i], center, halfExtents, tileNearestPt);
+				if (!tileNearest)
+					continue;
+
+				const float horizontalDistanceSqr = dtSqr(tileNearestPt[0] - center[0])
+					+ dtSqr(tileNearestPt[2] - center[2]);
+				const float verticalDistanceSqr = dtSqr(tileNearestPt[1] - center[1]);
+				if (horizontalDistanceSqr < nearestHorizontalDistanceSqr
+					|| (horizontalDistanceSqr == nearestHorizontalDistanceSqr && verticalDistanceSqr < nearestVerticalDistanceSqr))
+				{
+					nearestHorizontalDistanceSqr = horizontalDistanceSqr;
+					nearestVerticalDistanceSqr = verticalDistanceSqr;
+					nearest = tileNearest;
+					dtVcopy(nearestPt, tileNearestPt);
+					*nearestTile = tiles[i];
+				}
+			}
+		}
+	}
+
+	return nearest;
+}
+
 int dtNavMesh::queryPolygonsInTile(const dtMeshTile* tile, const float* qmin, const float* qmax,
 								   dtPolyRef* polys, const int maxPolys) const
 {

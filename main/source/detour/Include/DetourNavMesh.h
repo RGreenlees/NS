@@ -451,6 +451,10 @@ public:
 	/// @return The tile for the specified reference, or null if the 
 	///		reference is invalid.
 	const dtMeshTile* getTileByRef(dtTileRef ref) const;
+
+	/// Finds the polygon nearest to the specified point across all overlapping tiles.
+	dtPolyRef findNearestPolyInTiles(const float* center, const float* halfExtents,
+		float* nearestPt, const dtMeshTile** nearestTile) const;
 	
 	/// The maximum number of tiles supported by the navigation mesh.
 	/// @return The maximum number of tiles supported by the navigation mesh.

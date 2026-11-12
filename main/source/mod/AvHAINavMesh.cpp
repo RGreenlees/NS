@@ -27,6 +27,8 @@ int ConnectionDrawIndex = 0;
 uint32_t CurrentNavMeshGeneration = 1;
 uint32_t NextNavHintIndex = 1;
 
+static bool AIMESH_AddOffMeshConnectionInternal(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle, bool bProjectEndpoints);
+
 struct FastLZCompressor : public dtTileCacheCompressor
 {
 	virtual int maxCompressedSize(const int bufferSize)
@@ -490,7 +492,7 @@ EAINavMeshLoadResult AIMESH_LoadNavMesh(const char* MapName)
 			Vector Start = UTIL_VecDetourToGoldSrc(def.pos);
 			Vector End = UTIL_VecDetourToGoldSrc(&def.pos[3]);
 
-			AIMESH_AddOffMeshConnection(NewIndex, Start, End, static_cast<EAINavArea>(def.area), static_cast<EAINavMovementFlag>(def.flags), def.bBiDir, NewConnectionHandle);
+			AIMESH_AddOffMeshConnectionInternal(NewIndex, Start, End, static_cast<EAINavArea>(def.area), static_cast<EAINavMovementFlag>(def.flags), def.bBiDir, NewConnectionHandle, false);
 		}
 
 		fseek(OpenedNavFile, tcHeader.NavHintsOffset, SEEK_SET);
@@ -530,7 +532,7 @@ void AIMESH_AddHintToNavmesh(EAINavMeshIndex TargetNavMesh, Vector Location, uns
 	FoundNavMesh->MeshHints.push_back(NewHint);
 }
 
-bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle)
+static bool AIMESH_AddOffMeshConnectionInternal(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle, bool bProjectEndpoints)
 {
 	OutHandle.Invalidate();
 
@@ -538,8 +540,8 @@ bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc,
 
 	if (!FoundMesh) { return false; }
 
-	Vector ProjectedStart = AIMESH_ProjectPointToNavmesh(TargetNavMesh, StartLoc);
-	Vector ProjectedEnd = AIMESH_ProjectPointToNavmesh(TargetNavMesh, EndLoc);
+	Vector ProjectedStart = bProjectEndpoints ? AIMESH_ProjectPointToNavmesh(TargetNavMesh, StartLoc) : StartLoc;
+	Vector ProjectedEnd = bProjectEndpoints ? AIMESH_ProjectPointToNavmesh(TargetNavMesh, EndLoc) : EndLoc;
 
 	if (vIsZero(ProjectedStart) || vIsZero(ProjectedEnd)) { return false; }
 
@@ -587,6 +589,11 @@ bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc,
 	}
 
 	return false;
+}
+
+bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle)
+{
+	return AIMESH_AddOffMeshConnectionInternal(TargetNavMesh, StartLoc, EndLoc, area, flags, bBiDirectional, OutHandle, true);
 }
 
 bool AIMESH_ModifyOffMeshConnectionFlag(OffMeshConnectionHandle& ConnectionHandle, const EAINavMovementFlag NewFlag)
