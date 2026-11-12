@@ -616,9 +616,21 @@ inline void PopulateBaseAgentProfiles()
 {
 	BaseAgentProfiles.clear();
 
+	const EAINavMovementFlag BasicMovementFlags =
+			( EAINavMovementFlag::NAV_FLAG_WALK
+			| EAINavMovementFlag::NAV_FLAG_JUMP
+			| EAINavMovementFlag::NAV_FLAG_FALL
+			| EAINavMovementFlag::NAV_FLAG_CROUCH
+			| EAINavMovementFlag::NAV_FLAG_PLATFORM
+			| EAINavMovementFlag::NAV_FLAG_TELEPORT
+			| EAINavMovementFlag::NAV_FLAG_LADDER);
+
+	const EAINavMovementFlag MarineMovementFlags =
+		(BasicMovementFlags | EAINavMovementFlag::NAV_FLAG_WELD);
+
 	NavAgentProfile NewProfile0;
 	NewProfile0.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile0.Filters.setIncludeFlags(14463);
+	NewProfile0.Filters.setIncludeFlags(static_cast<unsigned int>(MarineMovementFlags));
 	NewProfile0.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile0.Filters.setAreaCost(0, 0.0);
 	NewProfile0.Filters.setAreaCost(1, 1.0);
@@ -635,9 +647,15 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile0.Filters.setAreaCost(12, 5.0);
 	BaseAgentProfiles.push_back(NewProfile0);
 
+	const EAINavMovementFlag SkulkMovementFlags =
+		( BasicMovementFlags
+		| EAINavMovementFlag::NAV_FLAG_WALLCLIMB
+		| EAINavMovementFlag::NAV_FLAG_FATALFALL
+		| EAINavMovementFlag::NAV_FLAG_FATALJUMP);
+
 	NavAgentProfile NewProfile1;
 	NewProfile1.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile1.Filters.setIncludeFlags(49407);
+	NewProfile1.Filters.setIncludeFlags(static_cast<unsigned int>(SkulkMovementFlags));
 	NewProfile1.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile1.Filters.setAreaCost(0, 0.0);
 	NewProfile1.Filters.setAreaCost(1, 1.0);
@@ -656,7 +674,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile2;
 	NewProfile2.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile2.Filters.setIncludeFlags(127);
+	NewProfile2.Filters.setIncludeFlags(static_cast<unsigned int>(BasicMovementFlags));
 	NewProfile2.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile2.Filters.setAreaCost(0, 0.0);
 	NewProfile2.Filters.setAreaCost(1, 1.0);
@@ -672,6 +690,10 @@ inline void PopulateBaseAgentProfiles()
 	NewProfile2.Filters.setAreaCost(11, 5.0);
 	NewProfile2.Filters.setAreaCost(12, 5.0);
 	BaseAgentProfiles.push_back(NewProfile2);
+
+	const EAINavMovementFlag LerkMovementFlags =
+		( SkulkMovementFlags
+		| EAINavMovementFlag::NAV_FLAG_FLY);
 
 	NavAgentProfile NewProfile3;
 	NewProfile3.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
@@ -694,7 +716,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile4;
 	NewProfile4.MeshIndex = EAINavMeshIndex::NAV_MESH_REGULAR;
-	NewProfile4.Filters.setIncludeFlags(49663);
+	NewProfile4.Filters.setIncludeFlags(static_cast<unsigned int>(SkulkMovementFlags));
 	NewProfile4.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile4.Filters.setAreaCost(0, 0.0);
 	NewProfile4.Filters.setAreaCost(1, 1.0);
@@ -713,7 +735,7 @@ inline void PopulateBaseAgentProfiles()
 
 	NavAgentProfile NewProfile5;
 	NewProfile5.MeshIndex = EAINavMeshIndex::NAV_MESH_ONOS;
-	NewProfile5.Filters.setIncludeFlags(127);
+	NewProfile5.Filters.setIncludeFlags(static_cast<unsigned int>(BasicMovementFlags));
 	NewProfile5.Filters.setExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_DISABLED));
 	NewProfile5.Filters.setAreaCost(0, 0.0);
 	NewProfile5.Filters.setAreaCost(1, 1.0);

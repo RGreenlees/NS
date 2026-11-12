@@ -1437,11 +1437,21 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 	{
 		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
 
-		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
-		{
-			AvHAIPlayer* thisBot = (*it);
+		Vector ProjectedLocation = AIMESH_ProjectPointToNavmesh(EAINavMeshIndex::NAV_MESH_REGULAR, theAvHPlayer->pev->origin, Vector(50.0f, 100.0f, 50.0f));
 
-			thisBot->DebugDestination = UTIL_GetFloorUnderEntity(theAvHPlayer->edict());
+		if (vIsZero(ProjectedLocation))
+		{
+			ProjectedLocation = UTIL_GetFloorUnderEntity(theAvHPlayer->edict());
+		}
+
+		if (!vIsZero(ProjectedLocation))
+		{
+			for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
+			{
+				AvHAIPlayer* thisBot = (*it);
+
+				thisBot->DebugDestination = ProjectedLocation;
+			}
 		}
 
 		theSuccess = true;

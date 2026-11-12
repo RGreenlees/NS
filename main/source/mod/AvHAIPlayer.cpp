@@ -3992,6 +3992,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 	const Vector CurrentFloorPosition = UTIL_GetFloorUnderEntity(Edict);
 	const Vector BottomOfHitbox = GetBottomOfHitbox();
 	const Vector CurrentPosition = GetLocation();
+	const Vector EyePosition = GetEyePosition();
 
 	if (IsPlayerSkulk(Edict))
 	{
@@ -3999,24 +4000,28 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		NextFrameMovementInput.bShouldCrouch = false;
 	}
 
-	if (AINAV_IsPointDirectlyReachable(NavProfile, CurrentFloorPosition, CurrentPathNode->ToLocation, Vector(8.0f, 8.0f, 50.0f)))
+	Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+	const Vector AdjustedTargetLocation = CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation) * 1000.0f);
+
+	Vector LookLocation = g_vecZero;
+
+	const float ZDiff = fabs(CurrentPosition.z - CurrentPathNode->RequiredClimbZ);
+	const Vector DirectAheadView = EyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - EyePosition) * 100.0f);
+
+	if (ZDiff < 16.0f)
 	{
-		Vector PointOnMoveLine = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentFloorPosition);
+		Vector TraceCheckEnd = CurrentPathNode->ToLocation;
+		TraceCheckEnd.z = CurrentPosition.z;
 
-		if (vEquals2D(PointOnMoveLine, CurrentPathNode->ToLocation, 4.0f))
+		if (UTIL_QuickHullTrace(Edict, CurrentPosition, TraceCheckEnd))
 		{
-			if (IsPlayerSkulk(Edict))
-			{
-				NextFrameMovementInput.bShouldCrouch = true;
-			}
-
-			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentFloorPosition);
-
+			Edict->v.velocity.z = 0.0f;
+			LookLocation = DirectAheadView;
+			NextFrameMovementInput.DesiredMoveDirection = vForward;
 			return true;
 		}
 	}
 
-	Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
 	Vector ClimbAngle = UTIL_GetVectorNormal(Vector(CurrentPathNode->ToLocation.x, CurrentPathNode->ToLocation.y, CurrentPathNode->RequiredClimbZ) - CurrentPosition);
 
 	TraceResult SurfaceCheck;
@@ -4045,13 +4050,13 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		vForward = (UTIL_GetDotProduct2D(vForward, CeilNormal) > 0.0f) ? vForward : -vForward;
 	}
 
-	Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
+	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
 
 	NextFrameMovementInput.DesiredMoveDirection = vForward;
 
-	Vector CheckLine = CurrentPathNode->FromLocation + (vForward * 1000.0f);
+	const Vector CheckLine = CurrentPathNode->FromLocation + (vForward * 1000.0f);
 
-	float DistFromLine = vDistanceFromLine2D(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
+	const float DistFromLine = vDistanceFromLine2D(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
 
 	// Draw an imaginary 2D line between from and to movement, and make sure we're aligned. If we've drifted off to one side, readjust.
 	if (DistFromLine > 18.0f)
@@ -4059,28 +4064,6 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		float modifier = (float)vPointOnLine(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
 
 		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection + (vRight * modifier));
-	}
-
-	const Vector EyePosition = GetEyePosition();
-
-	float ZDiff = fabs(CurrentPosition.z - CurrentPathNode->RequiredClimbZ);
-	Vector AdjustedTargetLocation = CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation) * 1000.0f);
-	Vector DirectAheadView = EyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - EyePosition) * 100.0f);
-
-	Vector LookLocation = g_vecZero;
-
-	if (ZDiff < 8.0f)
-	{
-		Vector TraceCheckEnd = CurrentPathNode->ToLocation;
-		TraceCheckEnd.z = CurrentPosition.z;
-
-		if (UTIL_QuickHullTrace(Edict, CurrentPosition, TraceCheckEnd))
-		{
-			Edict->v.velocity.z = 0.0f;
-			LookLocation = DirectAheadView;
-			NextFrameMovementInput.DesiredMoveDirection = vForward;
-			return true;
-		}
 	}
 
 	if (ZDiff < 1.0f)

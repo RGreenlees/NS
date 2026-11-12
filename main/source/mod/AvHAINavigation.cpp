@@ -694,6 +694,8 @@ bool AINAV_IsOffPathNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 			return AINAV_IsOffWalkNode(NavProfile, AIPlayer, PathNode);
 		case EAINavMovementFlag::NAV_FLAG_LADDER:
 			return AINAV_IsOffLadderNode(NavProfile, AIPlayer, PathNode);
+		case EAINavMovementFlag::NAV_FLAG_WALLCLIMB:
+			return AINAV_IsOffWallClimbNode(NavProfile, AIPlayer, PathNode);
 		case EAINavMovementFlag::NAV_FLAG_FALL:
 		case EAINavMovementFlag::NAV_FLAG_FATALFALL:
 			return AINAV_IsOffFallNode(NavProfile, AIPlayer, PathNode);
@@ -829,6 +831,11 @@ bool AINAV_IsOffPhaseGateNode(const NavAgentProfile* NavProfile, const edict_t* 
 	if (StartingPhaseGate->Team != (AvHTeamNumber)AIPlayer->v.team) { return true; }
 
 	return StartingPhaseGate->IsRecycling() || !StartingPhaseGate->IsCompleted();
+}
+
+bool AINAV_IsOffWallClimbNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode)
+{
+	return false;
 }
 
 bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, const AvHAIPathNode* ImpactedPathNode, const edict_t* ImpactingObject, AvHAIMoveTask& NewMoveTask)

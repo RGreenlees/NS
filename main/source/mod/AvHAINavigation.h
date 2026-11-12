@@ -394,6 +394,7 @@ bool AINAV_IsOffFallNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 bool AINAV_IsOffJumpNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
 bool AINAV_IsOffPlatformNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
 bool AINAV_IsOffPhaseGateNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
+bool AINAV_IsOffWallClimbNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode);
 
 Vector AINAV_GetFurthestVisiblePointOnPath(const Vector& ViewerLocation, const Vector& DesiredMoveDirection, const AvHAIPath* Path);
 
