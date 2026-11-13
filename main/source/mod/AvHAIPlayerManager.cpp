@@ -974,6 +974,8 @@ void AIMGR_ResetRound()
 {
 	if (!AIMGR_IsBotEnabled()) { return; } // Do nothing if we're not using bots, as the data will be cleared out via AIMGR_OnBotDisabled()
 
+	if (!AIMESH_IsNavMeshLoaded()) { return; }
+
 	AITAC_ClearMapAIData();
 	AIMAP_ClearCachedMapData();
 

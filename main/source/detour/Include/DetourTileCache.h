@@ -123,6 +123,7 @@ public:
 
 	const dtTileCacheObstacle* getObstacleByRef(dtObstacleRef ref);
 	dtOffMeshConnection* getOffMeshConnectionByRef(dtOffMeshConnectionRef ref);
+	dtOffMeshConnectionRef getLastOffMeshConnectionFailure() const { return m_lastOffMeshConnectionFailure; }
 
 	dtObstacleRef getObstacleRef(const dtTileCacheObstacle* obmin) const;
 	dtOffMeshConnectionRef getOffMeshRef(const dtOffMeshConnection* con) const;
@@ -295,6 +296,7 @@ private:
 
 	OffMeshRequest m_OffMeshReqs[MAX_REQUESTS];
 	int m_nOffMeshReqs;
+	dtOffMeshConnectionRef m_lastOffMeshConnectionFailure;
 
 	static const int MAX_UPDATE = 512;
 	dtCompressedTileRef m_update[MAX_UPDATE];

@@ -31,6 +31,24 @@ static bool contains(const dtCompressedTileRef* a, const int n, const dtCompress
 	return false;
 }
 
+static dtCompressedTileRef findCompressedTileRef(const dtTileCache* tileCache, const dtMeshTile* navTile)
+{
+	if (!tileCache || !navTile || !navTile->header)
+		return 0;
+
+	static const int MAX_TILES = 32;
+	dtCompressedTileRef tiles[MAX_TILES];
+	const int tileCount = tileCache->getTilesAt(navTile->header->x, navTile->header->y, tiles, MAX_TILES);
+	for (int i = 0; i < tileCount; ++i)
+	{
+		const dtCompressedTile* tile = tileCache->getTileByRef(tiles[i]);
+		if (tile && tile->header && tile->header->tlayer == navTile->header->layer)
+			return tiles[i];
+	}
+
+	return 0;
+}
+
 inline int computeTileHash(int x, int y, const int mask)
 {
 	const unsigned int h1 = 0x8da6b343; // Large multiplicative constants;
@@ -75,6 +93,7 @@ dtTileCache::dtTileCache() :
 	m_nextFreeObstacle(0),
 	m_nreqs(0),
 	m_nOffMeshReqs(0),
+	m_lastOffMeshConnectionFailure(0),
 	m_nupdate(0)
 {
 	memset(&m_params, 0, sizeof(m_params));
@@ -630,6 +649,8 @@ dtStatus dtTileCache::queryTiles(const float* bmin, const float* bmax,
 dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 							 bool* upToDate, bool* workDone)
 {
+	m_lastOffMeshConnectionFailure = 0;
+
 	if (workDone) { *workDone = false; }
 
 	if (m_nupdate == 0)
@@ -704,39 +725,26 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 
 			if (req->action == REQUEST_OFFMESH_ADD)
 			{
-				// Find touched tiles.
-				float bmin[3], bmax[3];
+				// Resolve endpoint ownership from the nearest navmesh polygon.
 				float ext[3] = { con->rad, 18.0f, con->rad };
-
-				dtVsub(bmin, &con->pos[0], ext);
-				dtVadd(bmax, &con->pos[0], ext);
-
-				int ntouched = 0;
-				dtCompressedTileRef touched[DT_MAX_TOUCHED_TILES];
 				dtCompressedTileRef StartTileRef = 0;
 				dtCompressedTileRef EndTileRef = 0;
+				const dtMeshTile* StartNavTile = 0;
+				const dtMeshTile* EndNavTile = 0;
+				float nearestPt[3];
 
-				queryTiles(bmin, bmax, touched, &ntouched, DT_MAX_TOUCHED_TILES);
+				navmesh->findNearestPolyInTiles(&con->pos[0], ext, nearestPt, &StartNavTile);
+				navmesh->findNearestPolyInTiles(&con->pos[3], ext, nearestPt, &EndNavTile);
 
-				if (ntouched > 0)
-				{
-					StartTileRef = touched[0];
-				}
-
-				dtVsub(bmin, &con->pos[3], ext);
-				dtVadd(bmax, &con->pos[3], ext);
-
-				queryTiles(bmin, bmax, touched, &ntouched, DT_MAX_TOUCHED_TILES);
-
-				if (ntouched > 0)
-				{
-					EndTileRef = touched[0];
-				}
+				StartTileRef = findCompressedTileRef(this, StartNavTile);
+				EndTileRef = findCompressedTileRef(this, EndNavTile);
 
 				if (!StartTileRef || !EndTileRef)
 				{
-					const int RemainingRequests = m_nOffMeshReqs - i;
-					memmove(m_OffMeshReqs, req, RemainingRequests * sizeof(OffMeshRequest));
+					m_lastOffMeshConnectionFailure = req->ref;
+					const int RemainingRequests = m_nOffMeshReqs - i - 1;
+					if (RemainingRequests > 0)
+						memmove(m_OffMeshReqs, req + 1, RemainingRequests * sizeof(OffMeshRequest));
 					m_nOffMeshReqs = RemainingRequests;
 					if (upToDate) { *upToDate = false; }
 					return DT_FAILURE | DT_INVALID_PARAM;
@@ -868,12 +876,14 @@ dtStatus dtTileCache::update(const float /*dt*/, dtNavMesh* navmesh,
 				status = navmesh->baseOffMeshLinks(con);
 				if (dtStatusFailed(status))
 				{
+					m_lastOffMeshConnectionFailure = getOffMeshRef(con);
 					if (upToDate) { *upToDate = false; }
 					return status;
 				}
 				status = navmesh->GlobalOffMeshLinks(con);
 				if (dtStatusFailed(status))
 				{
+					m_lastOffMeshConnectionFailure = getOffMeshRef(con);
 					if (upToDate) { *upToDate = false; }
 					return status;
 				}
