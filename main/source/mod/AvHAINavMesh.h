@@ -247,7 +247,7 @@ NavMesh* AIMESH_GetNavMeshAtIndex(EAINavMeshIndex DesiredIndex);
 NavMeshList AIMESH_GetAllNavMeshes();
 
 /* Adds a new off-mesh connection to the specified navmesh at runtime. Bots using this nav mesh will immediately start using this connection if they're allowed to */
-bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle, bool bProjectPositions = false);
+bool AIMESH_AddOffMeshConnection(EAINavMeshIndex TargetNavMesh, Vector StartLoc, Vector EndLoc, EAINavArea area, EAINavMovementFlag flags, bool bBiDirectional, OffMeshConnectionHandle& OutHandle);
 
 // Changes the flags on an existing off-mesh connection. Returns true if Detour accepted the change.
 bool AIMESH_ModifyOffMeshConnectionFlag(OffMeshConnectionHandle& ConnectionHandle, const EAINavMovementFlag NewFlag);

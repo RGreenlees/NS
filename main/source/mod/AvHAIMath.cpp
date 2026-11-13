@@ -899,6 +899,21 @@ Vector UTIL_GetRandomPointInBoundingBox(const Vector BoxMin, const Vector BoxMax
 	return Vector(RandX, RandY, RandZ);
 }
 
+Vector vProjectOnPlane(const Vector& Direction, const Vector& SurfaceNormal)
+{
+	if (vIsZero(Direction) || vIsZero(SurfaceNormal)) { return Direction; }
+
+	const float NormalComponent = UTIL_GetDotProduct(Direction, SurfaceNormal);
+
+	Vector Result = ZERO_VECTOR;
+
+	Result.x = Direction.x - NormalComponent * SurfaceNormal.x;
+	Result.y = Direction.y - NormalComponent * SurfaceNormal.y;
+	Result.z = Direction.z - NormalComponent * SurfaceNormal.z;
+
+	return Result;
+}
+
 /* Function to get no of set bits in binary
    representation of positive integer n */
 unsigned int UTIL_CountSetBitsInInteger(unsigned int n)

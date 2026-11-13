@@ -1428,7 +1428,7 @@ void AITAC_OnStructureCompleted(AvHAIBuildableStructure* Structure)
 
 			OffMeshConnectionHandle NewConnectionHandle;
 
-			const bool bAdded = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true, NewConnectionHandle, /* Project Positions */ true);
+			const bool bAdded = AIMESH_AddOffMeshConnection(EAINavMeshIndex::NAV_MESH_REGULAR, Structure->Location, OtherPG->Location, EAINavArea::NAV_AREA_TELEPORT, NewPGConnectionFlag, true, NewConnectionHandle);
 
 			if (bAdded)
 			{

@@ -1806,13 +1806,18 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 			return;
 		}
 
-		if (!IsOnGround()) { return; }
+		if (!IsOnGround())
+		{
+			Jump(true);
+			NextFrameMovementInput.DesiredMoveDirection = DesiredMoveDirection;
+			return;
+		}
 
 		// We have little room for manoeuvre here...
 
 		if (!IsPlayerOnGround(OtherPlayerEdict))
 		{
-			NextFrameMovementInput.bShouldCrouch;
+			NextFrameMovementInput.bShouldCrouch = true;
 			return;
 		}
 
@@ -2532,10 +2537,23 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 				Jump(true);
 			}
 		}
-		else
+
+		const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+		const Vector vRight = UTIL_GetCrossProduct(vForward, UP_VECTOR);
+
+		int SideOfLine = vPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
+
+		if (SideOfLine < 0)
 		{
-			Jump(true);
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward + vRight);
 		}
+
+		if (SideOfLine > 0)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward - vRight);
+		}
+
+		return;
 	}
 
 	// We are hopelessly stuck
@@ -4015,6 +4033,11 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 
 		if (UTIL_QuickHullTrace(Edict, CurrentPosition, TraceCheckEnd))
 		{
+			if (AvHAIPathNode* CurrentPathNodeMutable = Path->GetCurrentPathNode_Mutable())
+			{
+				CurrentPathNodeMutable->RequiredClimbZ = CurrentPosition.z;
+			}
+
 			Edict->v.velocity.z = 0.0f;
 			LookLocation = DirectAheadView;
 			NextFrameMovementInput.DesiredMoveDirection = vForward;
@@ -4036,18 +4059,15 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 
 	if (CurrentPosition.z < (CurrentPathNode->RequiredClimbZ - 10.0f) && !IsOnGround() && bClimbingUnderway)
 	{
-		if (SurfaceCheck.flFraction < 1.0f)
-		{
-			const float CeilingDot = UTIL_GetDotProduct(vForward, CeilNormal);
-
-			bIsUnderClimbing = CeilingDot > -0.5f;
-		}
+		bIsUnderClimbing = SurfaceCheck.flFraction < 1.0f;
 	}
 
 	if (bIsUnderClimbing)
 	{
+		const Vector NewClimbDir = vProjectOnPlane(UP_VECTOR, CeilNormal);
 		NextFrameMovementInput.bShouldWalk = true;
-		vForward = (UTIL_GetDotProduct2D(vForward, CeilNormal) > 0.0f) ? vForward : -vForward;
+		vForward = (!vIsZero(NewClimbDir)) ? UTIL_GetVectorNormal2D(NewClimbDir) : -vForward;
+		NextFrameMovementInput.RequiredLookLocation = CurrentPosition + (vForward * 1000.0f);
 	}
 
 	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
@@ -4059,12 +4079,14 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 	const float DistFromLine = vDistanceFromLine2D(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
 
 	// Draw an imaginary 2D line between from and to movement, and make sure we're aligned. If we've drifted off to one side, readjust.
-	if (DistFromLine > 18.0f)
+	if (DistFromLine > GetPlayerRadius())
 	{
 		float modifier = (float)vPointOnLine(CurrentPathNode->FromLocation, CheckLine, CurrentPosition);
 
 		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection + (vRight * modifier));
 	}
+
+	if (bIsUnderClimbing) { return true; }
 
 	if (ZDiff < 1.0f)
 	{
@@ -4087,28 +4109,22 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		}
 		else
 		{
-			if (bIsUnderClimbing)
+			if (bClimbingUnderway)
 			{
-				LookLocation = EyePosition + vForward;
-				LookLocation.z = CurrentPathNode->ToLocation.z + 100.0f;
+				LookLocation = EyePosition + (ClimbAngle * 100.0f);
+				LookLocation.z += 1000.0f;
 			}
 			else
 			{
-				if (bClimbingUnderway)
-				{
-					LookLocation = EyePosition + (ClimbAngle * 100.0f);
-					LookLocation.z += 1000.0f;
-				}
-				else
-				{
-					LookLocation = EyePosition + vForward;
-					LookLocation.z = CurrentPathNode->RequiredClimbZ;
-				}
+				LookLocation = EyePosition + vForward;
+				LookLocation.z = CurrentPathNode->RequiredClimbZ;
 			}
 		}
+
+		NextFrameMovementInput.RequiredLookLocation = LookLocation;
 	}
 
-	if (IsWallSticking() && !bIsUnderClimbing)
+	if (IsWallSticking())
 	{
 		Vector RightDir = UTIL_GetCrossProduct(vForward, UP_VECTOR);
 
@@ -4130,8 +4146,6 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward - RightDir);
 		}
 	}
-
-	NextFrameMovementInput.RequiredLookLocation = LookLocation;
 
 	return true;
 }

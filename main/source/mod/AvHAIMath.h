@@ -213,6 +213,9 @@ float UTIL_GetVelocityRequiredToReachTarget(const Vector StartLocation, const Ve
 
 Vector UTIL_GetRandomPointInBoundingBox(const Vector BoxMin, const Vector BoxMax);
 
+// Take an inbound direction and a hit surface normal, and returns the "slide" direction parallel to that surface
+Vector vProjectOnPlane(const Vector& Direction, const Vector& SurfaceNormal);
+
 // OTHER STUFF
 
 // Function to get number of set bits in a positive integer n
