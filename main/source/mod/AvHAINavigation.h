@@ -58,6 +58,7 @@ struct AvHAIPathNode
 	float TimeSinceMovement = 0.0f; // How long the bot has been frozen in place during this move
 	float TimeSinceProgressMade = 0.0f; // How long since the bot managed to make meaningful progress along this path node
 	float MovementProgress = 0.0f; // How far along the path node has the bot managed to reach
+	float LastUnderClimbTime = 0.0f; // During a wall-climb move, the last time the bot was "under-climbing" (i.e. an overhang)
 
 	void Clear()
 	{
@@ -72,6 +73,7 @@ struct AvHAIPathNode
 		LastRecordedPosition = ZERO_VECTOR;
 		TimeSinceMovement = 0.0f;
 		TimeSinceProgressMade = 0.0f;
+		LastUnderClimbTime = 0.0f;
 	}
 
 	bool IsValidMove() const

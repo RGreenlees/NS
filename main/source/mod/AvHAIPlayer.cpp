@@ -2490,11 +2490,11 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 
 	if (vEquals(CurrentPosition, CurrentPathNode->LastRecordedPosition, 1.0f))
 	{
-		CurrentPathNode->LastRecordedPosition = CurrentPosition;
 		CurrentPathNode->TimeSinceMovement += gpGlobals->frametime;
 	}
 	else
 	{
+		CurrentPathNode->LastRecordedPosition = CurrentPosition;
 		CurrentPathNode->TimeSinceMovement = 0.0f;
 	}
 
@@ -2514,6 +2514,8 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 	const Vector NewProgress = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
 
 	const float NewProgressPct = vDist2DSq(CurrentPathNode->FromLocation, NewProgress) / vDist2DSq(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+
+	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
 
 	if (NewProgressPct > CurrentPathNode->MovementProgress)
 	{
@@ -2538,7 +2540,6 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 			}
 		}
 
-		const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
 		const Vector vRight = UTIL_GetCrossProduct(vForward, UP_VECTOR);
 
 		int SideOfLine = vPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
@@ -2552,8 +2553,6 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 		{
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward - vRight);
 		}
-
-		return;
 	}
 
 	// We are hopelessly stuck
@@ -2614,6 +2613,22 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 			}
 
 			return;
+		}
+
+		return;
+	}
+
+	if (CurrentPathNode->TimeSinceProgressMade > 1.0f)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = vForward;
+
+		if (gpGlobals->time - BotNavInfo.LandedTime > 1.0f)
+		{
+			Jump(true);
+		}
+		else
+		{
+			NextFrameMovementInput.bShouldCrouch = true;
 		}
 
 		return;
@@ -4009,6 +4024,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 	const NavAgentProfile* NavProfile = GetNavProfile();
 	const Vector CurrentFloorPosition = UTIL_GetFloorUnderEntity(Edict);
 	const Vector BottomOfHitbox = GetBottomOfHitbox();
+	const Vector TopOfHitbox = GetTopOfHitbox();
 	const Vector CurrentPosition = GetLocation();
 	const Vector EyePosition = GetEyePosition();
 
@@ -4049,7 +4065,9 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 
 	TraceResult SurfaceCheck;
 
-	UTIL_TraceHull(CurrentPosition - Vector(0.0f, 0.0f, 1.0f), CurrentPosition + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, Edict->v.pContainingEntity, &SurfaceCheck);
+	const Vector SurfaceTraceStart = TopOfHitbox - Vector(0.0f, 0.0f, 18.0f);
+
+	UTIL_TraceHull(SurfaceTraceStart, SurfaceTraceStart + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, Edict->v.pContainingEntity, &SurfaceCheck);
 
 	const Vector CeilNormal = SurfaceCheck.vecPlaneNormal;
 
@@ -4062,12 +4080,28 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		bIsUnderClimbing = SurfaceCheck.flFraction < 1.0f;
 	}
 
-	if (bIsUnderClimbing)
+	if (bIsUnderClimbing || gpGlobals->time - CurrentPathNode->LastUnderClimbTime < 0.33f)
 	{
+		if (bIsUnderClimbing)
+		{
+			if (AvHAIPathNode* CurrentPathNodeMutable = Path->GetCurrentPathNode_Mutable())
+			{
+				CurrentPathNodeMutable->LastUnderClimbTime = gpGlobals->time;
+			}
+		}
+
 		const Vector NewClimbDir = vProjectOnPlane(UP_VECTOR, CeilNormal);
-		NextFrameMovementInput.bShouldWalk = true;
+
 		vForward = (!vIsZero(NewClimbDir)) ? UTIL_GetVectorNormal2D(NewClimbDir) : -vForward;
-		NextFrameMovementInput.RequiredLookLocation = CurrentPosition + (vForward * 1000.0f);
+
+		NextFrameMovementInput.RequiredLookLocation = (bIsUnderClimbing)
+			? CurrentPosition + (vForward * 1000.0f)
+			: CurrentPosition + (vForward * 100.0f) + Vector(0.0f, 0.0f, 1000.0f);
+	}
+
+	if (bIsUnderClimbing || gpGlobals->time - CurrentPathNode->LastUnderClimbTime < 1.0f)
+	{
+		NextFrameMovementInput.bShouldWalk = true;
 	}
 
 	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));
