@@ -601,7 +601,7 @@ static bool AIMESH_AddOffMeshConnectionInternal(EAINavMeshIndex TargetNavMesh, V
 	dtOffMeshConnectionRef dtRef = 0;
 	NewConnectionDef.ConnectionRef = 0;
 
-	dtStatus AddStatus = FoundMesh->TileCacheRef->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 18.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &dtRef);
+	dtStatus AddStatus = FoundMesh->TileCacheRef->addOffMeshConnection(ConvProjectedStart, ConvProjectedEnd, 10.0f, static_cast<unsigned char>(area), static_cast<unsigned int>(flags), bBiDirectional, &dtRef);
 
 	if (dtStatusSucceed(AddStatus))
 	{
