@@ -544,6 +544,9 @@ EAINavMoveResult AvHAIPlayer::MoveTo(const Vector& DesiredLocation)
 	const NavAgentProfile* NavProfile = GetNavProfile();
 
 	BotNavInfo.ClearPath();
+	LastOpenSpace = ZERO_VECTOR;
+	PlayerAvoidanceBacktrackTarget = ZERO_VECTOR;
+	PlayerAvoidanceBacktrackCooldown = 0.0f;
 
 	AvHAIMoveTask NewDestinationTask;
 
@@ -1618,11 +1621,22 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	if (AINAV_IsOffPathNode(NavProfile, Edict, CurrentPathNode))
 	{
-		const bool bSucceededRegen = AINAV_FindPathClosestToPoint(NavProfile, UTIL_GetFloorUnderEntity(Edict), Path->GetFinalDestination(), Path, GetPlayerRadius());
-
-		if (!bSucceededRegen)
+		// Do not rebuild every frame while a temporary knockback or corner slide
+		// is being resolved. The current node remains the cheapest recovery path.
+		if (gpGlobals->time - Path->LastRepathTime >= MIN_PATH_RECALC_TIME)
 		{
-			return EAINavMoveResult::NAV_MOVE_NOPATH;
+			AvHAIPath RecoveredPath;
+			const bool bSucceededRegen = AINAV_FindPathClosestToPoint(NavProfile, UTIL_GetFloorUnderEntity(Edict), Path->GetFinalDestination(), &RecoveredPath, GetPlayerRadius());
+			Path->LastRepathTime = gpGlobals->time;
+
+			if (bSucceededRegen)
+			{
+				RecoveredPath.LastRepathTime = gpGlobals->time;
+				*Path = RecoveredPath;
+				CurrentPathNode = Path->GetCurrentPathNode();
+				NextPathNode = Path->GetNextPathNode();
+				if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return EAINavMoveResult::NAV_MOVE_NOPATH; }
+			}
 		}
 	}
 
@@ -1738,6 +1752,20 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 
 	const Vector BotLocation = GetLocation();
 
+	if (!vIsZero(PlayerAvoidanceBacktrackTarget))
+	{
+		if (vDist2DSq(BotLocation, PlayerAvoidanceBacktrackTarget) <= sqrf(12.0f))
+		{
+			PlayerAvoidanceBacktrackTarget = ZERO_VECTOR;
+		}
+		else
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(PlayerAvoidanceBacktrackTarget - BotLocation);
+			NextFrameMovementInput.RequiredLookLocation = PlayerAvoidanceBacktrackTarget;
+			return;
+		}
+	}
+
 	for (AvHPlayer* OtherPlayer : ActivePlayerList)
 	{
 		if (OtherPlayer == Player) { continue; }
@@ -1781,7 +1809,7 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 			const float OtherPlayerDesiredMoveDot = UTIL_GetDotProduct2D(OtherPlayerDesiredDirection, DesiredMoveDirection);
 
 			// Player is wants to move away from us
-			if (OtherPlayerMoveDot > 0.0f) { continue; }
+			if (OtherPlayerDesiredMoveDot > 0.0f) { continue; }
 		}
 
 		// Ok, player is trying to move in the other direction to us.
@@ -1812,7 +1840,7 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 
 		if (!IsPlayerOnGround(OtherPlayerEdict))
 		{
-			NextFrameMovementInput.bShouldCrouch;
+			NextFrameMovementInput.bShouldCrouch = true;
 			return;
 		}
 
@@ -1826,19 +1854,40 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 			}
 		}
 
-		const bool bIsHeadingToLastSpace = GetCurrentMoveTask() && vEquals(GetCurrentMoveTask()->TaskLocation, LastOpenSpace, 5.0f);
-
-		// We have nowhere to move, goal now is to go to the last space where we had some room to manoeuvre.
-		if (!vIsZero(LastOpenSpace) && !bIsHeadingToLastSpace)
+		// Only one player yields when two players meet in a narrow passage. This
+		// prevents both bots from backing up and then repeating the same meeting.
+		if (ENTINDEX(Edict) < ENTINDEX(OtherPlayerEdict))
 		{
-			AvHAIMoveTask NewBackUpTask;
-			if (AINAV_AddMoveMovementTask(GetNavProfile(), BotLocation, LastOpenSpace, nullptr, NewBackUpTask, CurrentPathNode))
-			{
-				AddMovementTask(NewBackUpTask);
-				return;
-			}
+			NextFrameMovementInput.DesiredMoveDirection = ZERO_VECTOR;
+			return;
+		}
+
+		// We have nowhere to move, so steer back to the last known open point.
+		// Keep the existing path intact; rebuilding a temporary backup task used
+		// to erase the original path and could create a backtrack loop.
+		if (!vEquals(GetCurrentMoveDestination(), LastOpenSpace, 5.0f) && StartBacktrackToLastOpenSpace())
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(PlayerAvoidanceBacktrackTarget - BotLocation);
+			NextFrameMovementInput.RequiredLookLocation = PlayerAvoidanceBacktrackTarget;
+			return;
 		}
 	}
+}
+
+bool AvHAIPlayer::StartBacktrackToLastOpenSpace()
+{
+	if (vIsZero(LastOpenSpace)
+		|| vDist2DSq(GetLocation(), LastOpenSpace) > sqrf(96.0f)
+		|| !vIsZero(PlayerAvoidanceBacktrackTarget)
+		|| gpGlobals->time < PlayerAvoidanceBacktrackCooldown)
+	{
+		return false;
+	}
+
+	PlayerAvoidanceBacktrackTarget = LastOpenSpace;
+	LastOpenSpace = ZERO_VECTOR;
+	PlayerAvoidanceBacktrackCooldown = gpGlobals->time + 2.0f;
+	return true;
 }
 
 void AvHAIPlayer::HandleLadderPlayerAvoidance(const AvHAIPathNode* CurrentPathNode)
@@ -2485,11 +2534,11 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 
 	if (vEquals(CurrentPosition, CurrentPathNode->LastRecordedPosition, 1.0f))
 	{
-		CurrentPathNode->LastRecordedPosition = CurrentPosition;
 		CurrentPathNode->TimeSinceMovement += gpGlobals->frametime;
 	}
 	else
 	{
+		CurrentPathNode->LastRecordedPosition = CurrentPosition;
 		CurrentPathNode->TimeSinceMovement = 0.0f;
 	}
 
@@ -2508,9 +2557,19 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 
 	const Vector NewProgress = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
 
-	const float NewProgressPct = vDist2DSq(CurrentPathNode->FromLocation, NewProgress) / vDist2DSq(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+	const float PathLengthSq = vDist2DSq(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+	if (PathLengthSq <= 1.0f)
+	{
+		CurrentPathNode->TimeSinceProgressMade = 0.0f;
+		return;
+	}
 
-	if (NewProgressPct > CurrentPathNode->MovementProgress)
+	const float NewProgressPct = vDist2DSq(CurrentPathNode->FromLocation, NewProgress) / PathLengthSq;
+	const Vector PreviousProgress = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, CurrentPathNode->LastRecordedPosition);
+	const bool bMovedCloserToPath = vDist2DSq(BotLocation, NewProgress) + sqrf(2.0f)
+		< vDist2DSq(CurrentPathNode->LastRecordedPosition, PreviousProgress);
+
+	if (NewProgressPct > CurrentPathNode->MovementProgress || bMovedCloserToPath)
 	{
 		CurrentPathNode->MovementProgress = NewProgressPct;
 		CurrentPathNode->TimeSinceProgressMade = 0.0f;
@@ -2545,57 +2604,15 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 		return;
 	}
 
-	const AvHAIPathNode* NextPathNode = Path->GetNextPathNode();
-
 	if (!IsOnGround())
 	{
-		// Failing that, try and snap the bot back onto the path
-		if (CurrentPathNode->TimeSinceProgressMade > 4.0f)
-		{
-			const Vector FloorPosition = UTIL_GetFloorUnderEntity(Edict) + Vector(0.0f, 0.0f, (GetPlayerHeight() + 1.0f));
-			Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, FloorPosition);
-
-			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = PointOnPath;
-				return;
-			}
-
-			const Vector TravelDir = UTIL_GetVectorNormal(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
-			const float TeleportDistance = (Edict->v.absmax - Edict->v.absmin).Length2D();
-
-			PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
-
-			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = PointOnPath;
-				return;
-			}
-
-			PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
-
-			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = PointOnPath;
-				return;
-			}
-
-			return;
-		}
-
-		// First, stop movement to see if we can unstick that way
+		// Do not use a failed floor trace as a teleport anchor. On malformed
+		// collision hulls UTIL_GetFloorUnderEntity can return the current origin,
+		// and the old +50 recovery then launched the bot into the air.
 		if (CurrentPathNode->TimeSinceProgressMade > 2.0f)
 		{
 			NextFrameMovementInput.Clear();
 			NextFrameMovementInput.bShouldCrouch = true;
-
-			const Vector CheckPoint = BotLocation + Vector(0.0f, 0.0f, 50.0f);
-			if (AvHSUGetIsEnoughRoomForHull(CheckPoint, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = CheckPoint;
-			}
-
-			return;
 		}
 
 		return;
@@ -2604,60 +2621,33 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 	// We are on the ground, check if we're stuck
 	if (CurrentPathNode->TimeSinceProgressMade > 4.0f)
 	{
-		Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
-		PointOnPath.z = Edict->v.origin.z;
-
-		const Vector TravelDir = UTIL_GetVectorNormal(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
-		const float TeleportDistance = (Edict->v.absmax - Edict->v.absmin).Length2D();
-
-		PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
-		float HeightOffset = 0.0f;
-
-		while (HeightOffset < 20.0f)
+		const Vector TravelDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+		const Vector RightDir = UTIL_GetVectorNormal2D(UTIL_GetCrossProduct(TravelDir, UP_VECTOR));
+		const float RecoveryDistance = fminf(GetPlayerRadius() * 0.75f, 12.0f);
+		const Vector PointOnPath = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
+		const Vector RecoveryPoints[] =
 		{
-			const Vector CheckPointOnPath = PointOnPath + Vector(0.0f, 0.0f, HeightOffset);
-			if (AvHSUGetIsEnoughRoomForHull(CheckPointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = CheckPointOnPath;
-				return;
-			}
+			BotLocation + (RightDir * RecoveryDistance),
+			BotLocation - (RightDir * RecoveryDistance),
+			BotLocation - (TravelDir * RecoveryDistance),
+			BotLocation + (TravelDir * RecoveryDistance),
+			Vector(PointOnPath.x, PointOnPath.y, BotLocation.z)
+		};
 
-			HeightOffset += 2.0f;
-		}
-
-		HeightOffset = 0.0f;
-
-		PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
-
-		while (HeightOffset < 20.0f)
+		const int HullIndex = AvHMUGetHull(IsCrouching(), Edict->v.iuser3);
+		for (const Vector& RecoveryPoint : RecoveryPoints)
 		{
-			const Vector CheckPointOnPath = PointOnPath + Vector(0.0f, 0.0f, HeightOffset);
-			if (AvHSUGetIsEnoughRoomForHull(CheckPointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = CheckPointOnPath;
-				return;
-			}
+			if (vDist2DSq(RecoveryPoint, BotLocation) > sqrf(16.0f)) { continue; }
+			if (!AvHSUGetIsEnoughRoomForHull(RecoveryPoint, HullIndex, Edict->v.pContainingEntity)) { continue; }
 
-			HeightOffset += 2.0f;
+			Edict->v.origin = RecoveryPoint;
+			Edict->v.velocity = ZERO_VECTOR;
+			LastTeleportTime = gpGlobals->time;
+			CurrentPathNode->TimeSinceProgressMade = 0.0f;
+			CurrentPathNode->TimeSinceMovement = 0.0f;
+			CurrentPathNode->LastRecordedPosition = RecoveryPoint;
+			return;
 		}
-
-		HeightOffset = 0.0f;
-
-		PointOnPath = PointOnPath + (TravelDir * TeleportDistance);
-
-		while (HeightOffset < 20.0f)
-		{
-			const Vector CheckPointOnPath = PointOnPath + Vector(0.0f, 0.0f, HeightOffset);
-			if (AvHSUGetIsEnoughRoomForHull(CheckPointOnPath, AvHMUGetHull(IsCrouching(), Edict->v.iuser3), Edict->v.pContainingEntity))
-			{
-				Edict->v.origin = CheckPointOnPath;
-				return;
-			}
-
-			HeightOffset += 2.0f;
-		}
-
-		return;
 	}
 }
 
@@ -2702,14 +2692,16 @@ void AvHAIPlayer::CheckFallMoveStuckAndReact(AvHAIPath* Path)
 		{
 			Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
 
-			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, HullIndex, Edict->v.pContainingEntity))
+			if (vDist2DSq(PointOnPath, BotLocation) <= sqrf(24.0f)
+				&& fabsf(PointOnPath.z - BotLocation.z) <= 24.0f
+				&& AvHSUGetIsEnoughRoomForHull(PointOnPath, HullIndex, Edict->v.pContainingEntity))
 			{
 				NextFrameMovementInput.bShouldCrouch = true;
 				Edict->v.origin = PointOnPath;
 				return;
 			}
 
-			Vector RaisedPoint = BotLocation + Vector(0.0f, 0.0f, 50.0f);
+			Vector RaisedPoint = BotLocation + Vector(0.0f, 0.0f, 16.0f);
 
 			if (AvHSUGetIsEnoughRoomForHull(RaisedPoint, HullIndex, Edict->v.pContainingEntity))
 			{
@@ -2723,20 +2715,15 @@ void AvHAIPlayer::CheckFallMoveStuckAndReact(AvHAIPath* Path)
 		{
 			if (vDist3DSq(BotLocation, CurrentPathNode->ToLocation) < sqrf(200.0f))
 			{
-				float HeightOffset = 0.0f;
+				const Vector TargetDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+				const float RecoveryDistance = fminf(vDist2D(BotLocation, CurrentPathNode->ToLocation), 12.0f);
+				const Vector TeleportDestination = BotLocation + (TargetDirection * RecoveryDistance);
 
-				for (int32 i = 0; i < 8; i++)
+				if (AvHSUGetIsEnoughRoomForHull(TeleportDestination, HullIndex, Edict->v.pContainingEntity))
 				{
-					const Vector TeleportDestination = CurrentPathNode->ToLocation + Vector(0.0f, 0.0f, HeightOffset);
-
-					if (AvHSUGetIsEnoughRoomForHull(TeleportDestination, HullIndex, Edict->v.pContainingEntity))
-					{
-						NextFrameMovementInput.bShouldCrouch = true;
-						Edict->v.origin = TeleportDestination;
-						return;
-					}
-
-					HeightOffset += 2.0f;
+					NextFrameMovementInput.bShouldCrouch = true;
+					Edict->v.origin = TeleportDestination;
+					return;
 				}
 			}
 		}
@@ -2783,20 +2770,15 @@ void AvHAIPlayer::CheckFallMoveStuckAndReact(AvHAIPath* Path)
 
 		if (vDist3DSq(BotLocation, CurrentPathNode->ToLocation) < sqrf(200.0f))
 		{
-			float HeightOffset = 0.0f;
+			const Vector TargetDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+			const float RecoveryDistance = fminf(vDist2D(BotLocation, CurrentPathNode->ToLocation), 12.0f);
+			const Vector TeleportDestination = BotLocation + (TargetDirection * RecoveryDistance);
 
-			for (int32 i = 0; i < 8; i++)
+			if (AvHSUGetIsEnoughRoomForHull(TeleportDestination, HullIndex, Edict->v.pContainingEntity))
 			{
-				const Vector TeleportDestination = CurrentPathNode->ToLocation + Vector(0.0f, 0.0f, HeightOffset);
-
-				if (AvHSUGetIsEnoughRoomForHull(TeleportDestination, HullIndex, Edict->v.pContainingEntity))
-				{
-					NextFrameMovementInput.bShouldCrouch = true;
-					Edict->v.origin = TeleportDestination;
-					return;
-				}
-
-				HeightOffset += 2.0f;
+				NextFrameMovementInput.bShouldCrouch = true;
+				Edict->v.origin = TeleportDestination;
+				return;
 			}
 		}
 	}
@@ -2804,14 +2786,10 @@ void AvHAIPlayer::CheckFallMoveStuckAndReact(AvHAIPath* Path)
 	if (CurrentPathNode->TimeSinceMovement > 5.0f)
 	{
 		// We have nowhere to move, goal now is to go to the last space where we had some room to manoeuvre.
-		if (!vIsZero(LastOpenSpace) && !vEquals(Path->DesiredDestination, LastOpenSpace))
+		if (!vEquals(Path->DesiredDestination, LastOpenSpace) && StartBacktrackToLastOpenSpace())
 		{
-			AvHAIMoveTask NewBackUpTask;
-			if (AINAV_AddMoveMovementTask(GetNavProfile(), BotLocation, LastOpenSpace, nullptr, NewBackUpTask, CurrentPathNode))
-			{
-				AddMovementTask(NewBackUpTask);
-				return;
-			}
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(PlayerAvoidanceBacktrackTarget - BotLocation);
+			return;
 		}
 	}
 }
@@ -2954,7 +2932,9 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 		{
 			Vector PointOnPath = vClosestPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
 
-			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, HullIndex, Edict->v.pContainingEntity))
+			if (vDist2DSq(PointOnPath, BotLocation) <= sqrf(32.0f)
+				&& fabsf(PointOnPath.z - BotLocation.z) <= 32.0f
+				&& AvHSUGetIsEnoughRoomForHull(PointOnPath, HullIndex, Edict->v.pContainingEntity))
 			{
 				if (!IsWallSticking())
 				{
@@ -2965,7 +2945,7 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 				return;
 			}
 
-			Vector RaisedPoint = BotLocation + Vector(0.0f, 0.0f, 50.0f);
+			Vector RaisedPoint = BotLocation + Vector(0.0f, 0.0f, 16.0f);
 
 			if (AvHSUGetIsEnoughRoomForHull(RaisedPoint, HullIndex, Edict->v.pContainingEntity))
 			{
@@ -3017,14 +2997,10 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 	// Completely stuck
 
 	// We have nowhere to move, goal now is to go to the last space where we had some room to manoeuvre.
-	if (!vIsZero(LastOpenSpace) && !vEquals(Path->DesiredDestination, LastOpenSpace))
+	if (!vEquals(Path->DesiredDestination, LastOpenSpace) && StartBacktrackToLastOpenSpace())
 	{
-		AvHAIMoveTask NewBackUpTask;
-		if (AINAV_AddMoveMovementTask(GetNavProfile(), BotLocation, LastOpenSpace, nullptr, NewBackUpTask, CurrentPathNode))
-		{
-			AddMovementTask(NewBackUpTask);
-			return;
-		}
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(PlayerAvoidanceBacktrackTarget - BotLocation);
+		return;
 	}
 }
 
@@ -3052,7 +3028,7 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 	const bool bCanMoveRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, vRight, false, GetPlayerRadius() * 2.0f);
 	const bool bCanMoveLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, -vRight, false, GetPlayerRadius() * 2.0f);
 
-	if (bCanMoveRight && bCanMoveLeft)
+	if (bCanMoveRight && bCanMoveLeft && vIsZero(PlayerAvoidanceBacktrackTarget) && gpGlobals->time >= PlayerAvoidanceBacktrackCooldown)
 	{
 		LastOpenSpace = UTIL_GetFloorUnderEntity(Edict);
 	}
@@ -3129,13 +3105,48 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 
 	if (HitResult.fStartSolid || HitResult.fAllSolid)
 	{
-		bBumpLeft = true;
+		bBumpRight = true;
 	}
 	else if (HitResult.flFraction < 0.99f)
 	{
 		if (UTIL_GetDotProduct2D(vForward, HitResult.vecPlaneNormal) < -0.5f)
 		{
 			bBumpRight = true;
+		}
+	}
+
+	// A diagonal probe lets the bot slide around a corner while retaining
+	// forward progress. Pure 90-degree side steps are what commonly wedges a
+	// box-shaped player against the next brush.
+	const Vector SlideLeft = UTIL_GetVectorNormal2D(vForward - (vRight * 0.65f));
+	const Vector SlideRight = UTIL_GetVectorNormal2D(vForward + (vRight * 0.65f));
+	const bool bCanSlideLeft = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, SlideLeft, false, PlayerRadius * 1.5f);
+	const bool bCanSlideRight = QuickMovementTrace(EAIMovementTraceType::LOWER_CENTER, SlideRight, false, PlayerRadius * 1.5f);
+
+	if (bBumpLeft && !bBumpRight && bCanSlideRight)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = SlideRight;
+		return true;
+	}
+
+	if (bBumpRight && !bBumpLeft && bCanSlideLeft)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = SlideLeft;
+		return true;
+	}
+
+	if (bBumpLeft && bBumpRight)
+	{
+		if (bCanSlideLeft && !bCanSlideRight)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = SlideLeft;
+			return true;
+		}
+
+		if (bCanSlideRight)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = SlideRight;
+			return true;
 		}
 	}
 

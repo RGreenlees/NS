@@ -72,6 +72,7 @@ struct AvHAIPathNode
 		LastRecordedPosition = ZERO_VECTOR;
 		TimeSinceMovement = 0.0f;
 		TimeSinceProgressMade = 0.0f;
+		MovementProgress = 0.0f;
 	}
 
 	bool IsValidMove() const
@@ -121,6 +122,7 @@ struct AvHAIPath
 	int32 CurrentNodeIndex = 0;
 	EAINavMeshIndex UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
 	bool bIsPendingTermination = false;
+	float LastRepathTime = 0.0f;
 
 	void Clear()
 	{
@@ -130,6 +132,7 @@ struct AvHAIPath
 		DesiredDestination = ZERO_VECTOR;
 		UsedNavMesh = EAINavMeshIndex::NAV_MESH_INVALID;
 		bIsPendingTermination = false;
+		LastRepathTime = 0.0f;
 	}
 
 	bool IsValidPath() const

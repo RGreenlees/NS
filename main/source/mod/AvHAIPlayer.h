@@ -253,6 +253,8 @@ struct AvHAIPlayer
 	Vector ViewForwardVector = g_vecZero; // Bot's current forward unit vector
 	Vector LastSafeLocation = g_vecZero;
 	Vector LastOpenSpace = g_vecZero;
+	Vector PlayerAvoidanceBacktrackTarget = g_vecZero;
+	float PlayerAvoidanceBacktrackCooldown = 0.0f;
 
 	int ExperiencePointsAvailable = 0; // How much experience the bot has to spend
 	AvHMessageID NextCombatModeUpgrade = MESSAGE_NULL;
@@ -374,6 +376,7 @@ struct AvHAIPlayer
 	void HandlePlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
 	void HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
 	void HandleLadderPlayerAvoidance(const AvHAIPathNode* CurrentPathNode);
+	bool StartBacktrackToLastOpenSpace();
 
 	void DEBUG_DrawPath();
 

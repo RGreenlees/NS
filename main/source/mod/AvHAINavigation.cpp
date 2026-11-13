@@ -465,7 +465,10 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		NextPathNode.ToLocation.y = -dtStraightPath[nIndex++];
 
 		// The nav mesh doesn't always align perfectly with the floor, so align each nav point with the floor after generation
-		NextPathNode.ToLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToLocation, 16.0f);
+		// Detour treats the agent as a cylinder. GoldSrc players are boxes, so a
+		// 16-unit wall clearance still lets a 16x16 hull catch a diagonal corner.
+		const float NavWallClearance = (NavProfile->MeshIndex == EAINavMeshIndex::NAV_MESH_ONOS) ? 45.0f : 22.0f;
+		NextPathNode.ToLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToLocation, NavWallClearance);
 		NextPathNode.ToLocation = AINAV_AdjustPointForPathfinding(NavProfile, NextPathNode.ToLocation);
 
 		if (CurrFlags != EAINavMovementFlag::NAV_FLAG_JUMP || NextPathNode.FromLocation.z > NextPathNode.ToLocation.z)
@@ -718,18 +721,18 @@ bool AINAV_IsOffWalkNode(const NavAgentProfile* NavProfile, const edict_t* AIPla
 
 	if (!IsPlayerOnGround(AIPlayer)) { return false; }
 
-	if (AINAV_IsPointDirectlyReachable(NavProfile, GetPlayerBottomOfCollisionHull(AIPlayer), PathNode->ToLocation)) { return false; }
+	const float PlayerRadius = GetPlayerRadius(AIPlayer);
+	const float SalvageRadius = fmaxf(PlayerRadius * 1.5f, 24.0f);
+
+	// A knockback or a small corner slide is recoverable. Keep following the
+	// current node while its destination is still on the same nav corridor.
+	if (AINAV_IsPointDirectlyReachable(NavProfile, GetPlayerBottomOfCollisionHull(AIPlayer), PathNode->ToLocation, Vector(SalvageRadius, SalvageRadius, 55.0f))) { return false; }
 
 	Vector NearestPointOnLine = vClosestPointOnLine(PathNode->FromLocation, PathNode->ToLocation, AIPlayer->v.origin);
 
 	if (vPointOverlaps3D(NearestPointOnLine, AIPlayer->v.absmin, AIPlayer->v.absmax)) { return false; }
 
-	if (vDist2DSq(AIPlayer->v.origin, NearestPointOnLine) > sqrf(GetPlayerRadius(AIPlayer) * 3.0f)) { return true; }
-
-	const Vector FloorLocation = UTIL_GetFloorUnderEntity(AIPlayer);
-
-	if (vEquals2D(NearestPointOnLine, PathNode->FromLocation) && !AINAV_IsPointDirectlyReachable(NavProfile, FloorLocation, PathNode->FromLocation)) { return true; }
-	if (vEquals2D(NearestPointOnLine, PathNode->ToLocation) && !AINAV_IsPointDirectlyReachable(NavProfile, FloorLocation, PathNode->ToLocation)) { return true; }
+	if (vDist2DSq(AIPlayer->v.origin, NearestPointOnLine) > sqrf(PlayerRadius * 4.0f)) { return true; }
 
 	return false;
 }
@@ -1221,7 +1224,9 @@ bool AINAV_IsWalkMoveComplete(const NavAgentProfile* NavProfile, const edict_t* 
 
 	if (bHasNextPathNode && !NextPathNode->IsPrecisionMove())
 	{
-		const bool bNextPointDirectlyReachable = AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, Vector(8.0f, 8.0f, 55.0f));
+		const float PlayerRadius = GetPlayerRadius(AIPlayer);
+		const float CornerClearance = fmaxf(PlayerRadius * 1.5f, 16.0f);
+		const bool bNextPointDirectlyReachable = AINAV_IsPointDirectlyReachable(NavProfile, CurrentPosition, NextPathNode->ToLocation, Vector(CornerClearance, CornerClearance, 55.0f));
 
 		if (!bNextPointDirectlyReachable) { return false; }
 
