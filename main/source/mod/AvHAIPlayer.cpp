@@ -990,6 +990,11 @@ void AvHAIPlayer::StartThink(float DeltaTime)
 {
 	CheckAndSendMessages();
 	NextFrameMovementInput.Clear();
+
+	if (IsPlayerSkulk(Edict))
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+	}
 }
 
 void AvHAIPlayer::UpdateView(float DeltaTime)
@@ -2438,14 +2443,6 @@ bool AvHAIPlayer::NextMove(AvHAIPath* Path)
 	if (!Path || !Path->IsValidPath()) { return false; }
 
 	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
-
-	bool bMoveSuccess = false;
-
-	if (IsPlayerSkulk(Edict))
-	{
-		// Always crouch as skulk so we don't wall stick. We undo this in the wall climb move.
-		NextFrameMovementInput.bShouldCrouch = true;
-	}
 
 	bool bMadeMove = false;
 
@@ -4065,15 +4062,13 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 
 	TraceResult SurfaceCheck;
 
-	const Vector SurfaceTraceStart = TopOfHitbox - Vector(0.0f, 0.0f, 18.0f);
-
-	UTIL_TraceHull(SurfaceTraceStart, SurfaceTraceStart + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, head_hull, Edict->v.pContainingEntity, &SurfaceCheck);
+	UTIL_TraceHull(CurrentPosition, CurrentPosition + Vector(0.0f, 0.0f, 5.0f), ignore_monsters, GetPlayerHullIndex(Edict, IsCrouching()), Edict->v.pContainingEntity, &SurfaceCheck);
 
 	const Vector CeilNormal = SurfaceCheck.vecPlaneNormal;
 
 	bool bIsUnderClimbing = false;
 
-	bool bClimbingUnderway = ((BottomOfHitbox.z - CurrentPathNode->FromLocation.z) >= 32.0f) && IsWallSticking();
+	bool bClimbingUnderway = !IsOnGround() && IsWallSticking();
 
 	if (CurrentPosition.z < (CurrentPathNode->RequiredClimbZ - 10.0f) && !IsOnGround() && bClimbingUnderway)
 	{
@@ -4095,7 +4090,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		vForward = (!vIsZero(NewClimbDir)) ? UTIL_GetVectorNormal2D(NewClimbDir) : -vForward;
 
 		NextFrameMovementInput.RequiredLookLocation = (bIsUnderClimbing)
-			? CurrentPosition + (vForward * 1000.0f)
+			? CurrentPosition + (vForward * 100.0f) + Vector(0.0f, 0.0f, 100.0f)
 			: CurrentPosition + (vForward * 100.0f) + Vector(0.0f, 0.0f, 1000.0f);
 	}
 
