@@ -1031,6 +1031,16 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 		Edict->v.velocity = NextFrameMovementInput.VelocityOverride;
 	}
 
+	if (!(NextFrameMovementInput.Button & IN_WALK))
+	{
+		const bool bBoop = true;
+	}
+
+	if (NextFrameMovementInput.Button & IN_DUCK)
+	{
+		const bool bBoop = true;
+	}
+
 	// Simulate PM_PlayerMove so client prediction and stuff can be executed correctly.
 	RUN_AI_MOVE(Edict, Edict->v.v_angle, NextFrameMovementInput.ForwardMove,
 		NextFrameMovementInput.SideMove, NextFrameMovementInput.UpMove, NextFrameMovementInput.Button, NextFrameMovementInput.Impulse, (byte)AdjustedTimeMS);
@@ -1062,9 +1072,8 @@ void AvHAIPlayer::BotUpdateDesiredViewRotation()
 
 	vClampViewAngles(ViewInfo.InterpolatingViewTarget);
 
-	if (ViewInfo.bSnapView)
+	if (NextFrameMovementInput.bSnapView)
 	{
-		ViewInfo.ViewInterpolationSpeed = 1000.0f;
 		return;
 	}
 
@@ -1111,18 +1120,28 @@ void AvHAIPlayer::InterpolateView(float DeltaTime)
 {
 	if (vIsZero(ViewInfo.InterpolatingViewTarget)) { return; }
 
-	Vector ViewDelta = ViewInfo.InterpolatingViewTarget - ViewInfo.CurrentInterpolatedView;
-
-	vClampViewAngles(ViewDelta);
-
-	ViewInfo.CurrentInterpolatedView.x = fInterpConstantTo(ViewInfo.CurrentInterpolatedView.x, ViewInfo.InterpolatingViewTarget.x, DeltaTime, ViewInfo.ViewInterpolationSpeed);
-	ViewInfo.CurrentInterpolatedView.y += fInterpConstantTo(0.0f, ViewDelta.y, DeltaTime, ViewInfo.ViewInterpolationSpeed);
-
-	vClampViewAngles(ViewInfo.CurrentInterpolatedView);
-
-	if (vEquals2D(ViewInfo.CurrentInterpolatedView, ViewInfo.InterpolatingViewTarget) || gpGlobals->time - ViewInfo.ViewInterpStartedTime > 2.0f)
+	if (NextFrameMovementInput.bSnapView)
 	{
+		ViewInfo.CurrentInterpolatedView.x = ViewInfo.InterpolatingViewTarget.x;
+		ViewInfo.CurrentInterpolatedView.y = ViewInfo.InterpolatingViewTarget.y;
+
 		ViewInfo.InterpolatingViewTarget = ZERO_VECTOR;
+	}
+	else
+	{
+		Vector ViewDelta = ViewInfo.InterpolatingViewTarget - ViewInfo.CurrentInterpolatedView;
+
+		vClampViewAngles(ViewDelta);
+
+		ViewInfo.CurrentInterpolatedView.x = fInterpConstantTo(ViewInfo.CurrentInterpolatedView.x, ViewInfo.InterpolatingViewTarget.x, DeltaTime, ViewInfo.ViewInterpolationSpeed);
+		ViewInfo.CurrentInterpolatedView.y += fInterpConstantTo(0.0f, ViewDelta.y, DeltaTime, ViewInfo.ViewInterpolationSpeed);
+
+		vClampViewAngles(ViewInfo.CurrentInterpolatedView);
+
+		if (vEquals2D(ViewInfo.CurrentInterpolatedView, ViewInfo.InterpolatingViewTarget) || gpGlobals->time - ViewInfo.ViewInterpStartedTime > 2.0f)
+		{
+			ViewInfo.InterpolatingViewTarget = ZERO_VECTOR;
+		}
 	}
 
 	Edict->v.v_angle.x = ViewInfo.CurrentInterpolatedView.x;
@@ -2954,7 +2973,7 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return; }
 
-	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
+	/*AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
 
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return; }
 
@@ -3054,7 +3073,7 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 			AddMovementTask(NewBackUpTask);
 			return;
 		}
-	}
+	}*/
 }
 
 bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
@@ -4098,6 +4117,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 	if (bIsUnderClimbing || gpGlobals->time - CurrentPathNode->LastUnderClimbTime < 1.0f)
 	{
 		NextFrameMovementInput.bShouldWalk = true;
+		NextFrameMovementInput.bSnapView = true;
 	}
 
 	const Vector vRight = UTIL_GetVectorNormal(UTIL_GetCrossProduct(vForward, UP_VECTOR));

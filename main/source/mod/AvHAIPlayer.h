@@ -62,6 +62,7 @@ struct AvHAIMovementInput
 	EAIWeaponId		DesiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
 	Vector			DesiredMoveDirection = g_vecZero;
 	Vector			VelocityOverride = g_vecZero; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
+	bool			bSnapView = false; // For this frame, should the bot forcefully snap its view to the target position?
 	bool			bShouldWalk = false;
 	bool			bShouldCrouch = false;
 
@@ -80,6 +81,7 @@ struct AvHAIMovementInput
 		VelocityOverride = g_vecZero;
 		bShouldWalk = false;
 		bShouldCrouch = false;
+		bSnapView = false;
 	}
 
 	void ClearMovementOutputs()
@@ -97,7 +99,6 @@ struct AvHAIViewInfo
 {
 	Vector InterpolatingViewTarget = g_vecZero;
 	Vector CurrentInterpolatedView = g_vecZero;
-	bool bSnapView = false; // Use for rapid, precise snapping of the bot's view to the target. Useful if the bot requires more precise view angles for movement or other reasons
 	float LastTargetTrackUpdate = 0.0f; // Add a delay to how frequently a bot can track a target's movements
 	float ViewInterpolationSpeed = 0.0f; // How fast should the bot turn its view for this interpolated movement? Depends on distance to turn
 	float ViewInterpStartedTime = 0.0f; // Used for interpolation
