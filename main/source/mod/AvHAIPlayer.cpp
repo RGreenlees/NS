@@ -4075,14 +4075,11 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		bIsUnderClimbing = SurfaceCheck.flFraction < 1.0f;
 	}
 
-	if (bIsUnderClimbing || gpGlobals->time - CurrentPathNode->LastUnderClimbTime < 0.33f)
+	if (bIsUnderClimbing)
 	{
-		if (bIsUnderClimbing)
+		if (AvHAIPathNode* CurrentPathNodeMutable = Path->GetCurrentPathNode_Mutable())
 		{
-			if (AvHAIPathNode* CurrentPathNodeMutable = Path->GetCurrentPathNode_Mutable())
-			{
-				CurrentPathNodeMutable->LastUnderClimbTime = gpGlobals->time;
-			}
+			CurrentPathNodeMutable->LastUnderClimbTime = gpGlobals->time;
 		}
 
 		const Vector NewClimbDir = vProjectOnPlane(UP_VECTOR, CeilNormal);
@@ -4090,8 +4087,8 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		vForward = (!vIsZero(NewClimbDir)) ? UTIL_GetVectorNormal2D(NewClimbDir) : -vForward;
 
 		NextFrameMovementInput.RequiredLookLocation = (bIsUnderClimbing)
-			? CurrentPosition + (vForward * 100.0f) + Vector(0.0f, 0.0f, 100.0f)
-			: CurrentPosition + (vForward * 100.0f) + Vector(0.0f, 0.0f, 1000.0f);
+			? CurrentPosition + (UTIL_GetVectorNormal(vForward + Vector(0.0f, 0.0f, 0.5f)) * 100.0f)
+			: CurrentPosition + (UTIL_GetVectorNormal(vForward + Vector(0.0f, 0.0f, 10.0f)) * 100.0f);
 	}
 
 	if (bIsUnderClimbing || gpGlobals->time - CurrentPathNode->LastUnderClimbTime < 1.0f)
