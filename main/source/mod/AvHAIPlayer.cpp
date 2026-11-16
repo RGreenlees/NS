@@ -923,6 +923,11 @@ void AvHAIPlayer::Think(float DeltaTime)
 {
 	NextFrameMovementInput.Clear();
 
+	if (IsPlayerSkulk(Edict))
+	{
+		NextFrameMovementInput.bShouldCrouch = true;
+	}
+
 	if (IsOnGround() || IsOnLadder())
 	{
 		if (BotNavInfo.AirTime > 0.0f || BotNavInfo.bHasAttemptedJump)
@@ -989,12 +994,6 @@ void AvHAIPlayer::CheckAndSendMessages()
 void AvHAIPlayer::StartThink(float DeltaTime)
 {
 	CheckAndSendMessages();
-	NextFrameMovementInput.Clear();
-
-	if (IsPlayerSkulk(Edict))
-	{
-		NextFrameMovementInput.bShouldCrouch = true;
-	}
 }
 
 void AvHAIPlayer::UpdateView(float DeltaTime)
@@ -4072,7 +4071,12 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 
 	if (CurrentPosition.z < (CurrentPathNode->RequiredClimbZ - 10.0f) && !IsOnGround() && bClimbingUnderway)
 	{
-		bIsUnderClimbing = SurfaceCheck.flFraction < 1.0f;
+		if (SurfaceCheck.flFraction < 1.0f)
+		{
+			const float ForwardDot = UTIL_GetDotProduct(UP_VECTOR, SurfaceCheck.vecPlaneNormal);
+
+			bIsUnderClimbing = ForwardDot < -0.5f;
+		}
 	}
 
 	if (bIsUnderClimbing)
