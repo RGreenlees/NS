@@ -1031,16 +1031,6 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 		Edict->v.velocity = NextFrameMovementInput.VelocityOverride;
 	}
 
-	if (!(NextFrameMovementInput.Button & IN_WALK))
-	{
-		const bool bBoop = true;
-	}
-
-	if (NextFrameMovementInput.Button & IN_DUCK)
-	{
-		const bool bBoop = true;
-	}
-
 	// Simulate PM_PlayerMove so client prediction and stuff can be executed correctly.
 	RUN_AI_MOVE(Edict, Edict->v.v_angle, NextFrameMovementInput.ForwardMove,
 		NextFrameMovementInput.SideMove, NextFrameMovementInput.UpMove, NextFrameMovementInput.Button, NextFrameMovementInput.Impulse, (byte)AdjustedTimeMS);
@@ -1608,7 +1598,7 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 		const DynamicMapObject* CurrentPlatform = CurrentPlatformHandle.GetObjectRef();
 
-		if (CurrentPlatform)
+		if (CurrentPlatform && CurrentPlatform->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
 		{
 			const Vector DisembarkPoint = AIMAP_GetNearestPlatformDisembarkPoint(NavProfile, Edict->v.origin, CurrentPlatformHandle);
 
@@ -2973,16 +2963,11 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return; }
 
-	/*AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
+	AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode_Mutable();
 
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return; }
 
-	if (CurrentPathNode->TimeSinceMovement < 2.0f) { return; }
-
-	if (IsPlayerOnos(Edict))
-	{
-		NextFrameMovementInput.bShouldCrouch = true;
-	}
+	if (CurrentPathNode->TimeSinceMovement < 3.0f) { return; }
 
 	// We are hopelessly stuck
 	if (CurrentPathNode->TimeSinceMovement > 10.0f)
@@ -3004,10 +2989,7 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 
 			if (AvHSUGetIsEnoughRoomForHull(PointOnPath, HullIndex, Edict->v.pContainingEntity))
 			{
-				if (!IsWallSticking())
-				{
-					NextFrameMovementInput.bShouldCrouch = true;
-				}
+				NextFrameMovementInput.bShouldCrouch = !IsWallSticking();
 
 				Edict->v.origin = PointOnPath;
 				return;
@@ -3017,7 +2999,7 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 
 			if (AvHSUGetIsEnoughRoomForHull(RaisedPoint, HullIndex, Edict->v.pContainingEntity))
 			{
-				NextFrameMovementInput.bShouldCrouch = true;
+				NextFrameMovementInput.bShouldCrouch = !IsWallSticking();
 				Edict->v.origin = RaisedPoint;
 				return;
 			}
@@ -3073,7 +3055,7 @@ void AvHAIPlayer::CheckWallClimbMoveStuckAndReact(AvHAIPath* Path)
 			AddMovementTask(NewBackUpTask);
 			return;
 		}
-	}*/
+	}
 }
 
 bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
@@ -4031,9 +4013,19 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 	return false;
 }
 
+bool AvHAIPlayer::NewBlinkClimbMove(AvHAIPath* Path)
+{
+	return true;
+}
+
 bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
+
+	if (IsPlayerFade(Edict))
+	{
+		return NewBlinkClimbMove(Path);
+	}
 
 	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
 	const NavAgentProfile* NavProfile = GetNavProfile();

@@ -1883,7 +1883,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-			if (!ThisObject) { continue; }
+			if (!ThisObject || ThisObject->Edict->v.solid != SOLID_BBOX) { continue; }
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
@@ -1911,7 +1911,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-			if (!ThisObject) { continue; }
+			if (!ThisObject || ThisObject->Edict->v.solid != SOLID_BBOX) { continue; }
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
@@ -1938,7 +1938,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 		const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-		if (!ThisObject) { continue; }
+		if (!ThisObject || ThisObject->Edict->v.solid != SOLID_BBOX) { continue; }
 
 		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 

@@ -350,6 +350,7 @@ struct AvHAIPlayer
 	bool NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, const Vector& DesiredStop);
 	bool NewPhaseGateMove(AvHAIPath* Path);
 	bool NewWallClimbMove(AvHAIPath* Path);
+	bool NewBlinkClimbMove(AvHAIPath* Path);
 
 	// Returns true once the current move is successfully aborted
 	bool CanAbortCurrentMove();
