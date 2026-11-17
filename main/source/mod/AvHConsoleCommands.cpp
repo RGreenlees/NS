@@ -1462,17 +1462,23 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		theSuccess = true;
 	}
-	else if (FStrEq(pcmd, "bot_drawoffmeshconns"))
+	else if (FStrEq(pcmd, "bot_evolvefade"))
 	{
-		AIMESH_DEBUG_DrawOffMeshConnections(EAINavMeshIndex::NAV_MESH_REGULAR, 10.0f);
+		vector<AvHAIPlayer*> AIPlayers = AIMGR_GetAllAIPlayers();
 
-		theSuccess = true;
-	}
-	else if (FStrEq(pcmd, "testmovetrace"))
-	{
-		edict_t* ListenEdict = INDEXENT(1);
+		for (auto it = AIPlayers.begin(); it != AIPlayers.end(); it++)
+		{
+			AvHAIPlayer* ThisBot = (*it);
 
-		const Vector TestMoveDir = UTIL_GetForwardVector2D(ListenEdict->v.v_angle);
+			if (!IsPlayerAlien(ThisBot->Edict) || !IsPlayerActiveInGame(ThisBot->Edict)) { continue; }
+
+			if (ThisBot->Player->GetResources() < BALANCE_VAR(kFadeCost))
+			{
+				ThisBot->Player->GiveResources(BALANCE_VAR(kFadeCost));
+			}
+
+			ThisBot->RequestEvolveLifeform(EAIAlienLifeform::ALIEN_LIFEFORM_FADE);
+		}
 
 		theSuccess = true;
 	}

@@ -58,8 +58,8 @@ struct AvHAIMovementInput
 	int				Impulse = 0;
 	Vector			RequiredLookLocation = g_vecZero; // Where the bot MUST look to complete this movement (e.g. look up on ladder)
 	Vector			DesiredLookLocation = g_vecZero;  // Where the bot might want to look if they're not doing a precise movement (e.g. an enemy target)
-	EAIWeaponId		RequiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot MUST switch to for movement purposes (e.g. leap/blink)
-	EAIWeaponId		DesiredWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
+	EAIWeaponId		DesiredCombatWeapon = EAIWeaponId::WEAPON_INVALID; // Which weapon the bot desires to use (e.g. for combat)
+	EAIWeaponId		DesiredMovementWeapon = EAIWeaponId::WEAPON_INVALID; // Always takes priority over the combat weapon as it's needed for movement
 	Vector			DesiredMoveDirection = g_vecZero;
 	Vector			VelocityOverride = g_vecZero; // Used to force a bot's velocity to a particular direction/magnitude for "cheating" moves
 	bool			bSnapView = false; // For this frame, should the bot forcefully snap its view to the target position?
@@ -75,8 +75,8 @@ struct AvHAIMovementInput
 		Impulse = 0;
 		RequiredLookLocation = g_vecZero;
 		DesiredLookLocation = g_vecZero;
-		RequiredWeapon = EAIWeaponId::WEAPON_INVALID;
-		DesiredWeapon = EAIWeaponId::WEAPON_INVALID;
+		DesiredCombatWeapon = EAIWeaponId::WEAPON_INVALID;
+		DesiredMovementWeapon = EAIWeaponId::WEAPON_INVALID;
 		DesiredMoveDirection = g_vecZero;
 		VelocityOverride = g_vecZero;
 		bShouldWalk = false;

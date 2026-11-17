@@ -1007,9 +1007,9 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 {
 	NextFrameMovementInput.GenerateMovementOutputs(Edict->v.v_angle, Edict->v.maxspeed);
 
-	const EAIWeaponId NewSwitchWeapon = (NextFrameMovementInput.RequiredWeapon != EAIWeaponId::WEAPON_INVALID)
-		? NextFrameMovementInput.RequiredWeapon
-		: NextFrameMovementInput.DesiredWeapon;
+	const EAIWeaponId NewSwitchWeapon = (NextFrameMovementInput.DesiredMovementWeapon != EAIWeaponId::WEAPON_INVALID)
+		? NextFrameMovementInput.DesiredMovementWeapon
+		: NextFrameMovementInput.DesiredCombatWeapon;
 
 	if (NewSwitchWeapon != EAIWeaponId::WEAPON_INVALID && NewSwitchWeapon != GetCurrentWeapon())
 	{
@@ -1039,7 +1039,7 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 void AvHAIPlayer::BotUpdateDesiredViewRotation()
 {
 	// If we are in the process of interpolating towards a current view target, don't interrupt and let it finish
-	if (!vIsZero(ViewInfo.InterpolatingViewTarget)) { return; }
+	if (!vIsZero(ViewInfo.InterpolatingViewTarget) && !NextFrameMovementInput.bSnapView) { return; }
 
 	const bool bIsRequiredView = !vIsZero(NextFrameMovementInput.RequiredLookLocation);
 
@@ -1449,6 +1449,18 @@ void AvHAIPlayer::UpdateNavProfile()
 	if (IsPlayerSkulk(Edict))
 	{
 		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_SKULK);
+		return;
+	}
+
+	if (IsPlayerGorge(Edict))
+	{
+		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_GORGE);
+		return;
+	}
+
+	if (IsPlayerFade(Edict))
+	{
+		BotNavInfo.NavProfile = *GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_FADE);
 		return;
 	}
 }
@@ -2047,7 +2059,7 @@ void AvHAIPlayer::ShootTarget(const edict_t* Target, EAIWeaponId DesiredWeapon)
 
 	if (CurrentWeapon != DesiredWeapon)
 	{
-		NextFrameMovementInput.DesiredWeapon = DesiredWeapon;
+		NextFrameMovementInput.DesiredCombatWeapon = DesiredWeapon;
 		return;
 	}
 
@@ -2333,6 +2345,7 @@ EAINavMoveResult AvHAIPlayer::ProgressWeldTask(AvHAIMoveTask* MoveTask)
 
 	if (WeldResult == EAIAttackResult::ATTACK_SUCCESS)
 	{
+		NextFrameMovementInput.DesiredMovementWeapon = EAIWeaponId::WEAPON_MARINE_WELDER;
 		ShootTarget(MoveTask->TaskTarget, EAIWeaponId::WEAPON_MARINE_WELDER);
 
 		return EAINavMoveResult::NAV_MOVE_SUCCESS;
@@ -4015,6 +4028,113 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 
 bool AvHAIPlayer::NewBlinkClimbMove(AvHAIPath* Path)
 {
+	NextFrameMovementInput.DesiredMovementWeapon = EAIWeaponId::WEAPON_FADE_BLINK;
+
+	if (GetCurrentWeapon() != EAIWeaponId::WEAPON_FADE_BLINK) { return true; }
+
+	const AvHAIPathNode* CurrentPathNode = Path->GetCurrentPathNode();
+	const NavAgentProfile* NavProfile = GetNavProfile();
+	const Vector CurrentFloorPosition = UTIL_GetFloorUnderEntity(Edict);
+	const Vector BottomOfHitbox = GetBottomOfHitbox();
+	const Vector TopOfHitbox = GetTopOfHitbox();
+	const Vector CurrentPosition = GetLocation();
+	const Vector EyePosition = GetEyePosition();
+
+	NextFrameMovementInput.bShouldCrouch = true;
+
+	Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation);
+	const Vector AdjustedTargetLocation = CurrentPathNode->ToLocation + (UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - CurrentPathNode->FromLocation) * 1000.0f);
+
+	Vector LookLocation = g_vecZero;
+
+	const float ZDiff = fabs(CurrentPosition.z - CurrentPathNode->RequiredClimbZ);
+	const Vector DirectAheadView = EyePosition + (UTIL_GetVectorNormal2D(AdjustedTargetLocation - EyePosition) * 100.0f);
+
+	if (ZDiff < 16.0f)
+	{
+		Vector TraceCheckEnd = CurrentPathNode->ToLocation;
+		TraceCheckEnd.z = CurrentPosition.z;
+
+		if (UTIL_QuickHullTrace(Edict, CurrentPosition, TraceCheckEnd))
+		{
+			if (AvHAIPathNode* CurrentPathNodeMutable = Path->GetCurrentPathNode_Mutable())
+			{
+				CurrentPathNodeMutable->RequiredClimbZ = CurrentPosition.z;
+			}
+
+			Edict->v.velocity.z = 0.0f;
+			LookLocation = DirectAheadView;
+			NextFrameMovementInput.DesiredMoveDirection = vForward;
+			NextFrameMovementInput.Button |= IN_ATTACK2;
+			return true;
+		}
+	}
+
+	const Vector CurrVelocity = UTIL_GetVectorNormal2D(Edict->v.velocity);
+	const Vector FaceDir = UTIL_GetForwardVector2D(Edict->v.angles);
+	const float Dot = UTIL_GetDotProduct2D(vForward, CurrVelocity);
+	const float FaceDot = UTIL_GetDotProduct2D(FaceDir, vForward);
+
+	// Yes this is cheating, but the fades were struggling with zipping off-target when trying to blink
+	// Better this than fades getting constantly chewed up by marines because they can't escape properly
+	if (FaceDot < 0.95f)
+	{
+		float MoveSpeed = vSize2D(Edict->v.velocity);
+
+		if (MoveSpeed < 20.0f)
+		{
+			MoveSpeed = 100.0f;
+		}
+
+		Vector NewVelocity = vForward * MoveSpeed;
+		NewVelocity.z = Edict->v.velocity.z;
+
+		Edict->v.velocity = NewVelocity;
+	}
+
+	if (ZDiff < 0.0f)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = vForward;
+		NextFrameMovementInput.RequiredLookLocation = CurrentPathNode->ToLocation;
+		return true;
+	}
+
+	const float TotalClimbHeight = CurrentPathNode->RequiredClimbZ - CurrentPathNode->FromLocation.z;
+
+	const float ClimbHeightProgress = (TotalClimbHeight > 0.0f)
+		? fmaxf((CurrentPosition.z - CurrentPathNode->FromLocation.z) / fminf((CurrentPathNode->RequiredClimbZ - CurrentPathNode->FromLocation.z), 1.0f), 0.0f)
+		: 1.0f;
+
+	if (ClimbHeightProgress > 0.5f)
+	{
+		NextFrameMovementInput.DesiredMoveDirection = vForward;
+	}
+	else
+	{
+		Edict->v.velocity.x = 0.0f;
+		Edict->v.velocity.y = 0.0f;
+	}
+
+	// We don't want to blast off like a rocket, so only apply enough blink until our upwards velocity is enough to carry us to the desired height
+	const float DesiredZVelocity = sqrtf(2.0f * GOLDSRC_GRAVITY * (ZDiff + 10.0f));
+
+	if (Edict->v.velocity.z < DesiredZVelocity)
+	{
+		// We're going to cheat and give the bot the necessary energy to make the move. Better the fade cheats a bit than gets stuck somewhere
+		if (GetPlayerEnergy(Edict) < 0.1f)
+		{
+			Player->Energize(0.1f);
+		}
+
+		NextFrameMovementInput.RequiredLookLocation = (ClimbHeightProgress > 0.5f)
+			? TopOfHitbox + (UTIL_GetVectorNormal(vForward + Vector(0.0f, 0.0f, 10.0f)) * 100.0f)
+			: TopOfHitbox + (UTIL_GetVectorNormal(vForward + (UP_VECTOR * 1000.0f)) * 100.0f);
+
+		NextFrameMovementInput.bSnapView = true;
+
+		NextFrameMovementInput.Button |= IN_ATTACK2;
+	}
+
 	return true;
 }
 
