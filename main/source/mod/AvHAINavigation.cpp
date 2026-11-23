@@ -313,7 +313,9 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 			{
 				AvHAIPathNode StartPoint;
 				StartPoint.FromLocation = FromLocation;
+				StartPoint.FromFloorLocation = UTIL_FindFloor(FromLocation);
 				StartPoint.ToLocation = ToLocation;
+				StartPoint.ToFloorLocation = UTIL_FindFloor(ToLocation);
 				StartPoint.MovementArea = EAINavArea::NAV_AREA_WALK;
 				StartPoint.MovementFlag = EAINavMovementFlag::NAV_FLAG_WALK;
 
@@ -452,33 +454,33 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 	ResultPath->RequiredMoveFlags = EAINavMovementFlag::NAV_FLAG_NONE;
 
-	Vector NodeFromLocation = FromFloorLocation;
+	const Vector StandingOffset = UTIL_GetHullOffsetFromFloor(NavProfile->AgentStandHullIndex);
+	const Vector CrouchingOffset = UTIL_GetHullOffsetFromFloor(NavProfile->AgentCrouchHullIndex);
+
+	Vector NodeFromNavLocation = FromFloorLocation;
+	Vector NodeFromFloorLocation = UTIL_FindFloor(NodeFromNavLocation);
+	Vector NodeFromLocation = (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_CROUCH))
+		? NodeFromFloorLocation + CrouchingOffset
+		: NodeFromFloorLocation + StandingOffset;
 
 	for (int nVert = 0; nVert < nVertCount; nVert++)
 	{
 		AvHAIPathNode NextPathNode;
 
+		NextPathNode.FromNavMeshLocation = NodeFromNavLocation;
+		NextPathNode.FromFloorLocation = NodeFromFloorLocation;
 		NextPathNode.FromLocation = NodeFromLocation;
 
-		NextPathNode.ToLocation.x = dtStraightPath[nIndex++];
-		NextPathNode.ToLocation.z = dtStraightPath[nIndex++];
-		NextPathNode.ToLocation.y = -dtStraightPath[nIndex++];
+		NextPathNode.ToNavMeshLocation.x = dtStraightPath[nIndex++];
+		NextPathNode.ToNavMeshLocation.z = dtStraightPath[nIndex++];
+		NextPathNode.ToNavMeshLocation.y = -dtStraightPath[nIndex++];
 
-		// The nav mesh doesn't always align perfectly with the floor, so align each nav point with the floor after generation
-		NextPathNode.ToLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToLocation, 16.0f);
-		NextPathNode.ToLocation = AINAV_AdjustPointForPathfinding(NavProfile, NextPathNode.ToLocation);
-
-		if (CurrFlags != EAINavMovementFlag::NAV_FLAG_JUMP || NextPathNode.FromLocation.z > NextPathNode.ToLocation.z)
-		{
-			float Offset = UTIL_GetHullOffsetFromFloor(NavProfile->PlayerHullIndex).z;
-
-			if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_CROUCH))
-			{
-				Offset *= 0.5f;
-			}
-
-			NextPathNode.ToLocation.z += Offset;
-		}
+		// Since GoldSrc uses AABB for collision detection, and Detour assumes a cylinder, give it some extra breathing space where possible
+		NextPathNode.ToNavMeshLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToNavMeshLocation, 16.0f);
+		NextPathNode.ToFloorLocation = UTIL_FindFloor(NextPathNode.ToNavMeshLocation);
+		NextPathNode.ToLocation = (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_CROUCH))
+			? NextPathNode.ToFloorLocation + CrouchingOffset
+			: NextPathNode.ToFloorLocation + StandingOffset;
 
 		EnumAddFlags(ResultPath->RequiredMoveFlags, CurrFlags);
 
@@ -490,7 +492,7 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_LADDER) || EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_WALLCLIMB))
 		{
-			Vector FromLocation = (ResultPath->PathNodes.size() > 0) ? ResultPath->PathNodes.back().ToLocation : FromFloorLocation;
+			Vector FromLocation = (ResultPath->PathNodes.size() > 0) ? ResultPath->PathNodes.back().ToLocation : NodeFromLocation;
 			float NewRequiredZ = AINAV_FindZHeightForClimb(FromLocation, NextPathNode.ToLocation, head_hull);
 			NextPathNode.RequiredClimbZ = fmaxf(NewRequiredZ, NextPathNode.ToLocation.z);
 
@@ -518,6 +520,10 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		NodeFromLocation = NextPathNode.ToLocation;
 
+		NodeFromNavLocation = NextPathNode.ToNavMeshLocation;
+		NodeFromLocation = NextPathNode.ToLocation;
+		NodeFromFloorLocation = NextPathNode.ToFloorLocation;
+
 		NextPathNode.MovementObject = AINAV_GetMovementObjectForPathNode(NavProfile, &NextPathNode);
 
 		ResultPath->PathNodes.push_back(NextPathNode);
@@ -530,6 +536,8 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		FinalSwimBit.MovementFlag = EAINavMovementFlag::NAV_FLAG_WALK;
 		FinalSwimBit.FromLocation = ResultPath->PathNodes.back().ToLocation;
 		FinalSwimBit.ToLocation = ToLocation;
+		FinalSwimBit.FromFloorLocation = UTIL_FindFloor(FinalSwimBit.FromLocation);
+		FinalSwimBit.ToFloorLocation = UTIL_FindFloor(FinalSwimBit.ToLocation);
 
 		ResultPath->PathNodes.push_back(FinalSwimBit);
 	}
@@ -848,7 +856,7 @@ bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, con
 
 	const DynamicMapObject* ImpactingObjectRef = ImpactingObjectRefHandle.GetObjectRef();
 
-	if (!ImpactingObjectRef || !ImpactingObjectRef->IsValid()) { return false; }
+	if (!ImpactingObjectRef) { return false; }
 
 	switch (ImpactingObjectRef->Type)
 	{
@@ -870,7 +878,7 @@ bool AINAV_CheckMapObjectForMovementTasks(const NavAgentProfile* NavProfile, con
 
 	const DynamicMapObject* Trigger = TriggerHandle.GetObjectRef();
 
-	if (!Trigger || !Trigger->IsValid()) { return false; }
+	if (!Trigger) { return false; }
 
 	return AINAV_AddTriggerMovementTask(NavProfile, ImpactedPathNode->FromLocation, ImpactedPathNode->ToLocation, Trigger->Edict, ImpactingObject, NewMoveTask);
 }
@@ -1513,7 +1521,7 @@ void AINAV_DrawPath(const AvHAIPath* Path, float DrawTime)
 		UTIL_DrawLine(INDEXENT(1), FromLoc, ToLoc, DrawTime, r, g, b);
 	}
 
-	AvHAIPathNodeList PathNodeList = Path->GetFuturePathNodeList();
+	AvHAIPathNodeList PathNodeList = Path->GetCurrentPathNodeList();
 
 	int NumDrawCalls = 0;
 

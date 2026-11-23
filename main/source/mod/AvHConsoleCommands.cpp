@@ -1531,30 +1531,17 @@ BOOL AvHGamerules::ClientCommand( CBasePlayer *pPlayer, const char *pcmd )
 
 		theSuccess = true;
 	}
-	else if (FStrEq(pcmd, "bot_navtrace"))
+	else if (FStrEq(pcmd, "testfindfloor"))
 	{
-		const Vector DebugVector = AIDEBUG_GetDebugVector1();
+		edict_t* ListenEdict = INDEXENT(1);
 
-		if (!vIsZero(DebugVector))
+		if (!FNullEnt(ListenEdict))
 		{
-			edict_t* ListenEdict = INDEXENT(1);
+			const Vector FoundFloor = UTIL_FindFloor(ListenEdict->v.origin);
 
-			Vector StartTrace = GetPlayerEyePosition(ListenEdict);
-			Vector EndTrace = StartTrace + UTIL_GetForwardVector(ListenEdict->v.v_angle) * 1000.0f;
-
-			TraceResult Result;
-			UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, ListenEdict->v.pContainingEntity, &Result);
-
-			if (Result.flFraction < 1.0f)
+			if (!vIsZero(FoundFloor))
 			{
-				const NavAgentProfile* NavProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
-
-				const Vector EndPos = AIMESH_TraceNavLine(NavProfile, DebugVector, Result.vecEndPos);
-
-				if (!vIsZero(EndPos))
-				{
-					UTIL_DrawLine(ListenEdict, DebugVector, EndPos, 10.0f);
-				}
+				UTIL_DrawLine(ListenEdict, FoundFloor, FoundFloor + Vector(0.0f, 0.0f, 16.0f), 10.0f);
 			}
 		}
 

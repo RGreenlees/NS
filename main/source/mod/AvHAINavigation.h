@@ -47,7 +47,11 @@ enum class EAIMovementTaskType
 struct AvHAIPathNode
 {
 	Vector FromLocation = ZERO_VECTOR; // Location to move from
+	Vector FromFloorLocation = ZERO_VECTOR; // The physical floor location for the from point
+	Vector FromNavMeshLocation = ZERO_VECTOR; // The from point on the nav mesh
 	Vector ToLocation = ZERO_VECTOR; // Location to move to
+	Vector ToFloorLocation = ZERO_VECTOR; // The physical floor location for the to point
+	Vector ToNavMeshLocation = ZERO_VECTOR; // The to point on the nav mesh
 	float RequiredClimbZ = 0.0f; // If climbing a up ladder or wall, how high should they aim to get before dismounting.
 	EAINavMovementFlag MovementFlag = EAINavMovementFlag::NAV_FLAG_DISABLED; // Is this a ladder movement, wall climb, walk etc
 	EAINavArea MovementArea = EAINavArea::NAV_AREA_NULL; // Is this a crouch area, normal walking area etc
@@ -171,6 +175,20 @@ struct AvHAIPath
 		AvHAIPathNodeList Result;
 
 		for (int32 i = CurrentNodeIndex + 1; i < GetPathSize(); i++)
+		{
+			if (!PathNodes[i].IsValidMove()) { break; }
+
+			Result.push_back(&PathNodes[i]);
+		}
+
+		return Result;
+	}
+
+	AvHAIPathNodeList GetCurrentPathNodeList() const
+	{
+		AvHAIPathNodeList Result;
+
+		for (int32 i = CurrentNodeIndex; i < GetPathSize(); i++)
 		{
 			if (!PathNodes[i].IsValidMove()) { break; }
 

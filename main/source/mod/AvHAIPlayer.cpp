@@ -1465,7 +1465,7 @@ void AvHAIPlayer::UpdateNavProfile()
 	}
 }
 
-bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIMoveTask& Task)
+bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, const AvHAIMoveTask* CurrentMoveTask, AvHAIMoveTask& Task)
 {
 	if (!Path || !Path->IsValidPath()) { return false; }
 
@@ -1511,7 +1511,7 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 		}
 	}
 
-	AvHAIPathNodeList FuturePathNodes = Path->GetFuturePathNodeList();
+	AvHAIPathNodeList FuturePathNodes = Path->GetCurrentPathNodeList();
 
 	const NavAgentProfile* NavProfile = GetNavProfile();
 
@@ -1525,7 +1525,7 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, AvHAIM
 
 			const DynamicMapObject* PlatformObject = PlatformObjectHandle.GetObjectRef();
 
-			if (!PlatformObject) { return false; }
+			if (!PlatformObject) { continue; }
 
 			return AINAV_CheckPlatformForMovementTasks(NavProfile, FutureNode, PlatformObject->Edict, Task);
 		}
@@ -1653,7 +1653,7 @@ EAINavMoveResult AvHAIPlayer::FollowPath(AvHAIPath* Path)
 
 	AvHAIMoveTask NewMoveTask;
 
-	if (CheckAndAddRequiredMovementTasks(Path, NewMoveTask))
+	if (CheckAndAddRequiredMovementTasks(Path, this->GetCurrentMoveTask(), NewMoveTask))
 	{
 		bool bHasExistingTask = false;
 
@@ -1787,7 +1787,7 @@ void AvHAIPlayer::HandleGroundPlayerAvoidance(const AvHAIPathNode* CurrentPathNo
 		}
 
 		// Other player is definitely not in our way
-		if (!vlineIntersectsAABB(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, OtherPlayerEdict->v.absmin, OtherPlayerEdict->v.absmax))
+		if (!vBoxIntersectsAABB(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, Vector(16.0f, 16.0f, 18.0f), OtherPlayerEdict->v.absmin, OtherPlayerEdict->v.absmax))
 		{
 			continue;
 		}
@@ -2529,9 +2529,8 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 
 	const Vector BotLocation = GetLocation();
 
-	const Vector NewProgress = vClosestPointOnLine2D(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
-
-	const float NewProgressPct = vDist2DSq(CurrentPathNode->FromLocation, NewProgress) / vDist2DSq(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+	const float Progress = vDist3DSq(BotLocation, CurrentPathNode->ToLocation) / vDist3DSq(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+	const float NewProgressPct = 1.0f - clampf(Progress, 0.0f, 1.0f);
 
 	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
 
@@ -3332,6 +3331,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 	if (!CurrentPathNode || !CurrentPathNode->IsValidMove()) { return false; }
 
 	const bool bHasNextPathNode = NextPathNode && NextPathNode->IsValidMove();
+	const bool bPlayerIsSkulk = IsPlayerSkulk(Edict);
 
 	const Vector BotLocation = GetLocation();
 	const Vector CollisionTopLocation = GetTopOfHitbox();
@@ -3347,9 +3347,14 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 	Vector LadderTop = UTIL_GetCentreOfEntity(CurrentLadder);
 	LadderTop.z = CurrentLadder->v.absmax.z;
 
-	if (!UTIL_QuickHullTrace(Edict, BotLocation, CollisionTopLocation, GetPlayerHull(false)))
+	if (bPlayerIsSkulk)
 	{
-		NextFrameMovementInput.bShouldCrouch = true;
+		NextFrameMovementInput.bShouldCrouch = false;
+	}
+
+	if (!bPlayerIsSkulk && !UTIL_QuickHullTrace(Edict, BotLocation, CollisionTopLocation, GetPlayerHull(false)))
+	{
+		NextFrameMovementInput.bShouldCrouch = !bPlayerIsSkulk;
 	}
 
 	if (!IsOnLadder())
@@ -3362,7 +3367,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 
 				if (bHasNextPathNode && NextPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_CROUCH))
 				{
-					NextFrameMovementInput.bShouldCrouch = true;
+					NextFrameMovementInput.bShouldCrouch = !bPlayerIsSkulk;
 				}
 
 				return true;
@@ -3378,7 +3383,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 
 			if (bHasNextPathNode && CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
-				NextFrameMovementInput.bShouldCrouch = true;
+				NextFrameMovementInput.bShouldCrouch = !bPlayerIsSkulk;
 			}
 
 			return true;
@@ -4273,7 +4278,7 @@ bool AvHAIPlayer::NewWallClimbMove(AvHAIPath* Path)
 		{
 			if (bClimbingUnderway)
 			{
-				LookLocation = EyePosition + (ClimbAngle * 100.0f);
+				LookLocation = EyePosition + (vForward * 100.0f);
 				LookLocation.z += 1000.0f;
 			}
 			else

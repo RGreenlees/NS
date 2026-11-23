@@ -105,12 +105,32 @@ Vector UTIL_FindFloor(const Vector& CheckLocation, const edict_t* IgnoreEntity)
 {
 	TraceResult hit;
 
-	Vector TraceStart = CheckLocation + Vector(0.0f, 0.0f, 1.0f);
+	Vector TraceStart = CheckLocation;
 	Vector TraceEnd = (TraceStart - Vector(0.0f, 0.0f, 1000.0f));
 
 	UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, (IgnoreEntity) ? IgnoreEntity->v.pContainingEntity : nullptr, &hit);
 
-	if (hit.fStartSolid || hit.fAllSolid) { return CheckLocation; }
+	bool bAdjustUpwards = true;
+
+	while (hit.fStartSolid || hit.fAllSolid)
+	{
+		if (TraceStart.z == CheckLocation.z + 18.0f || TraceStart.z == CheckLocation.z - 18.0f)
+		{
+			if (bAdjustUpwards)
+			{
+				TraceStart.z = CheckLocation.z;
+				bAdjustUpwards = false;
+			}
+			else
+			{
+				return CheckLocation;
+			}
+		}
+
+		TraceStart.z += (bAdjustUpwards) ? 1.0f : -1.0f;
+
+		UTIL_TraceHull(TraceStart, TraceEnd, ignore_monsters, head_hull, (IgnoreEntity) ? IgnoreEntity->v.pContainingEntity : nullptr, &hit);
+	}
 
 	while (hit.flFraction < 1.0f)
 	{

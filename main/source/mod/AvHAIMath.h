@@ -223,7 +223,8 @@ unsigned int UTIL_CountSetBitsInInteger(unsigned int n);
 
 float UTIL_CalculateSlopeAngleBetweenPoints(const Vector StartPoint, const Vector EndPoint);
 
-bool vlineIntersectsAABB(Vector lineStart, Vector lineEnd, Vector BoxMinPosition, Vector BoxMaxPosition);
+bool vBoxIntersectsAABB(Vector TraceStart, Vector TraceEnd, Vector BoxExtents, Vector AABBMinPosition, Vector AABBMaxPosition);
+bool vLineIntersectsAABB(Vector lineStart, Vector lineEnd, Vector BoxMinPosition, Vector BoxMaxPosition);
 Vector vClampPointToAABBEdge(const Vector Point, const Vector bbMin, const Vector bbMax);
 Vector vClampPointToAABBEdge2D(const Vector Point, const Vector bbMin, const Vector bbMax);
 bool vPointInsideAABB2D(const Vector Point, const Vector bbMin, const Vector bbMax);

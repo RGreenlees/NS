@@ -361,22 +361,7 @@ bool AIMAP_PopulateDynamicPlatObject(edict_t* PlatObject)
 
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
 
-	if (CBaseEntity* PlatTarget = PlatRef->GetNextTarget())
-	{
-		edict_t* TargetEdict = PlatTarget->edict();
-
-		if (!FNullEnt(TargetEdict))
-		{
-			NewObject.Targets.push_back(PlatTarget->edict());
-		}
-	}
-
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
-
-	if (CBaseEntity* Target = PlatRef->GetNextTarget())
-	{
-		NewObject.Targets.push_back(Target->edict());
-	}
 
 	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
 
@@ -1066,7 +1051,7 @@ DynamicMapObjectHandle AIMAP_GetBestTriggerForObject_Internal(const NavAgentProf
 			TriggerLocation = UTIL_GetClosestPointOnEntityToLocation(FromLoc, ThisTrigger->Edict);
 		}
 
-		float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
+		const float MaxDist = (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_BREAK || ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_SHOOT) ? UTIL_MetresToGoldSrcUnits(5.0f) : 64.0f;
 
 		if (!AINAV_IsPointReachable(NavProfile, FromLoc, TriggerLocation, MaxDist)) { continue; }
 
@@ -1109,7 +1094,7 @@ DynamicMapObjectHandle AIMAP_GetBestTriggerForObject_Internal(const NavAgentProf
 			if (bOtherSideOfLift) { continue; }
 		}
 
-		float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
+		const float ThisDist = vDist3DSq(FromLoc, TriggerLocation);
 
 		// If we have an alternative trigger that doesn't require welding, then prefer that since it avoids locking out players without a welder
 		const bool bCanReplaceWeldTrigger = (WinningTrigger)
@@ -1118,6 +1103,7 @@ DynamicMapObjectHandle AIMAP_GetBestTriggerForObject_Internal(const NavAgentProf
 
 		if (ThisDist < MinDist || bCanReplaceWeldTrigger)
 		{
+			MinDist = ThisDist;
 			WinningTrigger = ThisTrigger;
 			WinningHandle = FoundObjectHandle;
 		}
@@ -1381,12 +1367,6 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 			break;
 
 			case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
-			{
-				if (FClassnameIs(ThisObject->Edict, "func_plat"))
-				{
-					ThisObject->Triggers.push_back(ThisObject->Edict);
-				}
-			}
 			break;
 
 			case EAIDynamicMapObjectType::TRIGGER_USE:
@@ -1420,6 +1400,20 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 
 			default:
 				break;
+		}
+	}
+
+	// Now do a secondary sweep for platform objects specifically. This is because a platform will be self-activated IF the toggle flag
+	// is not set AND if nothing else is already targeting it
+	for (auto objectIt = DynamicMapObjects.begin(); objectIt != DynamicMapObjects.end(); objectIt++)
+	{
+		DynamicMapObject* ThisObject = &objectIt->second;
+
+		if (!ThisObject || ThisObject->Type != EAIDynamicMapObjectType::MAPOBJECT_PLATFORM) { continue; }
+
+		if (ThisObject->Triggers.size() == 0 && !(ThisObject->Edict->v.flags & SF_PLAT_TOGGLE))
+		{
+			ThisObject->Triggers.push_back(ThisObject->Edict);
 		}
 	}
 }
@@ -1507,7 +1501,7 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector
 	{
 		if (UTIL_QuickHullTrace(nullptr, StartLoc, EndLoc))
 		{
-			return vlineIntersectsAABB(StartLoc, EndLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax);
+			return vLineIntersectsAABB(StartLoc, EndLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax);
 		}
 	}
 
@@ -1535,37 +1529,34 @@ bool AIMAP_IsPathBlockedByObject(const NavAgentProfile* NavProfile, const Vector
 
 	const bool bFoundPath = AINAV_FindPathClosestToPoint(NavProfile, StartLoc, ValidNavmeshPoint, &TestPath, 50.0f);
 
-	if (bFoundPath)
+	if (!bFoundPath) { return true; }
+
+	for (int32 i = 0; i < TestPath.GetPathSize(); i++)
 	{
-		for (int32 i = 0; i < TestPath.GetPathSize(); i++)
+		const AvHAIPathNode* ThisPathNode = TestPath.GetNodeAtIndex(i);
+
+		if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
+
+		// Check that this path does not require us to go up the very platform we are checking for blockages
+		if (ThisPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
 		{
-			const AvHAIPathNode* ThisPathNode = TestPath.GetNodeAtIndex(i);
+			DynamicMapObjectHandle RetrievedHandle = AIMAP_GetDynamicObjectByEdict(ThisPathNode->MovementObject);
 
-			if (!ThisPathNode || !ThisPathNode->IsValidMove()) { break; }
-
-			// Check that this path does not require us to go up the very platform we are checking for blockages
-			if (ThisPathNode->HasMovementFlag(EAINavMovementFlag::NAV_FLAG_PLATFORM))
+			if (RetrievedHandle.IsValid())
 			{
-				DynamicMapObjectHandle RetrievedHandle = AIMAP_GetDynamicObjectByEdict(ThisPathNode->MovementObject);
+				const DynamicMapObject* FoundObject = RetrievedHandle.GetObjectRef();
 
-				if (RetrievedHandle.IsValid())
-				{
-					const DynamicMapObject* FoundObject = RetrievedHandle.GetObjectRef();
-
-					if (FoundObject == SearchObject) { return true; }
-				}
-			}
-
-			if (AIMAP_GetObjectBlockingPathPoint(ThisPathNode->FromLocation, ThisPathNode->ToLocation, ThisPathNode->MovementFlag, SearchObject, nullptr) != nullptr)
-			{
-				return true;
+				if (FoundObject == SearchObject) { return true; }
 			}
 		}
 
-		return false;
+		if (AIMAP_GetObjectBlockingPathPoint(ThisPathNode->FromLocation, ThisPathNode->ToLocation, ThisPathNode->MovementFlag, SearchObject, nullptr) != nullptr)
+		{
+			return true;
+		}
 	}
 
-	return true;
+	return false;
 }
 
 const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocation, const Vector ToLocation, const EAINavMovementFlag MovementFlag, const DynamicMapObject* SearchObject, const DynamicMapObject* IgnoreObject)
@@ -1583,7 +1574,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1598,7 +1589,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1607,7 +1598,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vlineIntersectsAABB(TargetLoc, ToLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1622,7 +1613,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1636,7 +1627,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1651,7 +1642,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1660,7 +1651,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vlineIntersectsAABB(TargetLoc, ToLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1675,7 +1666,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1688,7 +1679,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 	if (SearchObject != nullptr)
 	{
-		if (vlineIntersectsAABB(FromLoc, TargetLoc, SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+		if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 		{
 			return SearchObject;
 		}
@@ -1703,7 +1694,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObject;
 			}
@@ -1883,16 +1874,16 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-			if (!ThisObject || ThisObject->Edict->v.solid != SOLID_BBOX) { continue; }
+			if (!ThisObject || ThisObject->Edict->v.solid == SOLID_NOT || ThisObject->Edict->v.solid == SOLID_TRIGGER) { continue; }
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
 
-			if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
@@ -1911,16 +1902,16 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-			if (!ThisObject || ThisObject->Edict->v.solid != SOLID_BBOX) { continue; }
+			if (!ThisObject || ThisObject->Edict->v.solid == SOLID_NOT || ThisObject->Edict->v.solid == SOLID_TRIGGER) { continue; }
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
-			if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
 
-			if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
@@ -1938,16 +1929,16 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 		const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-		if (!ThisObject || ThisObject->Edict->v.solid != SOLID_BBOX) { continue; }
+		if (!ThisObject || ThisObject->Edict->v.solid == SOLID_NOT || ThisObject->Edict->v.solid == SOLID_TRIGGER) { continue; }
 
 		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
-		if (vlineIntersectsAABB(FromLoc, TargetLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+		if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 		{
 			return ThisObjectHandle;
 		}
 
-		if (vlineIntersectsAABB(TargetLoc, ToLoc, ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+		if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 		{
 			return ThisObjectHandle;
 		}
@@ -2048,12 +2039,12 @@ bool AIMAP_IsOffMeshConnectionAffectedByObject(const DynamicMapObjectHandle& Tes
 	Vector MidPoint = ConnStart + ((ConnEnd - ConnStart) * 0.5f);
 	MidPoint.z = fmaxf(ConnStart.z, ConnEnd.z);
 
-	if (vlineIntersectsAABB(ConnStart, MidPoint, ObjectPosition - HalfExtents, ObjectPosition + HalfExtents))
+	if (vBoxIntersectsAABB(ConnStart, MidPoint, Vector(16.0f, 16.0f, 18.0f), ObjectPosition - HalfExtents, ObjectPosition + HalfExtents))
 	{
 		return true;
 	}
 
-	if (vlineIntersectsAABB(MidPoint, ConnEnd, ObjectPosition - HalfExtents, ObjectPosition + HalfExtents))
+	if (vBoxIntersectsAABB(MidPoint, ConnEnd, Vector(16.0f, 16.0f, 18.0f), ObjectPosition - HalfExtents, ObjectPosition + HalfExtents))
 	{
 		return true;
 	}
@@ -2784,6 +2775,11 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 
 	if (!Object) { return; }
 
+	edict_t* ListenEdict = INDEXENT(1);
+
+	if (FNullEnt(ListenEdict)) { return; }
+
+	Vector ListenEdictPosition = UTIL_GetFloorUnderEntity(ListenEdict);
 	Vector ObjectLocation = UTIL_GetCentreOfEntity(Object->Edict);
 
 	sprintf(buf, "Info for %s (%s):\n\n", (Object->Edict->v.targetname != 0) ? STRING(Object->Edict->v.targetname) : "Unnamed", STRING(Object->Edict->v.classname));
@@ -2796,7 +2792,7 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 
 		if (!vIsZero(DisembarkPoint))
 		{
-			UTIL_DrawLine(INDEXENT(1), ObjectLocation, DisembarkPoint, 0, 0, 128);
+			UTIL_DrawLine(ListenEdict, ObjectLocation, DisembarkPoint, 0, 0, 128);
 		}
 	}
 
@@ -2861,13 +2857,13 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 	sprintf(interbuf, "Next Stop: %s\n", (Object->GetNextStop() != nullptr) ? vToString(Object->GetNextStop()->StopLocation) : "NONE");
 	strcat(buf, interbuf);
 
-	UTIL_DrawHUDText(INDEXENT(1), 0, 0.1, 0.1f, 255, 255, 255, buf);
+	UTIL_DrawHUDText(ListenEdict, 0, 0.1, 0.1f, 255, 255, 255, buf);
 
 	if (!Object->StopPoints.empty())
 	{
 		Vector NextStop = Object->StopPoints[Object->NextStopIndex].StopLocation;
 
-		UTIL_DrawLine(INDEXENT(1), ObjectLocation, NextStop, 0, 0, 255);
+		UTIL_DrawLine(ListenEdict, ObjectLocation, NextStop, 0, 0, 255);
 	}
 
 	sprintf(buf, "Trigger States:\n\n");
@@ -2876,7 +2872,7 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 	{
 		sprintf(interbuf, "NONE");
 		strcat(buf, interbuf);
-		UTIL_DrawHUDText(INDEXENT(1), 1, 0.6, 0.1f, 255, 255, 255, buf);
+		UTIL_DrawHUDText(ListenEdict, 1, 0.6, 0.1f, 255, 255, 255, buf);
 		return;
 	}
 
@@ -2948,6 +2944,18 @@ void DEBUG_PrintObjectInfo(const DynamicMapObjectHandle& ObjectHandle)
 
 		sprintf(interbuf, "Is Active: %s\n\n", (ThisTrigger->bIsActive) ? "True" : "False");
 		strcat(buf, interbuf);
+	}
+
+	const NavAgentProfile* NavProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_MARINE);
+
+	const DynamicMapObjectHandle BestTrigger = AIMAP_GetBestTriggerForObject(NavProfile, ObjectHandle, ListenEdictPosition);
+
+	if (const DynamicMapObject* BestTriggerRef = BestTrigger.GetObjectRef())
+	{
+		sprintf(interbuf, "Best Trigger: %s", BestTriggerRef->ObjectName);
+		strcat(buf, interbuf);
+
+		UTIL_DrawLine(ListenEdict, ListenEdict->v.origin, UTIL_GetClosestPointOnEntityToLocation(ListenEdict->v.origin, BestTriggerRef->Edict), 128, 0, 0);
 	}
 
 	UTIL_DrawHUDText(INDEXENT(1), 1, 0.6, 0.1f, 255, 255, 255, buf);

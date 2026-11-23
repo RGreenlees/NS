@@ -937,8 +937,46 @@ float UTIL_CalculateSlopeAngleBetweenPoints(const Vector StartPoint, const Vecto
 	return atanf(Rise / Run);
 }
 
+bool vBoxIntersectsAABB(Vector TraceStart, Vector TraceEnd, Vector BoxExtents, Vector AABBMinPosition, Vector AABBMaxPosition)
+{
+	if (vPointOverlaps3D(TraceStart, AABBMinPosition, AABBMaxPosition) || vPointOverlaps3D(TraceEnd, AABBMinPosition, AABBMaxPosition)) { return true; }
+
+	const Vector ExpandedMin = AABBMinPosition - BoxExtents;
+	const Vector ExpandedMax = AABBMaxPosition + BoxExtents;
+
+	const Vector TraceDirection = TraceEnd - TraceStart;
+
+	float EnterTime = 0.0f;
+	float ExitTime = 1.0f;
+
+	for (int32 Axis = 0; Axis < 3; Axis++)
+	{
+		if (TraceDirection[Axis] == 0.0f)
+		{
+			if (TraceStart[Axis] < ExpandedMin[Axis] || TraceStart[Axis] > ExpandedMax[Axis])
+			{
+				return false;
+			}
+
+			continue;
+		}
+
+		const float Time1 = (ExpandedMin[Axis] - TraceStart[Axis]) / TraceDirection[Axis];
+		const float Time2 = (ExpandedMax[Axis] - TraceStart[Axis]) / TraceDirection[Axis];
+		EnterTime = fmaxf(EnterTime, fminf(Time1, Time2));
+		ExitTime = fminf(ExitTime, fmaxf(Time1, Time2));
+
+		if (EnterTime > ExitTime)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 // Function to check if a finite line intersects with an AABB
-bool vlineIntersectsAABB(Vector lineStart, Vector lineEnd, Vector BoxMinPosition, Vector BoxMaxPosition)
+bool vLineIntersectsAABB(Vector lineStart, Vector lineEnd, Vector BoxMinPosition, Vector BoxMaxPosition)
 {
 	if (vPointOverlaps3D(lineStart, BoxMinPosition, BoxMaxPosition) || vPointOverlaps3D(lineEnd, BoxMinPosition, BoxMaxPosition)) { return true; }
 
