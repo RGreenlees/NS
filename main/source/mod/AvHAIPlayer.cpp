@@ -791,7 +791,7 @@ bool AvHAIPlayer::IsUseMovementTaskComplete(const AvHAIMoveTask* Task)
 		if (TriggerTargetObject->State != EAIDynamicMapObjectState::OBJECTSTATE_IDLE) { return true; }
 	}
 
-	return Task->TaskTarget->v.nextthink > 0.0f;
+	return false;
 }
 
 bool AvHAIPlayer::IsBreakMovementTaskComplete(const AvHAIMoveTask* Task)
@@ -2533,6 +2533,7 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 	const float NewProgressPct = 1.0f - clampf(Progress, 0.0f, 1.0f);
 
 	const Vector vForward = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+	const Vector vRight = UTIL_GetCrossProduct(vForward, UP_VECTOR);
 
 	if (NewProgressPct > CurrentPathNode->MovementProgress)
 	{
@@ -2544,7 +2545,14 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 		CurrentPathNode->TimeSinceProgressMade += gpGlobals->frametime;
 	}
 
-	if (CurrentPathNode->TimeSinceProgressMade > 0.33f)
+	// We are hopelessly stuck
+	if (CurrentPathNode->TimeSinceMovement > 10.0f)
+	{
+		Suicide();
+		return;
+	}
+
+	if (CurrentPathNode->TimeSinceProgressMade > 0.33f && CurrentPathNode->TimeSinceProgressMade < 1.0f)
 	{
 		// Onos always get stuck on stuff because of its massive hitbox. Crouching reverts to regular human size, might help
 		if (IsPlayerOnos(Edict))
@@ -2557,8 +2565,6 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 			}
 		}
 
-		const Vector vRight = UTIL_GetCrossProduct(vForward, UP_VECTOR);
-
 		int SideOfLine = vPointOnLine(CurrentPathNode->FromLocation, CurrentPathNode->ToLocation, BotLocation);
 
 		if (SideOfLine < 0)
@@ -2570,12 +2576,33 @@ void AvHAIPlayer::CheckGroundMoveStuckAndReact(AvHAIPath* Path)
 		{
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(vForward - vRight);
 		}
+
+		return;
 	}
 
-	// We are hopelessly stuck
-	if (CurrentPathNode->TimeSinceMovement > 10.0f)
+	if (CurrentPathNode->TimeSinceProgressMade > 1.0f && CurrentPathNode->TimeSinceProgressMade < 2.0f)
 	{
-		Suicide();
+		TraceResult HitResult;
+
+		UTIL_TraceHull(BotLocation, BotLocation + (vRight * 200.0f), dont_ignore_monsters, head_hull, Edict, &HitResult);
+
+		const float HitDistRight = HitResult.flFraction;
+
+		UTIL_TraceHull(BotLocation, BotLocation - (vRight * 200.0f), dont_ignore_monsters, head_hull, Edict, &HitResult);
+
+		const float HitDistLeft = HitResult.flFraction;
+
+		NextFrameMovementInput.DesiredMoveDirection = (HitDistRight > HitDistLeft)
+			? vRight
+			: -vRight;
+
+		UTIL_TraceHull(BotLocation, BotLocation + (vForward * 100.0f), dont_ignore_monsters, head_hull, Edict, &HitResult);
+
+		if (HitResult.flFraction > 0.1f)
+		{
+			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NextFrameMovementInput.DesiredMoveDirection + vForward);
+		}
+
 		return;
 	}
 
@@ -3506,6 +3533,7 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 	const Vector BotLocation = GetLocation();
 	const Vector CollisionTopLocation = GetTopOfHitbox();
 	const Vector CollisionBottomLocation = GetBottomOfHitbox();
+	const bool bPlayerIsSkulk = IsPlayerSkulk(Edict);
 
 	edict_t* CurrentLadder = UTIL_GetNearestLadderAtPoint(BotLocation);
 
@@ -3654,10 +3682,10 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
+	const bool bPlayerIsSkulk = IsPlayerSkulk(Edict);
+
 	const Vector BotCurrentLocation = GetLocation();
-
-	Vector LadderCentre = UTIL_GetCentreOfEntity(MountLadder);
-
+	const Vector LadderCentre = UTIL_GetCentreOfEntity(MountLadder);
 	Vector MountPoint = AINAV_GetLadderMountPoint(MountLadder, CurrentPathNode->FromLocation);
 
 	bool bMountingFromTop = BotCurrentLocation.z > MountLadder->v.absmax.z;
@@ -3954,14 +3982,14 @@ bool AvHAIPlayer::NewRidePlatformMove(AvHAIPath* Path, const edict_t* Platform, 
 	// We are riding a moving platform, stay away from the edges so we don't get clipped by something and fall off
 	if (PlatformRef->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING || PlatformRef->State == EAIDynamicMapObjectState::OBJECTSTATE_PREPARING)
 	{
-		float DistToCentre = vDist2DSq(GetLocation(), LiftPosition);
+		const float DistToCentre = vDist2DSq(GetLocation(), LiftPosition);
 		// Check we're not already in the middle, we might be on a really small moving platform
 		if (DistToCentre > sqrf(8.0f))
 		{
-			Vector NearestEdgePoint = vClampPointToAABBEdge2D(GetLocation(), Platform->v.absmin, Platform->v.absmax);
-			float DistToEdge = vDist2DSq(NearestEdgePoint, GetLocation());
-			// We're a little too close to the edge of the lift, we might fall off. Move to the centre a bit
-			if (DistToEdge < sqrf(GetPlayerRadius()))
+			const Vector NearestEdgePoint = vClampPointToAABBEdge2D(GetLocation(), Platform->v.absmin, Platform->v.absmax);
+			const float DistToEdge = vDist2DSq(NearestEdgePoint, GetLocation());
+			// We're a little too close to the edge of the lift or are past it, we might fall off. Move to the centre a bit
+			if (DistToCentre > vDist2DSq(NearestEdgePoint, LiftPosition) || DistToEdge < sqrf(GetPlayerRadius() * 2.0f))
 			{
 				return MoveToWithoutNav(LiftPosition) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 			}

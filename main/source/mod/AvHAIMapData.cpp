@@ -74,6 +74,10 @@ bool AIMAP_PopulateDynamicMapObjects()
 		AIMAP_PopulateDynamicTriggerObject(theEntity->edict());
 	END_FOR_ALL_ENTITIES("trigger_once")
 
+	FOR_ALL_ENTITIES("trigger_plat", CBaseEntity*)
+		AIMAP_PopulateDynamicTriggerObject(theEntity->edict());
+	END_FOR_ALL_ENTITIES("trigger_plat")
+
 	FOR_ALL_ENTITIES("trigger_multiple", CBaseEntity*)
 		AIMAP_PopulateDynamicTriggerObject(theEntity->edict());
 	END_FOR_ALL_ENTITIES("trigger_multiple")
@@ -531,6 +535,8 @@ void AIMAP_InitializeDynamicMapObject(DynamicMapObject* Object)
 
 	int32 CurrentStopIndex = 0;
 
+	Object->LastToggleState = static_cast<TOGGLE_STATE>(Object->ObjectRef->GetToggleState());
+
 	for (int32 StopIndex = 0; StopIndex < Object->StopPoints.size(); StopIndex++)
 	{
 		const DynamicMapObjectStop* StopPoint = &Object->StopPoints[StopIndex];
@@ -696,11 +702,23 @@ void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject)
 
 	if (!ButtonRef) { return; }
 
-	const TOGGLE_STATE ButtonCurrentState = static_cast<TOGGLE_STATE>(ButtonRef->GetToggleState());
+	const TOGGLE_STATE ButtonOldState = ButtonObject->LastToggleState;
+	const TOGGLE_STATE ButtonNewState = static_cast<TOGGLE_STATE>(ButtonRef->GetToggleState());
 
-	if (ButtonCurrentState == TS_GOING_UP)
+	if (ButtonOldState == ButtonNewState) { return; }
+
+	ButtonObject->LastToggleState = ButtonNewState;
+
+	if (ButtonNewState == TS_GOING_UP)
 	{
-		if (ButtonObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+		AIMAP_OnTriggerActivated(ButtonObject);
+		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_MOVING);
+		return;
+	}
+
+	if (ButtonNewState == TS_GOING_DOWN)
+	{
+		if (FBitSet(ButtonRef->pev->spawnflags, SF_BUTTON_TOGGLE))
 		{
 			AIMAP_OnTriggerActivated(ButtonObject);
 		}
@@ -709,32 +727,39 @@ void AIMAP_UpdateDynamicButtonObject(DynamicMapObject* ButtonObject)
 		return;
 	}
 
-	if (ButtonCurrentState == TS_GOING_DOWN)
+	if (ButtonNewState == TS_AT_BOTTOM)
 	{
-		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_PREPARING);
-		return;
-	}
-
-	if (ButtonCurrentState == TS_AT_BOTTOM)
-	{
-		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
-		return;
-	}
-
-	if (ButtonCurrentState == TS_AT_TOP)
-	{
-		// Button doesn't move so it will go direct from TS_AT_BOTTOM to TS_AT_TOP
-		if (ButtonObject->State == EAIDynamicMapObjectState::OBJECTSTATE_IDLE)
+		// Button doesn't move so it will go direct from TS_AT_TOP to TS_AT_BOTTOM
+		if (ButtonOldState == TS_AT_TOP)
 		{
 			AIMAP_OnTriggerActivated(ButtonObject);
 		}
 
-		// Button is single use only, remove it from the nav data as it no longer has a role to play
-		if (ButtonRef->m_fStayPushed)
+		AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
+		return;
+	}
+
+	if (ButtonNewState == TS_AT_TOP)
+	{
+		// Button doesn't move so it will go direct from TS_AT_BOTTOM to TS_AT_TOP
+		if (ButtonOldState == TS_AT_BOTTOM)
 		{
-			if (!FBitSet(ButtonRef->pev->spawnflags, SF_BUTTON_TOGGLE))
+			AIMAP_OnTriggerActivated(ButtonObject);
+		}
+
+		const bool bIsToggle = ButtonRef->m_fStayPushed || FBitSet(ButtonRef->pev->spawnflags, SF_BUTTON_TOGGLE);
+
+		if (bIsToggle)
+		{
+			// Button is single use only, remove it from the nav data as it no longer has a role to play
+			if (ButtonRef->m_fStayPushed && !FBitSet(ButtonRef->pev->spawnflags, SF_BUTTON_TOGGLE))
 			{
 				ButtonObject->Edict = nullptr;
+				return;
+			}
+			else
+			{
+				AIMAP_SetDynamicObjectStatus(ButtonObject, EAIDynamicMapObjectState::OBJECTSTATE_IDLE);
 				return;
 			}
 		}
@@ -752,7 +777,12 @@ void AIMAP_UpdateDynamicPlatformObject(DynamicMapObject* PlatformObject)
 
 	if (!PlatRef) { return; }
 
+	const TOGGLE_STATE PlatOldState = PlatformObject->LastToggleState;
 	const TOGGLE_STATE PlatCurrentState = static_cast<TOGGLE_STATE>(PlatRef->GetToggleState());
+
+	if (PlatOldState == PlatCurrentState) { return; }
+
+	PlatformObject->LastToggleState = PlatCurrentState;
 
 	if (PlatCurrentState == TS_GOING_UP || PlatCurrentState == TS_GOING_DOWN)
 	{
@@ -764,6 +794,7 @@ void AIMAP_UpdateDynamicPlatformObject(DynamicMapObject* PlatformObject)
 	{
 		const EAIDynamicMapObjectState NewState = (PlatRef->pev->spawnflags & SF_PLAT_TOGGLE) ? EAIDynamicMapObjectState::OBJECTSTATE_IDLE : EAIDynamicMapObjectState::OBJECTSTATE_PREPARING;
 		AIMAP_SetDynamicObjectStatus(PlatformObject, NewState);
+
 		return;
 	}
 
@@ -800,6 +831,9 @@ void AIMAP_UpdateDynamicTrainObject(DynamicMapObject* TrainObject)
 		return;
 	}
 
+	// Train isn't moving now
+
+	// It WAS moving: handle stuff here
 	if (TrainObject->State == EAIDynamicMapObjectState::OBJECTSTATE_MOVING)
 	{
 		for (int32 StopIndex = 0; StopIndex < TrainObject->StopPoints.size(); StopIndex++)
@@ -1366,9 +1400,6 @@ void AIMAP_LinkDynamicMapObjectsToTriggers()
 			}
 			break;
 
-			case EAIDynamicMapObjectType::MAPOBJECT_PLATFORM:
-			break;
-
 			case EAIDynamicMapObjectType::TRIGGER_USE:
 			case EAIDynamicMapObjectType::TRIGGER_TOUCH:
 			case EAIDynamicMapObjectType::TRIGGER_SHOOT:
@@ -1574,7 +1605,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1589,7 +1620,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1598,7 +1629,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1613,7 +1644,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1627,7 +1658,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1642,7 +1673,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1651,7 +1682,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 		if (SearchObject != nullptr)
 		{
-			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 			{
 				return SearchObject;
 			}
@@ -1666,7 +1697,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 				if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-				if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+				if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 				{
 					return ThisObject;
 				}
@@ -1679,7 +1710,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 	if (SearchObject != nullptr)
 	{
-		if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
+		if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), SearchObject->Edict->v.absmin, SearchObject->Edict->v.absmax))
 		{
 			return SearchObject;
 		}
@@ -1694,7 +1725,7 @@ const DynamicMapObject* AIMAP_GetObjectBlockingPathPoint(const Vector FromLocati
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObject;
 			}
@@ -1878,12 +1909,12 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
-			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
 
-			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
@@ -1906,12 +1937,12 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
-			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
 
-			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+			if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 			{
 				return ThisObjectHandle;
 			}
@@ -1933,12 +1964,12 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
-		if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+		if (vBoxIntersectsAABB(FromLoc, TargetLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 		{
 			return ThisObjectHandle;
 		}
 
-		if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(16.0f, 16.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
+		if (vBoxIntersectsAABB(TargetLoc, ToLoc, Vector(1.0f, 1.0f, 18.0f), ThisObject->Edict->v.absmin, ThisObject->Edict->v.absmax))
 		{
 			return ThisObjectHandle;
 		}

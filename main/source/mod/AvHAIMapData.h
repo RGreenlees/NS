@@ -84,6 +84,7 @@ struct DynamicMapObject
 	bool bIsActive = true; // If false, means this trigger or object has a dependent multisource or env_global which have not been satisfied yet, therefore this object is inert.
 	int NumTimesActivated = 0; // How many times this object has been triggered
 	DynamicMapObjectStop* CurrentStop = nullptr;
+	TOGGLE_STATE LastToggleState = TS_AT_TOP; // Used to track when a button or door has changed state
 
 	bool IsValid() const
 	{

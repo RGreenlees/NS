@@ -907,6 +907,8 @@ bool AINAV_CheckPlatformForMovementTasks(const NavAgentProfile* NavProfile, cons
 	if (vEquals(UTIL_GetCentreOfEntity(Platform), DesiredEmbarkStop.StopLocation, 5.0f))
 	{
 		TriggerHandle = AIMAP_GetTriggerReachableFromPlatform(PlatformRefHandle, ImpactedPathNode->FromLocation.z + 32.0f);
+
+		if (TriggerHandle.IsValid()) { return false; }
 	}
 
 	if (!TriggerHandle.IsValid())
