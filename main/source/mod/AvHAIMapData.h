@@ -85,10 +85,19 @@ struct DynamicMapObject
 	int NumTimesActivated = 0; // How many times this object has been triggered
 	DynamicMapObjectStop* CurrentStop = nullptr;
 	TOGGLE_STATE LastToggleState = TS_AT_TOP; // Used to track when a button or door has changed state
+	bool bPendingDestroy = false; // If true, will be cleared out on the next invocation of UpdateDynamicMapObjects()
 
 	bool IsValid() const
 	{
-		return ObjectRef != nullptr && EdictIndex > -1 && !FNullEnt(Edict) && !Edict->free && Edict->v.deadflag == DEAD_NO;
+		return ObjectRef != nullptr && EdictIndex > -1 && UTIL_IsEdictActive(Edict);
+	}
+
+	// Will clear all modifications to off-mesh connections and temporary obstacles, then nulls the ObjectRef and Edict so it will be cleared up next invocation of UpdateDynamicMapObjects
+	void Destroy();
+
+	bool BlocksMovement() const
+	{
+		return UTIL_IsEdictActive(Edict) && (Edict->v.solid == SOLID_BSP || Edict->v.solid == SOLID_BBOX || Edict->v.solid == SOLID_SLIDEBOX);
 	}
 
 	bool IsRideablePlatformType() const
@@ -178,6 +187,9 @@ void AIMAP_ForceRefreshDynamicObjectConnections(DynamicMapObject* Object);
 
 void AIMAP_OnDynamicMapObjectStopIdle(DynamicMapObject* Object);
 void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object);
+void AIMAP_OnWeldableObjectBecomeIdle(DynamicMapObject* Object);
+void AIMAP_OnStaticObjectBecomeIdle(DynamicMapObject* Object);
+void AIMAP_OnMovingObjectBecomeIdle(DynamicMapObject* Object);
 
 void AIMAP_UpdateDynamicMapObjects();
 void AIMAP_UpdateDynamicDoorObject(DynamicMapObject* DoorObject);

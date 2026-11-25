@@ -185,12 +185,11 @@ float GetPlayerEnergy(const edict_t* Player)
 	return (Player->v.fuser3 * 0.001f);
 }
 
-int GetPlayerMaxArmour(const edict_t* Player)
+int GetPlayerMaxArmor(const edict_t* Player)
 {
 	if (FNullEnt(Player)) { return 0; }
 
 	return AvHPlayerUpgrade::GetMaxArmorLevel(Player->v.iuser4, (AvHUser3)Player->v.iuser3);
-
 }
 
 int GetPlayerResources(const edict_t* Player)
@@ -367,10 +366,10 @@ float GetPlayerOverallHealthPercent(const edict_t* Player)
 {
 	if (AITAC_IsEdictStructure(Player)) { return (Player->v.health / Player->v.max_health); }
 
-	float MaxHealthAndArmour = Player->v.max_health + GetPlayerMaxArmour(Player);
-	float CurrentHealthAndArmour = Player->v.health + Player->v.armorvalue;
+	float MaxHealthAndArmor = Player->v.max_health + GetPlayerMaxArmor(Player);
+	float CurrentHealthAndArmor = Player->v.health + Player->v.armorvalue;
 
-	return (CurrentHealthAndArmour / MaxHealthAndArmour);
+	return (CurrentHealthAndArmor / MaxHealthAndArmor);
 }
 
 Vector GetPlayerEyePosition(const edict_t* Player)
@@ -638,7 +637,7 @@ bool IsPlayerInUseRange(const edict_t* Player, const edict_t* Target)
 	return false;
 }
 
-bool PlayerHasHeavyArmour(const edict_t* Player)
+bool PlayerHasHeavyArmor(const edict_t* Player)
 {
 	if (!IsPlayerMarine(Player)) { return false; }
 	return (Player->v.iuser4 & MASK_UPGRADE_13);
@@ -653,7 +652,7 @@ bool PlayerHasJetpack(const edict_t* Player)
 bool PlayerHasEquipment(edict_t* Player)
 {
 	if (!IsPlayerMarine(Player)) { return false; }
-	return PlayerHasHeavyArmour(Player) || PlayerHasJetpack(Player);
+	return PlayerHasHeavyArmor(Player) || PlayerHasJetpack(Player);
 }
 
 bool PlayerHasSpecialWeapon(const AvHPlayer* Player)
@@ -683,8 +682,6 @@ bool UTIL_PlayerHasLOSToEntity(const edict_t* Player, const edict_t* Target, con
 	{
 		UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, Player->v.pContainingEntity, &hit);
 	}
-
-
 
 	if (hit.fStartSolid || (hit.flFraction < 1.0f && ((Dist * hit.flFraction) <= MaxRange)))
 	{

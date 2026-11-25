@@ -83,7 +83,7 @@ bool IsPlayerBuffed(const edict_t* Player);
 void AIPlayer_Say(edict_t* pEntity, bool bTeamOnly, const char* Msg);
 
 // Returns the player's max armour, based on armour research levels (marines) or class and carapace level (aliens)
-int GetPlayerMaxArmour(const edict_t* Player);
+int GetPlayerMaxArmor(const edict_t* Player);
 
 // Returns the player's current energy (between 0.0 and 1.0)
 float GetPlayerEnergy(const edict_t* Player);
@@ -149,7 +149,7 @@ bool IsPlayerTouchingEntity(const edict_t* Player, const edict_t* TargetEntity);
 
 bool IsPlayerInUseRange(const edict_t* Player, const edict_t* Target);
 
-bool PlayerHasHeavyArmour(const edict_t* Player);
+bool PlayerHasHeavyArmor(const edict_t* Player);
 
 bool PlayerHasJetpack(const edict_t* Player);
 

@@ -755,7 +755,27 @@ bool AvHAIPlayer::IsPickupMovementTaskComplete(const AvHAIMoveTask* Task)
 {
 	if (!Task || !Task->IsValid()) { return true; }
 
-	return !UTIL_IsEdictActive(Task->TaskTarget);
+	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
+
+	EAIDeployableItemType ItemType = UTIL_GetItemTypeFromEdict(Task->TaskTarget);
+
+	switch (ItemType)
+	{
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_AMMO:
+			return false;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_HEALTHPACK:
+			return Edict->v.health >= kMarineHealth;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_HEAVYARMOR:
+			return PlayerHasHeavyArmor(Edict);
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN:
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_LMG:
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_HMG:
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER:
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER:
+			return PlayerHasWeapon(Player, UTIL_GetWeaponTypeFromEdict(Task->TaskTarget));
+		default:
+			return false;
+	}
 }
 
 bool AvHAIPlayer::IsTouchMovementTaskComplete(const AvHAIMoveTask* Task)
@@ -805,8 +825,6 @@ bool AvHAIPlayer::IsBreakMovementTaskComplete(const AvHAIMoveTask* Task)
 bool AvHAIPlayer::IsObtainWeaponMovementTaskComplete(const AvHAIMoveTask* Task)
 {
 	if (!Task || !Task->IsValid()) { return true; }
-
-	if (!UTIL_IsEdictActive(Task->TaskTarget)) { return true; }
 
 	if (Task->WeaponToObtain == EAIWeaponId::WEAPON_INVALID) { return true; }
 
@@ -1482,18 +1500,6 @@ bool AvHAIPlayer::CheckAndAddRequiredMovementTasks(const AvHAIPath* Path, const 
 			NavAgentProfile WelderCheckNavProfile = *GetNavProfile();
 			WelderCheckNavProfile.Filters.removeIncludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
 			WelderCheckNavProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
-
-			DroppedItemSearchFilter WelderSearchFilter;
-			WelderSearchFilter.DeployableTeam = Team;
-			WelderSearchFilter.DeployableTypes = EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER;
-			WelderSearchFilter.AgentProfile = &WelderCheckNavProfile;
-
-			const AvHAIDroppedItem* FoundItem = AITAC_FindClosestItemToLocation(GetLocation(), &WelderSearchFilter);
-
-			if (FoundItem)
-			{
-				return AINAV_AddPickupMovementTask(GetNavProfile(), GetLocation(), FoundItem->Edict, nullptr, Task);
-			}
 
 			StructureSearchFilter WelderArmorySearchFilter;
 			WelderArmorySearchFilter.DeployableTeam = Team;
@@ -2383,39 +2389,54 @@ EAINavMoveResult AvHAIPlayer::ProgressObtainWeaponTask(AvHAIMoveTask* MoveTask)
 		CheckNavProfile.Filters.addExcludeFlags(static_cast<unsigned int>(EAINavMovementFlag::NAV_FLAG_WELD));
 	}
 
-	const EAIDeployableItemType WeaponDeployableType = UTIL_GetDeployableTypeFromWeaponId(MoveTask->WeaponToObtain);
+	const bool bHasWeaponPickup = UTIL_IsEdictActive(MoveTask->SecondaryTarget);
 
-	DroppedItemSearchFilter ItemSearchFilter;
-	ItemSearchFilter.DeployableTypes = WeaponDeployableType;
-	ItemSearchFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
-	ItemSearchFilter.bConsiderPhaseDistance = false;
-	ItemSearchFilter.AgentProfile = &CheckNavProfile;
-
-	const AvHAIDroppedItem* NearbyWelder = AITAC_FindClosestItemToLocation(GetLocation(), &ItemSearchFilter);
-
-	// Replace this task with a pickup task if there is a welder nearby. This will allow the bot to pick up the welder instead of going all the way to the armory.
-	if (NearbyWelder)
+	if (!bHasWeaponPickup)
 	{
-		if (AINAV_AddPickupMovementTask(&CheckNavProfile, GetLocation(), NearbyWelder->Edict, MoveTask->TriggerToActivate, *MoveTask))
+		const EAIDeployableItemType WeaponDeployableType = UTIL_GetDeployableTypeFromWeaponId(MoveTask->WeaponToObtain);
+
+		DroppedItemSearchFilter ItemSearchFilter;
+		ItemSearchFilter.DeployableTypes = WeaponDeployableType;
+		ItemSearchFilter.MaxSearchRadius = UTIL_MetresToGoldSrcUnits(10.0f);
+		ItemSearchFilter.bConsiderPhaseDistance = false;
+		ItemSearchFilter.AgentProfile = &CheckNavProfile;
+
+		const AvHAIDroppedItem* NearbyItem = AITAC_FindClosestItemToLocation(GetLocation(), &ItemSearchFilter);
+
+		// Replace this task with a pickup task if there is a welder nearby. This will allow the bot to pick up the welder instead of going all the way to the armory.
+		if (NearbyItem)
 		{
-			return EAINavMoveResult::NAV_MOVE_SUCCESS;
+			MoveTask->SecondaryTarget = NearbyItem->Edict;
+			MoveTask->ClearPath();
 		}
 	}
 
-	if (vDist2DSq(GetLocation(), Armory->Location) < sqrf(kArmoryBuildDistance))
+	if (!bHasWeaponPickup && vDist2DSq(GetLocation(), Armory->Location) < sqrf(kArmoryBuildDistance))
 	{
 		return EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
+	const edict_t* TargetObject = (bHasWeaponPickup)
+		? MoveTask->SecondaryTarget
+		: MoveTask->TaskTarget;
+
 	if (!MoveTask->HasPath() || MoveTask->TaskPath.UsedNavMesh != CheckNavProfile.MeshIndex)
 	{
-		const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetLocation(), MoveTask->TaskTarget);
+		const Vector ClosestPoint = UTIL_GetClosestPointOnEntityToLocation(GetLocation(), TargetObject);
 
 		const bool bSuccess = AINAV_FindPathClosestToPoint(&CheckNavProfile, UTIL_GetFloorUnderEntity(Edict), ClosestPoint, &MoveTask->TaskPath, kArmoryBuildDistance);
 
 		if (!bSuccess)
 		{
 			return EAINavMoveResult::NAV_MOVE_NOPATH;
+		}
+	}
+
+	if (vIsZero(NextFrameMovementInput.RequiredLookLocation) && vIsZero(NextFrameMovementInput.DesiredLookLocation))
+	{
+		if (UTIL_PlayerHasLOSToEntity(Edict, TargetObject, UTIL_GoldSrcUnitsToMetres(10.0f), false))
+		{
+			LookAt(TargetObject);
 		}
 	}
 

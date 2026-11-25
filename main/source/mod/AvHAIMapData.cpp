@@ -457,6 +457,13 @@ bool AIMAP_PopulateDynamicWeldableObject(edict_t* WeldableObject)
 	NewObject.State = EAIDynamicMapObjectState::OBJECTSTATE_START;
 	NewObject.NextStopIndex = (NewObject.StopPoints.size() > 1) ? 1 : 0;
 
+	DynamicMapObjectStop DummyStop;
+	DummyStop.StopLocation = UTIL_GetCentreOfEntity(WeldableObject);
+	DummyStop.WaitTime = 0.0f;
+	DummyStop.bWaitForRetrigger = true;
+
+	NewObject.StopPoints.push_back(DummyStop);
+
 	DynamicMapObjects.try_emplace(NextDynamicObjectIndex, NewObject);
 
 	NextDynamicObjectIndex++;
@@ -602,24 +609,13 @@ void AIMAP_UpdateDynamicMapObjects()
 			continue;
 		}
 
-		if (!ThisObject->IsValid())
+		if (!ThisObject->IsValid() && !ThisObject->bPendingDestroy)
 		{
-			for (auto it = ThisObject->Targets.begin(); it != ThisObject->Targets.end(); it++)
-			{
-				DynamicMapObjectHandle FoundObjectHandle = AIMAP_GetDynamicObjectByEdict(*it);
+			ThisObject->Destroy();
+		}
 
-				if (!FoundObjectHandle.IsValid()) { continue; }
-
-				DynamicMapObject* TargetObject = FoundObjectHandle.GetObjectRef_Mutable();
-
-				if (!TargetObject || !TargetObject->IsValid()) { continue; }
-
-				AIMAP_ForceRefreshDynamicObjectConnections(TargetObject);
-			}
-
-			ThisObject->ClearTemporaryObstacles();
-			ThisObject->UndoOffMeshConnectionChanges();
-
+		if (ThisObject->bPendingDestroy)
+		{
 			it = DynamicMapObjects.erase(it);
 			bListModified = true;
 			continue;
@@ -1020,7 +1016,18 @@ void AIMAP_UpdateDynamicWeldableObject(DynamicMapObject* WeldableObject)
 	if (WeldableRef && WeldableRef->GetIsWelded())
 	{
 		AIMAP_OnTriggerActivated(WeldableObject);
-		WeldableObject->Edict = nullptr;
+
+		if (WeldableRef->GetWeldOpens())
+		{
+			WeldableObject->Destroy();
+		}
+		else
+		{
+			WeldableObject->Type = EAIDynamicMapObjectType::MAPOBJECT_STATIC;
+			AIMAP_ForceRefreshDynamicObjectConnections(WeldableObject);
+			AIMAP_OnDynamicMapObjectBecomeIdle(WeldableObject);
+		}
+
 		return;
 	}
 }
@@ -1291,48 +1298,54 @@ void AIMAP_ForceRefreshDynamicObjectConnections(DynamicMapObject* Object)
 	}
 }
 
-void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
+void AIMAP_OnWeldableObjectBecomeIdle(DynamicMapObject* Object)
+{
+	if (!Object) { return; }
+
+	AvHWeldable* WeldableRef = dynamic_cast<AvHWeldable*>(Object->ObjectRef);
+
+	if (!WeldableRef) { return; }
+
+	// Only apply the temporary obstacles if the weldable object starts solid and has to be welded open
+	if (WeldableRef->GetWeldOpens())
+	{
+		AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_WELDABLE);
+	}
+
+	if (Object->StopPoints.size() == 0) { return; }
+
+	// Weldable triggers can never move, so will only ever have one stop point (their spawn position)
+	for (auto it = Object->StopPoints[0].AffectedConnections.begin(); it != Object->StopPoints[0].AffectedConnections.end();)
+	{
+		OffMeshConnectionHandle& ThisConnectionHandle = (*it);
+
+		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
+
+		if (!ThisConnection)
+		{
+			it = Object->StopPoints[0].AffectedConnections.erase(it);
+			continue;
+		}
+
+		// Only modify connections if the weldable object starts "closed" i.e. solid
+		if (WeldableRef->GetWeldOpens())
+		{
+			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_WELD);
+		}
+	}
+}
+
+void AIMAP_OnStaticObjectBecomeIdle(DynamicMapObject* Object)
 {
 	if (!Object || !Object->IsValid()) { return; }
 
-	// Object will not move again, so block off all connections permanently, and place null obstacles to block nav mesh
-	if (Object->Type == EAIDynamicMapObjectType::MAPOBJECT_STATIC)
-	{
-		AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_NULL);
+	// Static object can never move again under any circumstances, so just block any movement through it
 
-		if (Object->StopPoints.empty()) { return; }
-
-		int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
-
-		for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
-		{
-			OffMeshConnectionHandle& ThisConnectionHandle = (*it);
-
-			if (!ThisConnectionHandle.IsValid())
-			{
-				it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
-				continue;
-			}
-
-			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
-
-			++it;
-		}
-
-		return;
-	}
+	AIMAP_ApplyTempObstaclesToObject(Object, EAINavArea::NAV_AREA_NULL);
 
 	if (Object->StopPoints.empty()) { return; }
 
-	// Door is not permanently blocking anything and can still be activated. We need to do a more nuanced take on how connections are modified
-	// The idea is that if a connection is one-way, we detect how we can activate the door from that side and modify the connection flag accordingly
-	// Two-way connections will end up being treated like a one-way connection, so use 2 one-way connections if a door requires different capabilities for each side!
-
-	const int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
-
-	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
-
-	NavAgentProfile TestProfile = *DefaultBase;
+	int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
 
 	for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
 	{
@@ -1343,6 +1356,31 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 			it = Object->StopPoints[CurrStopIndex].AffectedConnections.erase(it);
 			continue;
 		}
+
+		AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
+
+		++it;
+	}
+}
+
+void AIMAP_OnMovingObjectBecomeIdle(DynamicMapObject* Object)
+{
+	if (!Object || !Object->IsValid()) { return; }
+
+	if (Object->StopPoints.empty()) { return; }
+
+	// The idea below is that if a connection is one-way, we detect how we can activate the door from that side and modify the connection flag accordingly
+	// Bidirectional connections will end up being treated like a one-way connection, so use 2 one-way connections if a door requires different capabilities for each side!
+
+	const int CurrStopIndex = (Object->NextStopIndex > 0) ? Object->NextStopIndex - 1 : Object->StopPoints.size() - 1;
+
+	const NavAgentProfile* DefaultBase = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT);
+
+	NavAgentProfile TestProfile = *DefaultBase;
+
+	for (auto it = Object->StopPoints[CurrStopIndex].AffectedConnections.begin(); it != Object->StopPoints[CurrStopIndex].AffectedConnections.end();)
+	{
+		OffMeshConnectionHandle& ThisConnectionHandle = (*it);
 
 		const NavOffMeshConnection* ThisConnection = ThisConnectionHandle.GetConnectionRef();
 
@@ -1360,12 +1398,30 @@ void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
 		{
 			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_DISABLED);
 		}
-		else if(ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD)
+		else if (ThisTrigger->Type == EAIDynamicMapObjectType::TRIGGER_WELD)
 		{
 			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_WELD);
 		}
 
 		++it;
+	}
+}
+
+void AIMAP_OnDynamicMapObjectBecomeIdle(DynamicMapObject* Object)
+{
+	if (!Object || !Object->IsValid()) { return; }
+
+	switch (Object->Type)
+	{
+	case EAIDynamicMapObjectType::MAPOBJECT_STATIC:
+		AIMAP_OnStaticObjectBecomeIdle(Object);
+		break;
+	case EAIDynamicMapObjectType::TRIGGER_WELD:
+		AIMAP_OnWeldableObjectBecomeIdle(Object);
+		break;
+	default:
+		AIMAP_OnMovingObjectBecomeIdle(Object);
+		break;
 	}
 }
 
@@ -1905,7 +1961,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-			if (!ThisObject || ThisObject->Edict->v.solid == SOLID_NOT || ThisObject->Edict->v.solid == SOLID_TRIGGER) { continue; }
+			if (!ThisObject || !ThisObject->BlocksMovement()) { continue; }
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject->Edict == IgnoreObject->Edict)) { continue; }
 
@@ -1933,7 +1989,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 			const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-			if (!ThisObject || ThisObject->Edict->v.solid == SOLID_NOT || ThisObject->Edict->v.solid == SOLID_TRIGGER) { continue; }
+			if (!ThisObject || !ThisObject->BlocksMovement()) { continue; }
 
 			if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
@@ -1960,7 +2016,7 @@ DynamicMapObjectHandle AIMAP_FindObjectBlockingPathPoint(const AvHAIPathNode* Pa
 
 		const DynamicMapObject* ThisObject = ThisObjectHandle.GetObjectRef();
 
-		if (!ThisObject || ThisObject->Edict->v.solid == SOLID_NOT || ThisObject->Edict->v.solid == SOLID_TRIGGER) { continue; }
+		if (!ThisObject || !ThisObject->BlocksMovement()) { continue; }
 
 		if (ThisObject->Type == EAIDynamicMapObjectType::MAPOBJECT_PLATFORM || (IgnoreObject && ThisObject == IgnoreObject)) { continue; }
 
@@ -3002,6 +3058,28 @@ void DynamicMapObject::ClearTemporaryObstacles()
 	}
 
 	TempObstacles.clear();
+}
+
+void DynamicMapObject::Destroy()
+{
+	for (auto it = Targets.begin(); it != Targets.end(); it++)
+	{
+		DynamicMapObjectHandle FoundObjectHandle = AIMAP_GetDynamicObjectByEdict(*it);
+
+		if (!FoundObjectHandle.IsValid()) { continue; }
+
+		DynamicMapObject* TargetObject = FoundObjectHandle.GetObjectRef_Mutable();
+
+		if (!TargetObject || !TargetObject->IsValid()) { continue; }
+
+		AIMAP_ForceRefreshDynamicObjectConnections(TargetObject);
+	}
+
+	UndoOffMeshConnectionChanges();
+	ClearTemporaryObstacles();
+
+	ObjectRef = nullptr;
+	Edict = NULL;
 }
 
 void DynamicMapObject::UndoOffMeshConnectionChanges()

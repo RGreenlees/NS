@@ -971,9 +971,9 @@ char* AITAC_StructTypeToChar(const EAIStructureType StructureType)
 		case EAIStructureType::STRUCTURE_MARINE_ADVTURRETFACTORY:
 			return "Adv TF";
 		case EAIStructureType::STRUCTURE_MARINE_ARMORY:
-			return "Armoury";
+			return "Armory";
 		case EAIStructureType::STRUCTURE_MARINE_ADVARMORY:
-			return "Adv Armoury";
+			return "Adv Armory";
 		case EAIStructureType::STRUCTURE_MARINE_ARMSLAB:
 			return "Armslab";
 		case EAIStructureType::STRUCTURE_MARINE_PROTOTYPELAB:
@@ -1140,12 +1140,58 @@ void AITAC_RefreshMarineItems()
 		AITAC_RefreshMarineItem(theEntity);
 	END_FOR_ALL_ENTITIES(kwsScan);
 
+	for (auto it = MarineDroppedItemMap.begin(); it != MarineDroppedItemMap.end();)
+	{
+		if (it->second.LastSeen < ItemRefreshFrame)
+		{
+			it = MarineDroppedItemMap.erase(it);
+		}
+		else
+		{
+			it++;
+		}
+	}
+
 	ItemRefreshFrame++;
 }
 
 void AITAC_RefreshMarineItem(CBaseEntity* ItemRef)
 {
+	if (!ItemRef) { return; }
 
+	edict_t* ItemEdict = ItemRef->edict();
+
+	if (!UTIL_IsEdictActive(ItemEdict)) { return; }
+
+	EAIDeployableItemType ItemType = UTIL_GetItemTypeFromEdict(ItemEdict);
+
+	if (ItemType == EAIDeployableItemType::DEPLOYABLE_ITEM_NONE) { return; }
+
+	// All items except scans are of interest only if they're collectable. Without this check, marines might attempt to grab weapons from other players.
+	if (ItemType != EAIDeployableItemType::DEPLOYABLE_ITEM_SCAN)
+	{
+		if (ItemEdict->v.solid != SOLID_TRIGGER || (ItemEdict->v.effects & EF_NODRAW)) { return; }
+	}
+
+	int EntIndex = ENTINDEX(ItemEdict);
+	if (EntIndex < 0) { return; }
+
+	MarineDroppedItemMap[EntIndex].Edict = ItemEdict;
+	MarineDroppedItemMap[EntIndex].ItemType = ItemType;
+
+	if (MarineDroppedItemMap[EntIndex].LastSeen == 0 || !vEquals(ItemEdict->v.origin, MarineDroppedItemMap[EntIndex].Location, 5.0f))
+	{
+		AITAC_RefreshReachabilityForItem(&MarineDroppedItemMap[EntIndex]);
+	}
+
+	MarineDroppedItemMap[EntIndex].Location = ItemEdict->v.origin;
+
+	if (MarineDroppedItemMap[EntIndex].LastSeen == 0)
+	{
+		AITAC_OnItemDropped(&MarineDroppedItemMap[EntIndex]);
+	}
+
+	MarineDroppedItemMap[EntIndex].LastSeen = ItemRefreshFrame;
 }
 
 void AITAC_OnItemDropped(const AvHAIDroppedItem* NewItem)
@@ -1790,18 +1836,18 @@ EAIWeaponId UTIL_GetWeaponTypeFromEdict(const edict_t* ItemEdict)
 
 	switch (ItemType)
 	{
-	case EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER:
-		return EAIWeaponId::WEAPON_MARINE_WELDER;
-	case EAIDeployableItemType::DEPLOYABLE_ITEM_HMG:
-		return EAIWeaponId::WEAPON_MARINE_HMG;
-	case EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER:
-		return EAIWeaponId::WEAPON_MARINE_GL;
-	case EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN:
-		return EAIWeaponId::WEAPON_MARINE_SHOTGUN;
-	case EAIDeployableItemType::DEPLOYABLE_ITEM_MINES:
-		return EAIWeaponId::WEAPON_MARINE_MINES;
-	default:
-		return EAIWeaponId::WEAPON_INVALID;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER:
+			return EAIWeaponId::WEAPON_MARINE_WELDER;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_HMG:
+			return EAIWeaponId::WEAPON_MARINE_HMG;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER:
+			return EAIWeaponId::WEAPON_MARINE_GL;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN:
+			return EAIWeaponId::WEAPON_MARINE_SHOTGUN;
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_MINES:
+			return EAIWeaponId::WEAPON_MARINE_MINES;
+		default:
+			return EAIWeaponId::WEAPON_INVALID;
 	}
 
 	return EAIWeaponId::WEAPON_INVALID;
@@ -2162,11 +2208,64 @@ bool AITAC_TeamHiveWithTechExists(const AvHTeamNumber Team, const EAIHiveTechSta
 
 EAIDeployableItemType UTIL_GetItemTypeFromEdict(const edict_t* ItemEdict)
 {
-	const AvHAIDroppedItem* FoundItem = AITAC_GetDroppedItemRefFromEdict(ItemEdict);
+	if (!UTIL_IsEdictActive(ItemEdict)) { return EAIDeployableItemType::DEPLOYABLE_ITEM_NONE; }
 
-	if (!FoundItem) { return EAIDeployableItemType::DEPLOYABLE_ITEM_NONE; }
+	if (ItemEdict->v.classname == MAKE_STRING(kwsHealth))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_HEALTHPACK;
+	}
 
-	return FoundItem->ItemType;
+	if (ItemEdict->v.classname == MAKE_STRING(kwsGenericAmmo))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_AMMO;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsWelder))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_WELDER;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsScan))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_SCAN;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsShotGun))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_SHOTGUN;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsHeavyMachineGun))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_HMG;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsHeavyArmor))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_HEAVYARMOR;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsMine))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_MINES;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsGrenadeGun))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_GRENADELAUNCHER;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsCatalyst))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_CATALYSTS;
+	}
+
+	if (ItemEdict->v.classname == MAKE_STRING(kwsJetpack))
+	{
+		return EAIDeployableItemType::DEPLOYABLE_ITEM_JETPACK;
+	}
+
+	return EAIDeployableItemType::DEPLOYABLE_ITEM_NONE;
 }
 
 EAIWeaponId UTIL_GetWeaponTypeFromDroppedItem(const EAIDeployableItemType ItemType)
@@ -2434,7 +2533,7 @@ AvHMessageID UTIL_ItemTypeToImpulseCommand(const EAIDeployableItemType ItemType)
 {
 	switch (ItemType)
 	{
-		case EAIDeployableItemType::DEPLOYABLE_ITEM_HEAVYARMOUR:
+		case EAIDeployableItemType::DEPLOYABLE_ITEM_HEAVYARMOR:
 			return BUILD_HEAVY;
 		case EAIDeployableItemType::DEPLOYABLE_ITEM_JETPACK:
 			return BUILD_JETPACK;

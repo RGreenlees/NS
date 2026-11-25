@@ -1075,6 +1075,7 @@ bool AINAV_AddObtainWeaponMovementTask(const NavAgentProfile* NavProfile, const 
 	NewTask.TriggerToActivate = (UTIL_IsEdictActive(TriggerTarget)) ? TriggerTarget : nullptr;
 	NewTask.TaskStartLocation = StartPoint;
 	NewTask.TaskLocation = ArmoryEdict->v.origin;
+	NewTask.WeaponToObtain = DesiredWeaponType;
 
 	if (RelevantMoveInfo && RelevantMoveInfo->IsValidMove())
 	{
