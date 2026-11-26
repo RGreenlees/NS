@@ -397,11 +397,6 @@ bool AvHAIPlayer::IsOnGround() const
 
 bool AvHAIPlayer::IsOnLadder() const
 {
-	if (IsPlayerSkulk(Edict))
-	{
-		return IsPlayerOnLadder(Edict);
-	}
-
 	return (!FNullEnt(Edict) && Edict->v.movetype == MOVETYPE_FLY);
 }
 
@@ -3575,10 +3570,28 @@ bool AvHAIPlayer::NewClimbDownLadderMove(AvHAIPath* Path)
 		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
-	Vector LadderBottom = UTIL_GetCentreOfEntity(CurrentLadder);
+	const Vector LadderCentre = UTIL_GetCentreOfEntity(CurrentLadder);
+	Vector LadderBottom = LadderCentre;
 	LadderBottom.z = CurrentLadder->v.absmin.z;
 
-	if (!IsOnLadder())
+	bool bIsOnLadder = IsOnLadder();
+
+	if (bPlayerIsSkulk)
+	{
+		const Vector MountPoint = AINAV_GetLadderMountPoint(CurrentLadder, CurrentPathNode->FromLocation);
+
+		if (!vIsZero(MountPoint))
+		{
+			if (vDist2DSq(BotLocation, MountPoint) < sqrf(GetPlayerRadius()))
+			{
+				const Vector TraceDir = UTIL_GetVectorNormal2D(LadderCentre - BotLocation);
+				const edict_t* HitEdict = UTIL_TraceEntityHull(Edict, BotLocation, BotLocation + (TraceDir * 2.0f));
+				bIsOnLadder = HitEdict == CurrentLadder;
+			}
+		}
+	}
+
+	if (!bIsOnLadder)
 	{
 		if (IsOnGround())
 		{
@@ -3715,8 +3728,6 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
-	const bool bPlayerIsSkulk = IsPlayerSkulk(Edict);
-
 	const Vector BotCurrentLocation = GetLocation();
 	const Vector LadderCentre = UTIL_GetCentreOfEntity(MountLadder);
 	Vector MountPoint = AINAV_GetLadderMountPoint(MountLadder, CurrentPathNode->FromLocation);
@@ -3744,6 +3755,8 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 		: Vector(LadderCentre.x, LadderCentre.y, MountLadder->v.absmax.z);
 
 	NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(MountPoint - BotCurrentLocation);
+
+	UTIL_DrawLine(INDEXENT(1), BotCurrentLocation, MountPoint, 10.0f);
 
 	return true;
 }
