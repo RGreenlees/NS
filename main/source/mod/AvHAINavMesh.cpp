@@ -1039,6 +1039,31 @@ Vector AIMESH_ProjectPointToNavmesh(const NavAgentProfile* NavProfile, const Vec
 	return ZERO_VECTOR;
 }
 
+dtPolyRef AIMESH_GetNearestPolyOnNavMesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents)
+{
+	if (!NavProfile) { return 0; }
+
+	NavMesh* FoundMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
+
+	if (!FoundMesh) { return 0; }
+
+	const dtQueryFilter* m_navFilter = &NavProfile->Filters;
+
+	Vector PointToProject = Location;
+
+	float dtCheckLoc[3];
+	UTIL_VecGoldSrcToDetour(Location, dtCheckLoc);
+
+	dtPolyRef FoundPoly;
+	float dtNavNearest[3];
+
+	dtStatus success = FoundMesh->NavQueryRef->findNearestPoly(dtCheckLoc, Extents, m_navFilter, &FoundPoly, dtNavNearest);
+
+	if (dtStatusSucceed(success)) { return FoundPoly; }
+
+	return 0;
+}
+
 Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile* NavProfile, const Vector& SearchPoint, bool bIgnoreReachability)
 {
 	if (!NavProfile || !NavProfile->IsValid()) { return ZERO_VECTOR; }
@@ -1092,15 +1117,17 @@ Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile* NavProfile, const V
 	return UTIL_VecDetourToGoldSrc(DetourResult);
 }
 
-Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter)
+Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile* NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter)
 {
-	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile.MeshIndex);
+	if (!NavProfile) { return g_vecZero; }
+
+	NavMesh* QueriedMesh = AIMESH_GetNavMeshAtIndex(NavProfile->MeshIndex);
 
 	if (!QueriedMesh) { return g_vecZero; }
 
-	const NavAgentProfile SearchProfile = (FlagFilter != EAINavMovementFlag::NAV_FLAG_NONE)
-		? NavAgentProfile(NavProfile.MeshIndex, FlagFilter, NavProfile.bFlyingProfile)
-		: NavProfile;
+	const NavAgentProfile& SearchProfile = (FlagFilter != EAINavMovementFlag::NAV_FLAG_NONE)
+		? NavAgentProfile(NavProfile->MeshIndex, FlagFilter, NavProfile->bFlyingProfile)
+		: *NavProfile;
 
 	const dtNavMeshQuery* m_navQuery = QueriedMesh->NavQueryRef;
 	const dtQueryFilter* m_navFilter = &SearchProfile.Filters;
@@ -1144,8 +1171,10 @@ Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile,
 	return Result;
 }
 
-Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter)
+Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile* NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter)
 {
+	if (!NavProfile) { return g_vecZero; }
+
 	int maxIterations = 0;
 	float MinRadiusSq = sqrf(MinRadius);
 

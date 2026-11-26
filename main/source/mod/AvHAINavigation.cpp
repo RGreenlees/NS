@@ -478,7 +478,19 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 		// Since GoldSrc uses AABB for collision detection, and Detour assumes a cylinder, give it some extra breathing space where possible
 		NextPathNode.ToNavMeshLocation = AIMESH_AdjustPointAwayFromNavWall(NavProfile, NextPathNode.ToNavMeshLocation, 16.0f);
 		NextPathNode.ToFloorLocation = UTIL_FindFloor(NextPathNode.ToNavMeshLocation);
-		NextPathNode.ToLocation = (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_CROUCH))
+
+		dtPolyRef NearestPoly = AIMESH_GetNearestPolyOnNavMesh(NavProfile, NextPathNode.ToNavMeshLocation);
+		EAINavArea GeneralMoveArea = CurrArea;
+
+		if (NearestPoly > 0)
+		{
+			unsigned char dtFoundArea = 0;
+			FoundMesh->NavMeshRef->getPolyArea(NearestPoly, &dtFoundArea);
+
+			GeneralMoveArea = static_cast<EAINavArea>(dtFoundArea);
+		}
+
+		NextPathNode.ToLocation = (GeneralMoveArea == EAINavArea::NAV_AREA_CROUCH)
 			? NextPathNode.ToFloorLocation + CrouchingOffset
 			: NextPathNode.ToFloorLocation + StandingOffset;
 
@@ -492,8 +504,9 @@ bool AINAV_FindPathClosestToPoint(const NavAgentProfile* NavProfile, const Vecto
 
 		if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_LADDER) || EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_WALLCLIMB))
 		{
-			Vector FromLocation = (ResultPath->PathNodes.size() > 0) ? ResultPath->PathNodes.back().ToLocation : NodeFromLocation;
-			float NewRequiredZ = AINAV_FindZHeightForClimb(FromLocation, NextPathNode.ToLocation, head_hull);
+			const Vector FromLocation = (ResultPath->PathNodes.size() > 0) ? ResultPath->PathNodes.back().ToLocation : NodeFromLocation;
+			const float NewRequiredZ = AINAV_FindZHeightForClimb(FromLocation, NextPathNode.ToLocation, head_hull);
+
 			NextPathNode.RequiredClimbZ = fmaxf(NewRequiredZ, NextPathNode.ToLocation.z);
 
 			if (EnumHasAnyFlags(CurrFlags, EAINavMovementFlag::NAV_FLAG_LADDER))
@@ -647,14 +660,6 @@ float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, 
 	TraceResult hit;
 
 	Vector StartTrace = ClimbEnd;
-
-	UTIL_TraceLine(ClimbEnd, ClimbEnd - Vector(0.0f, 0.0f, 50.0f), ignore_monsters, nullptr, &hit);
-
-	if (hit.fAllSolid || hit.fStartSolid || hit.flFraction < 1.0f)
-	{
-		StartTrace.z = hit.vecEndPos.z + 18.0f;
-	}
-
 	Vector EndTrace = ClimbStart;
 	EndTrace.z = StartTrace.z;
 
@@ -666,30 +671,26 @@ float AINAV_FindZHeightForClimb(const Vector ClimbStart, const Vector ClimbEnd, 
 	{
 		return StartTrace.z;
 	}
-	else
+
+	const int32 maxTests = 100;
+	int32 testCount = 0;
+
+	while ((hit.flFraction < 1.0f || hit.fStartSolid || hit.fAllSolid) && testCount < maxTests)
 	{
-		int maxTests = 100;
-		int testCount = 0;
-
-		while ((hit.flFraction < 1.0f || hit.fStartSolid || hit.fAllSolid) && testCount < maxTests)
-		{
-			CurrTraceStart.z += 1.0f;
-			EndTrace.z = CurrTraceStart.z;
-			UTIL_TraceHull(CurrTraceStart, EndTrace, ignore_monsters, HullNum, nullptr, &hit);
-			testCount++;
-		}
-
-		if (hit.flFraction >= 1.0f && !hit.fStartSolid)
-		{
-			return CurrTraceStart.z;
-		}
-		else
-		{
-			return StartTrace.z;
-		}
+		CurrTraceStart.z += 1.0f;
+		EndTrace.z = CurrTraceStart.z;
+		UTIL_TraceHull(CurrTraceStart, EndTrace, ignore_monsters, HullNum, nullptr, &hit);
+		testCount++;
 	}
 
-	return StartTrace.z;
+	if (hit.flFraction >= 1.0f && !hit.fStartSolid)
+	{
+		return CurrTraceStart.z;
+	}
+	else
+	{
+		return ClimbEnd.z;
+	}
 }
 
 bool AINAV_IsOffPathNode(const NavAgentProfile* NavProfile, const edict_t* AIPlayer, const AvHAIPathNode* PathNode)

@@ -939,8 +939,6 @@ void AvHAIPlayer::TestNavThink(float DeltaTime)
 
 void AvHAIPlayer::Think(float DeltaTime)
 {
-	NextFrameMovementInput.Clear();
-
 	if (IsPlayerSkulk(Edict))
 	{
 		NextFrameMovementInput.bShouldCrouch = true;
@@ -1052,6 +1050,8 @@ void AvHAIPlayer::EndThink(float DeltaTime)
 	// Simulate PM_PlayerMove so client prediction and stuff can be executed correctly.
 	RUN_AI_MOVE(Edict, Edict->v.v_angle, NextFrameMovementInput.ForwardMove,
 		NextFrameMovementInput.SideMove, NextFrameMovementInput.UpMove, NextFrameMovementInput.Button, NextFrameMovementInput.Impulse, (byte)AdjustedTimeMS);
+
+	NextFrameMovementInput.Clear();
 }
 
 void AvHAIPlayer::BotUpdateDesiredViewRotation()
@@ -2251,25 +2251,33 @@ EAIAttackResult AvHAIPlayer::PerformAttackLOSCheck(const EAIWeaponId Weapon, con
 	// Add a LITTLE bit of give to avoid edge cases where the bot is a smidge out of range
 	float MaxWeaponRange = GetMaxIdealWeaponRange(Weapon) - 5.0f;
 
+	if (vDist3DSq(EyePosition, TargetLocation) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+
 	// Don't need aiming or special LOS checks for Xenocide as it's an AOE attack, just make sure we're close enough and don't have a wall in the way
 	if (Weapon == EAIWeaponId::WEAPON_SKULK_XENOCIDE)
 	{
-		if (vDist3DSq(BotLocation, TargetLocation) <= sqrf(MaxWeaponRange) && UTIL_QuickTrace(Edict, BotLocation, TargetLocation))
-		{
-			return EAIAttackResult::ATTACK_SUCCESS;
-		}
-		else
-		{
-			return EAIAttackResult::ATTACK_OUTOFRANGE;
-		}
+		return (UTIL_QuickTrace(Edict, BotLocation, TargetLocation))
+			? EAIAttackResult::ATTACK_SUCCESS
+			: EAIAttackResult::ATTACK_BLOCKED;
+	}
+
+	if (Weapon == EAIWeaponId::WEAPON_ONOS_CHARGE)
+	{
+		const NavAgentProfile* OnosProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_ONOS);
+
+		if (!OnosProfile) { return EAIAttackResult::ATTACK_SUCCESS; }
+
+		const float PlayerRadius = GetPlayerRadius();
+
+		return (AINAV_IsPointDirectlyReachable(OnosProfile, UTIL_GetFloorUnderEntity(Edict), UTIL_GetFloorUnderEntity(Target), Vector(PlayerRadius, PlayerRadius, 50.0f)))
+			? EAIAttackResult::ATTACK_SUCCESS
+			: EAIAttackResult::ATTACK_BLOCKED;
 	}
 
 	// For charge and stomp, we can go through stuff so don't need to check for being blocked
-	if (Weapon == EAIWeaponId::WEAPON_ONOS_CHARGE || Weapon == EAIWeaponId::WEAPON_ONOS_STOMP)
+	if (Weapon == EAIWeaponId::WEAPON_ONOS_STOMP)
 	{
-		if (vDist3DSq(BotLocation, Target->v.origin) > sqrf(MaxWeaponRange)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
-
-		if (!UTIL_QuickTrace(Edict, GetLocation(), TargetLocation) || fabsf(BotLocation.z - TargetLocation.z) > 50.0f) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+		if (!UTIL_QuickTrace(Edict, GetLocation(), TargetLocation) || fabsf(BotLocation.z - TargetLocation.z) > 50.0f) { return EAIAttackResult::ATTACK_BLOCKED; }
 
 		return EAIAttackResult::ATTACK_SUCCESS;
 	}
@@ -2280,22 +2288,20 @@ EAIAttackResult AvHAIPlayer::PerformAttackLOSCheck(const EAIWeaponId Weapon, con
 
 	Vector AttackDir = UTIL_GetVectorNormal(TargetLocation - StartTrace);
 
-	Vector EndTrace = StartTrace + (AttackDir * MaxWeaponRange);
+	Vector EndTrace = TargetLocation + (AttackDir * 1.0f);
 
 	UTIL_TraceLine(StartTrace, EndTrace, dont_ignore_monsters, dont_ignore_glass, Edict->v.pContainingEntity, &hit);
 
-	if (FNullEnt(hit.pHit)) { return EAIAttackResult::ATTACK_OUTOFRANGE; }
+	if (FNullEnt(hit.pHit))
+	{
+		return (hit.flFraction >= 1.0f)
+			? EAIAttackResult::ATTACK_SUCCESS
+			: EAIAttackResult::ATTACK_BLOCKED;
+	}
 
 	if (hit.pHit != Target)
 	{
-		if (vDist3DSq(EyePosition, TargetLocation) > sqrf(MaxWeaponRange))
-		{
-			return EAIAttackResult::ATTACK_OUTOFRANGE;
-		}
-		else
-		{
-			return EAIAttackResult::ATTACK_BLOCKED;
-		}
+		return EAIAttackResult::ATTACK_BLOCKED;
 	}
 
 	return EAIAttackResult::ATTACK_SUCCESS;
@@ -3157,7 +3163,13 @@ bool AvHAIPlayer::NewGroundMove(AvHAIPath* Path)
 		{
 			if (NextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 			{
-				NextFrameMovementInput.bShouldCrouch = true;
+				const float DistToNextPoint = vDist2DSq(CurrentPos, NextPathNode->FromLocation);
+				const float DesiredCrouchDistance = vSize2DSq(Edict->v.velocity);
+
+				if (DistToNextPoint <= DesiredCrouchDistance)
+				{
+					NextFrameMovementInput.bShouldCrouch = true;
+				}
 			}
 			else
 			{
@@ -4119,9 +4131,19 @@ bool AvHAIPlayer::NewBlinkClimbMove(AvHAIPath* Path)
 			Edict->v.velocity.z = 0.0f;
 			LookLocation = DirectAheadView;
 			NextFrameMovementInput.DesiredMoveDirection = vForward;
+			NextFrameMovementInput.RequiredLookLocation = LookLocation;
 			NextFrameMovementInput.Button |= IN_ATTACK2;
 			return true;
 		}
+	}
+
+	if (CurrentPosition.z > CurrentPathNode->RequiredClimbZ)
+	{
+		const Vector NearestPointOnLine = vClosestPointOnLine2D(CurrentPosition, CurrentPathNode->FromLocation, CurrentPathNode->ToLocation);
+
+		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(NearestPointOnLine - CurrentPosition);
+		NextFrameMovementInput.RequiredLookLocation = CurrentPathNode->ToLocation;
+		return true;
 	}
 
 	const Vector CurrVelocity = UTIL_GetVectorNormal2D(Edict->v.velocity);

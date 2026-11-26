@@ -2416,7 +2416,7 @@ Vector UTIL_GetNextMinePosition(const AvHAIBuildableStructure* StructureToMine)
 		}
 	}
 
-	return AIMESH_GetRandomPointOnNavmeshInRadius(MineCheckProfile, StructureToMine->Location, Size, false);
+	return AIMESH_GetRandomPointOnNavmeshInRadius(&MineCheckProfile, StructureToMine->Location, Size, false);
 }
 
 int UTIL_GetCostOfStructureType(EAIStructureType StructureType)

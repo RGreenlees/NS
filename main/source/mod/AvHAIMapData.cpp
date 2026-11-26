@@ -1332,6 +1332,8 @@ void AIMAP_OnWeldableObjectBecomeIdle(DynamicMapObject* Object)
 		{
 			AIMESH_ModifyOffMeshConnectionFlag(ThisConnectionHandle, EAINavMovementFlag::NAV_FLAG_WELD);
 		}
+
+		it++;
 	}
 }
 

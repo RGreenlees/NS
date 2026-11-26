@@ -292,15 +292,16 @@ Vector AIMESH_GetRandomPointOnNavmesh(const NavAgentProfile* NavProfile, const V
 
 	Returns ZERO_VECTOR if none found
 */
-Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile& NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = EAINavMovementFlag::NAV_FLAG_NONE);
+Vector AIMESH_GetRandomPointOnNavmeshInRadius(const NavAgentProfile* NavProfile, const Vector SearchOrigin, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = EAINavMovementFlag::NAV_FLAG_NONE);
 
 /*	Finds any random point on the navmesh of the area type (e.g. crouch area) that is relevant for the bot within the min and max radius of the origin point,
 	taking reachability into account(will not return impossible to reach location).
 
 	Returns ZERO_VECTOR if none found
 */
-Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile& NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = EAINavMovementFlag::NAV_FLAG_NONE);
+Vector AIMESH_GetRandomPointOnNavmeshInDonut(const NavAgentProfile* NavProfile, const Vector origin, const float MinRadius, const float MaxRadius, bool bIgnoreReachability, EAINavMovementFlag FlagFilter = EAINavMovementFlag::NAV_FLAG_NONE);
 
+dtPolyRef AIMESH_GetNearestPolyOnNavMesh(const NavAgentProfile* NavProfile, const Vector Location, const Vector Extents = Vector(400.0f, 400.0f, 400.0f));
 
 bool AIMESH_IsPointOnNavmesh(const EAINavMeshIndex MeshIndex, const Vector Location, const NavAgentProfile* NavProfile = GetBaseAgentProfile(EAINavProfileIndex::NAV_PROFILE_DEFAULT), const Vector SearchExtents = DefaultReachableExtents);
 
