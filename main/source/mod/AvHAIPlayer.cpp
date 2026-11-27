@@ -3399,7 +3399,8 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 		return MoveToWithoutNav(CurrentPathNode->ToLocation) == EAINavMoveResult::NAV_MOVE_SUCCESS;
 	}
 
-	Vector LadderTop = UTIL_GetCentreOfEntity(CurrentLadder);
+	const Vector LadderCentre = UTIL_GetCentreOfEntity(CurrentLadder);
+	Vector LadderTop = LadderCentre;
 	LadderTop.z = CurrentLadder->v.absmax.z;
 
 	if (bPlayerIsSkulk)
@@ -3412,7 +3413,23 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 		NextFrameMovementInput.bShouldCrouch = !bPlayerIsSkulk;
 	}
 
-	if (!IsOnLadder())
+	bool bIsOnLadder = IsOnLadder();
+
+	if (bPlayerIsSkulk && IsWallSticking())
+	{
+		if (Edict->v.absmin.z < CurrentLadder->v.absmax.z && Edict->v.absmax.z > CurrentLadder->v.absmin.z)
+		{
+			Vector NearestPointOnLadder = UTIL_GetClosestPointOnEntityToLocation(BotLocation, CurrentLadder);
+			Vector NearestPointOnPlayer = UTIL_GetClosestPointOnEntityToLocation(NearestPointOnLadder, Edict);
+
+			bIsOnLadder = vDist3DSq(NearestPointOnLadder, NearestPointOnPlayer) <= sqrf(5.0f);
+		}
+	}
+
+	// We always "snap" the view for skulks (instant view turn) because they move fast and can often end up flying off the ladder if
+	// their view angles aren't precise.
+
+	if (!bIsOnLadder)
 	{
 		if (IsOnGround())
 		{
@@ -3436,9 +3453,15 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 			NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 			NextFrameMovementInput.DesiredLookLocation = CurrentPathNode->ToLocation;
 
-			if (bHasNextPathNode && CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+			if (bPlayerIsSkulk)
 			{
-				NextFrameMovementInput.bShouldCrouch = !bPlayerIsSkulk;
+				const Vector FloorPos = UTIL_GetFloorUnderEntity(Edict);
+
+				NextFrameMovementInput.bShouldCrouch = (AINAV_IsPointDirectlyReachable(GetNavProfile(), FloorPos, CurrentPathNode->ToNavMeshLocation));
+			}
+			else if (bHasNextPathNode && CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+			{
+				NextFrameMovementInput.bShouldCrouch = true;
 			}
 
 			return true;
@@ -3446,31 +3469,28 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 
 		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(LadderTop - GetLocation());
 		NextFrameMovementInput.RequiredLookLocation = LadderTop;
+		NextFrameMovementInput.bSnapView = bPlayerIsSkulk;
 
 		return true;
 	}
 
 	// We're on the ladder and actively climbing
 
-	Vector LadderNormalCheck = CollisionBottomLocation + Vector(0.0f, 0.0f, 18.0f);
-	LadderNormalCheck = LadderNormalCheck + UTIL_GetVectorNormal2D(LadderNormalCheck - LadderTop);
-
-	Vector CurrentLadderNormal = UTIL_GetNearestLadderNormal(LadderNormalCheck);
-
-	CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentLadderNormal);
+	const Vector LadderClimbPoint = AINAV_GetLadderMountPoint(CurrentLadder, CurrentPathNode->FromLocation);
+	Vector CurrentLadderNormal = UTIL_GetNearestLadderNormal(LadderClimbPoint);
 
 	if (vIsZero(CurrentLadderNormal))
 	{
-		CurrentLadderNormal = UTIL_GetVectorNormal2D(CurrentPathNode->FromLocation - CurrentPathNode->ToLocation);
+		CurrentLadderNormal = UTIL_GetVectorNormal2D(BotLocation - LadderCentre);
 	}
 
 	const Vector LadderRightNormal = UTIL_GetVectorNormal(UTIL_GetCrossProduct(CurrentLadderNormal, UP_VECTOR));
 
-	Vector ClimbRightNormal = -LadderRightNormal;
-	Vector ClimbDir = -CurrentLadderNormal;
+	const Vector ClimbRightNormal = -LadderRightNormal;
+	const Vector ClimbDir = -CurrentLadderNormal;
 
-	Vector DisembarkDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
-	float DisembarkDot = UTIL_GetDotProduct2D(CurrentLadderNormal, DisembarkDir);
+	const Vector DisembarkDir = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - BotLocation);
+	const float DisembarkDot = UTIL_GetDotProduct2D(CurrentLadderNormal, DisembarkDir);
 
 	float DesiredClimbHeight = CurrentPathNode->RequiredClimbZ;
 
@@ -3486,19 +3506,35 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 	// We've reached the end of the ladder, try and make it to the disembark point if we can
 	if (LadderTop.z - CollisionBottomLocation.z <= 2.0f || BotLocation.z >= DesiredClimbHeight)
 	{
-		if (bHasNextPathNode && CanCrouch() && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
+		if (!bPlayerIsSkulk && CanCrouch() && bHasNextPathNode && NextPathNode->MovementArea == EAINavArea::NAV_AREA_CROUCH)
 		{
 			NextFrameMovementInput.bShouldCrouch = true;
 		}
 
 		if (DisembarkDot > 0.75f)
 		{
-			Jump(true);
+			bool bShouldJump = true;
+
+			if (bPlayerIsSkulk)
+			{
+				NextFrameMovementInput.RequiredLookLocation = (GetEyePosition() + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
+				NextFrameMovementInput.bSnapView = true;
+
+				bShouldJump = UTIL_GetDotProduct2D(UTIL_GetForwardVector2D(Edict->v.v_angle), DisembarkDir) > 0.7f;
+			}
+
+			if (bShouldJump)
+			{
+				Jump(true);
+			}
+
 			return true;
 		}
 
 		NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(CurrentPathNode->ToLocation - GetLocation());
 		NextFrameMovementInput.RequiredLookLocation = (GetEyePosition() + (DisembarkDir * 50.0f)) + Vector(0.0f, 0.0f, 50.0f);
+
+		NextFrameMovementInput.bSnapView = bPlayerIsSkulk;
 
 		return true;
 	}
@@ -3525,6 +3561,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 		LookLocation.z = DesiredClimbHeight + 100.0f;
 		NextFrameMovementInput.RequiredLookLocation = LookLocation;
 		NextFrameMovementInput.DesiredMoveDirection = ClimbRightNormal;
+		NextFrameMovementInput.bSnapView = bPlayerIsSkulk;
 		return true;
 	}
 
@@ -3534,7 +3571,16 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 		LookLocation.z = DesiredClimbHeight + 100.0f;
 		NextFrameMovementInput.RequiredLookLocation = LookLocation;
 		NextFrameMovementInput.DesiredMoveDirection = -ClimbRightNormal;
+		NextFrameMovementInput.bSnapView = bPlayerIsSkulk;
 		return true;
+	}
+
+	// Zero out sideways movement
+
+	if (vDist2DSq(BotLocation, LadderClimbPoint) < sqrf(8.0f))
+	{
+		const float VelocitySideDot = UTIL_GetDotProduct2D(Edict->v.velocity, ClimbRightNormal);
+		Edict->v.velocity = Edict->v.velocity - (ClimbRightNormal * VelocitySideDot);
 	}
 
 	NextFrameMovementInput.DesiredMoveDirection = ClimbDir;
@@ -3543,6 +3589,7 @@ bool AvHAIPlayer::NewClimbUpLadderMove(AvHAIPath* Path)
 	LookTarget.z = fmaxf(LadderTop.z, CollisionTopLocation.z + 200.0f);
 
 	NextFrameMovementInput.RequiredLookLocation = LookTarget;
+	NextFrameMovementInput.bSnapView = bPlayerIsSkulk;
 
 	return true;
 }
@@ -3755,8 +3802,6 @@ bool AvHAIPlayer::NewMountLadderMove(AvHAIPath* Path)
 		: Vector(LadderCentre.x, LadderCentre.y, MountLadder->v.absmax.z);
 
 	NextFrameMovementInput.DesiredMoveDirection = UTIL_GetVectorNormal2D(MountPoint - BotCurrentLocation);
-
-	UTIL_DrawLine(INDEXENT(1), BotCurrentLocation, MountPoint, 10.0f);
 
 	return true;
 }

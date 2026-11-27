@@ -156,6 +156,9 @@ bool IsPlayerOnLadder(const edict_t* Player)
 
 		if (FNullEnt(NearestLadder)) { return false; }
 
+		if (Player->v.absmin.z >= NearestLadder->v.absmax.z) { return false; }
+		if (Player->v.absmax.z <= NearestLadder->v.absmin.z) { return false; }
+
 		Vector NearestPointOnLadder = UTIL_GetClosestPointOnEntityToLocation(Player->v.origin, NearestLadder);
 		Vector NearestPointOnPlayer = UTIL_GetClosestPointOnEntityToLocation(NearestPointOnLadder, Player);
 
